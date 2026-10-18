@@ -16,11 +16,20 @@ import { diceRouter } from './backend/src/games/dice/dice.routes';
 import { dragonTigerRouter } from './backend/src/games/dragon-tiger/dragon-tiger.routes';
 import { andarBaharRouter } from './backend/src/games/andar-bahar/andar-bahar.routes';
 import { setupWebSocketServer } from './backend/src/websocket/wsServer';
+import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  // Connect using a backend-only secret. The frontend must never receive DATABASE_URL.
+  if (process.env.DATABASE_URL?.trim()) {
+    await connectDatabase();
+    console.log('✅ Supabase PostgreSQL connectivity check passed.');
+  } else if (config.isProduction) {
+    throw new Error('DATABASE_URL is required for production PostgreSQL connectivity.');
+  }
+
   const app = express();
   app.use(express.json());
 
@@ -57,8 +66,17 @@ async function startServer() {
           'Set APP_MODE=development or provide the required production environment variables. Refer to docs/CONFIGURATION_GUIDE.md.',
       });
     });
+  } else if (config.isProduction) {
+    // Do not serve simulated in-memory wallet/game data as production data.
+    // The relational persistence adapter must be completed before production APIs are enabled.
+    app.use('/api', (_req, res) => {
+      res.status(503).json({
+        error: 'PERSISTENT_STORAGE_NOT_READY',
+        message: 'PostgreSQL connectivity is available, but business storage migration is not complete. Production financial APIs are disabled to protect wallet and ledger integrity.',
+      });
+    });
   } else {
-    // REST API Routes (Active in Development/Preview or Validated Production)
+    // REST API Routes (development/preview only; state is simulated in memory)
     app.use('/api/auth', authRouter);
     app.use('/api/wallet', walletRouter);
     app.use('/api/requests', tokenRequestRouter);
@@ -79,6 +97,8 @@ async function startServer() {
       service: 'BigDaddy Casino Authority',
       mode: config.mode,
       isSimulated: config.isSimulated,
+      databaseConnected: isDatabaseConnected(),
+      businessDataPersistence: 'IN_MEMORY_NOT_MIGRATED',
       timestamp: new Date().toISOString(),
     });
   });
