@@ -33,7 +33,9 @@ Open `http://localhost:3000` to preview the live application immediately.
 
 ## 3. Transitioning to Production Mode
 
-To deploy BigDaddy Casino to production, follow these steps:
+Production API routes remain intentionally disabled until the in-memory StorageEngine is fully replaced with PostgreSQL-backed business operations. The current connection module checks connectivity only; it does not yet persist wallet, user, bet, or settlement data. Do not launch live financial traffic until that migration and its tests are complete.
+
+To configure the database connection for the next integration stage, follow these steps:
 
 ### Step 1: Set Operational Mode
 In your production environment or hosting dashboard (e.g. Google Cloud Run, Docker, Kubernetes):
@@ -60,19 +62,10 @@ Provide a PostgreSQL database connection string:
 ```env
 DATABASE_URL=postgresql://user:password@host:5432/bigdaddy_casino?sslmode=require
 ```
-Or use Supabase backend credentials:
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key-here
-```
+Get the PostgreSQL URI from the Supabase Dashboard **Connect** panel and use its **Transaction pooler** option for transient/serverless hosts. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` alone do not replace `DATABASE_URL` for direct PostgreSQL transactions. Never paste the URI or password into GitHub.
 
 ### Step 4: Apply Database Schema & Migrations
-Before accepting live traffic, run the DDL schema and genesis seed:
-```bash
-psql $DATABASE_URL -f database/schema.sql
-psql $DATABASE_URL -f database/seed.sql
-```
-This initializes the 16 normalized relational tables and the genesis 10 Billion token supply into the Owner Treasury exactly once.
+The schema has been applied to the connected Supabase project and the 16 tables were verified. The migration file is tracked at `database/migrations/002_supabase_schema.sql`. Do not run a genesis seed against production until the application storage adapter has been migrated and the seed is made idempotent; current application demo IDs and the schema UUID keys need a deliberate mapping.
 
 ---
 
@@ -82,8 +75,10 @@ To prevent accidental financial anomalies or mock data leakage, the server stric
 
 ```typescript
 if (config.isProduction && !config.productionValid) {
-  // Halts API with 503 and returns missing variables
+  // Missing secrets: return 503.
 }
+// Even with valid secrets, production business APIs return 503 until
+// PostgreSQL-backed storage replaces the simulated in-memory engine.
 ```
 
 If any mandatory variable is omitted or if default preview placeholders are used:
