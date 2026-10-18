@@ -52,7 +52,9 @@ async function startServer() {
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
-      const allowed = config.corsOrigins.includes(origin);
+      const allowed =
+        config.corsOrigins.includes(origin) ||
+        (!config.isProduction && (config.corsOrigins.length === 0 || config.corsOrigins.includes('*')));
       if (!allowed) {
         return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED' });
       }
