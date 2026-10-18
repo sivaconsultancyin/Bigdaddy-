@@ -41,6 +41,24 @@ function checkProductionValidation(): { isValid: boolean; missing: string[] } {
     missing.push('DATABASE_URL (Supabase PostgreSQL connection string)');
   }
 
+  // Production browser access must be explicitly restricted to known origins.
+  const corsOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (corsOrigins.length === 0 || corsOrigins.includes('*')) {
+    missing.push('CORS_ORIGINS (comma-separated trusted HTTPS origins; wildcard is forbidden in production)');
+  } else if (corsOrigins.some((origin) => {
+    try {
+      const parsed = new URL(origin);
+      return parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1';
+    } catch {
+      return true;
+    }
+  })) {
+    missing.push('CORS_ORIGINS (each entry must be a valid HTTPS origin)');
+  }
+
   // Cryptographic secrets verification
   const defaultDevSecret = 'bigdaddy-casino-super-secret-jwt-key-2026';
   if (
@@ -77,7 +95,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'bigdaddy-casino-super-secret-jwt-key-2026',
   jwtExpiresIn: '7d',
   sessionSecret: process.env.SESSION_SECRET || 'dev-preview-session-secret-999',
-  corsOrigins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['*'],
+  corsOrigins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean) : [],
   databaseUrl: process.env.DATABASE_URL || '',
   supabaseUrl: process.env.SUPABASE_URL || '',
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
