@@ -2,14 +2,14 @@
 
 ## 1. Dual-Mode Architecture Overview
 
-BigDaddy Casino provides a first-class dual-mode configuration system designed for zero-friction development and previewing while guaranteeing rigorous security and financial safety in production:
+BigDaddy has a development preview mode and a fail-closed production guard. Production financial APIs remain disabled until PostgreSQL-backed user, wallet, ledger, bet, and settlement storage is implemented and verified.
 
 | Capability | Development & Preview Mode (`APP_MODE=development`) | Production Mode (`APP_MODE=production`) |
 |---|---|---|
 | **Environment Variables** | **Zero required** | **Mandatory validation** |
-| **Database** | Isolated in-memory authoritative store | Real PostgreSQL / Supabase instance |
-| **Token Balances & Wallets** | Simulated demo tokens (clearly labeled) | Real double-entry ledger |
-| **Game Outcomes (Aviator)** | In-memory authoritative simulator | Authoritative production server |
+| **Database** | Isolated in-memory preview store | PostgreSQL connectivity only; business storage migration still pending |
+| **Token Balances & Wallets** | Simulated demo tokens (clearly labeled) | APIs disabled until persistent ledger integration is complete |
+| **Game Outcomes (Aviator)** | In-memory preview simulator | Game APIs/WebSockets disabled pending durable settlement integration |
 | **Missing Secrets Behavior** | Runs out of the box with safe defaults | **Fails safely** with `ProductionConfigError` |
 | **Real Money Risk** | None (Non-real money preview) | Authorized production settlement |
 
@@ -65,7 +65,7 @@ DATABASE_URL=postgresql://user:password@host:5432/bigdaddy_casino?sslmode=requir
 Get the PostgreSQL URI from the Supabase Dashboard **Connect** panel and use its **Transaction pooler** option for transient/serverless hosts. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` alone do not replace `DATABASE_URL` for direct PostgreSQL transactions. Never paste the URI or password into GitHub.
 
 ### Step 4: Apply Database Schema & Migrations
-The base schema was applied to the connected Supabase project and the 16 tables were verified. The base migration is `database/migrations/002_supabase_schema.sql`. The additional migration `database/migrations/003_atomic_wallet_transfer.sql` defines an atomic, idempotent transfer function with wallet row locks, double-entry ledger records, and a fixed-supply check. It is committed to GitHub but has **not** been verified as applied to Supabase; review and apply it manually in the Supabase SQL Editor after confirming the base schema is present.
+The base schema was applied to the connected Supabase project and the 16 tables were verified. The base migration is `database/migrations/002_supabase_schema.sql`. Migrations `003_atomic_wallet_transfer.sql` and `004_production_database_hardening.sql` have been applied to Supabase and are recorded in its migration history. Migration 003 defines an atomic, idempotent transfer function with wallet row locks, double-entry ledger records, a fixed-supply check, and execution revoked from browser roles. Migration 004 revokes public execution of the RLS helper and adds indexes for uncovered foreign keys.
 
 Production CORS now requires `CORS_ORIGINS` to list the exact trusted HTTPS origins (comma-separated); wildcard origins are rejected in production. The health endpoint remains available, while readiness and financial/game APIs report not-ready until persistence is completed. Production WebSocket game streams are disabled to prevent exposing simulated game state.
 
