@@ -31,52 +31,92 @@ async function startServer() {
   }
 
   const app = express();
-  app.use(express.json());
 
-  // CORS middleware for API routes
+  // Basic security headers. TLS termination must be configured at the hosting edge.
+  app.disable('x-powered-by');
   app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (config.isProduction) {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
     next();
   });
 
-  // Public Configuration Endpoint
-  app.get('/api/config', (req, res) => {
+  // Bound request body size to reduce accidental or abusive memory exhaustion.
+  app.use(express.json({ limit: '256kb' }));
+
+  // Explicit CORS allowlist. Production configuration rejects wildcard origins.
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      const allowed = config.corsOrigins.includes(origin);
+      if (!allowed) {
+        return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED' });
+      }
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Idempotency-Key');
+    res.header('Access-Control-Max-Age', '600');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
+  // Liveness is deliberately available even while financial APIs are disabled.
+  app.get('/api/health', (_req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'BigDaddy Casino Authority',
+      mode: config.mode,
+      databaseConnected: isDatabaseConnected(),
+      businessDataPersistence: 'IN_MEMORY_NOT_MIGRATED',
+      productionFinancialApisEnabled: false,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Readiness remains false until durable storage and game settlement are implemented.
+  app.get('/api/ready', (_req, res) => {
+    const ready = !config.isProduction;
+    res.status(ready ? 200 : 503).json({
+      ready,
+      reason: ready ? null : 'PERSISTENT_STORAGE_AND_SETTLEMENT_NOT_READY',
+      databaseConnected: isDatabaseConnected(),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  app.get('/api/config', (_req, res) => {
     res.json(getPublicConfigInfo());
   });
 
-  // Production Safety Interceptor:
-  // Requirement 7: Production Mode must fail safely with a clear configuration error
-  // if required credentials or services are missing. Never silently use mock balances.
+  // Fail closed in production: no mock/in-memory financial or game operations.
   if (config.isProduction && !config.productionValid) {
-    console.error('❌ PRODUCTION CONFIGURATION ERROR: Mandatory credentials missing:');
-    config.productionMissingVars.forEach((v) => console.error(`   - ${v}`));
-
-    app.use('/api', (req, res) => {
-      res.status(503).json({
+    console.error('Production configuration invalid:', config.productionMissingVars.join(', '));
+    app.use('/api', (req, res, next) => {
+      if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
+      return res.status(503).json({
         error: 'PRODUCTION_CONFIGURATION_ERROR',
-        message:
-          'BigDaddy Casino cannot operate in Production Mode without mandatory database and security secrets. Mock/simulated data is strictly forbidden in Production.',
+        message: 'Production configuration is incomplete. Financial and game APIs remain disabled.',
         missingVariables: config.productionMissingVars,
-        instructions:
-          'Set APP_MODE=development or provide the required production environment variables. Refer to docs/CONFIGURATION_GUIDE.md.',
       });
     });
   } else if (config.isProduction) {
-    // Do not serve simulated in-memory wallet/game data as production data.
-    // The relational persistence adapter must be completed before production APIs are enabled.
-    app.use('/api', (_req, res) => {
-      res.status(503).json({
+    app.use('/api', (req, res, next) => {
+      if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
+      return res.status(503).json({
         error: 'PERSISTENT_STORAGE_NOT_READY',
-        message: 'PostgreSQL connectivity is available, but business storage migration is not complete. Production financial APIs are disabled to protect wallet and ledger integrity.',
+        message: 'PostgreSQL-backed user, wallet, ledger, bet, and settlement operations have not completed production verification.',
       });
     });
   } else {
-    // REST API Routes (development/preview only; state is simulated in memory)
     app.use('/api/auth', authRouter);
     app.use('/api/wallet', walletRouter);
     app.use('/api/requests', tokenRequestRouter);
@@ -90,23 +130,12 @@ async function startServer() {
     app.use('/api/games/andar-bahar', andarBaharRouter);
   }
 
-  // Health check
-  app.get('/api/health', (req, res) => {
-    res.json({
-      status: 'healthy',
-      service: 'BigDaddy Casino Authority',
-      mode: config.mode,
-      isSimulated: config.isSimulated,
-      databaseConnected: isDatabaseConnected(),
-      businessDataPersistence: 'IN_MEMORY_NOT_MIGRATED',
-      timestamp: new Date().toISOString(),
-    });
-  });
-
   const server = http.createServer(app);
 
-  // Setup WebSocket Server for Live Game Multipliers & Balance Sync
-  setupWebSocketServer(server);
+  // WebSocket game streams are simulated and must not be exposed in production.
+  if (!config.isProduction) {
+    setupWebSocketServer(server);
+  }
 
   // Mount Vite middleware for dev or serve static dist in production
   if (process.env.NODE_ENV === 'production' && !process.env.DEV_MODE && !config.isDevelopmentOrPreview) {
