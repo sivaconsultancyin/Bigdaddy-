@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { AppMode, AppConfigInfo } from '../../../shared/src/types';
+import { isDatabaseConnected } from '../db/postgres';
 dotenv.config();
 
 export class ProductionConfigError extends Error {
@@ -33,14 +34,11 @@ function checkProductionValidation(): { isValid: boolean; missing: string[] } {
 
   // Database verification
   const hasDatabaseUrl = !!process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== '';
-  const hasSupabase =
-    !!process.env.SUPABASE_URL &&
-    process.env.SUPABASE_URL.trim() !== '' &&
-    !!process.env.SUPABASE_SERVICE_ROLE_KEY &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY.trim() !== '';
 
-  if (!hasDatabaseUrl && !hasSupabase) {
-    missing.push('DATABASE_URL or (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)');
+  // The backend uses direct PostgreSQL transactions for wallet/ledger operations.
+  // A Supabase REST/service-role key alone is not a PostgreSQL connection string.
+  if (!hasDatabaseUrl) {
+    missing.push('DATABASE_URL (Supabase PostgreSQL connection string)');
   }
 
   // Cryptographic secrets verification
@@ -98,7 +96,7 @@ export function getPublicConfigInfo(): AppConfigInfo {
   return {
     mode: config.mode,
     isSimulated: config.isSimulated,
-    databaseConnected: config.isProduction && !!config.databaseUrl,
+    databaseConnected: isDatabaseConnected(),
     authProvider: config.isProduction
       ? 'PRODUCTION_SUPABASE_POSTGRES'
       : 'SIMULATED_LOCAL',
