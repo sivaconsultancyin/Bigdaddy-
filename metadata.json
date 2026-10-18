@@ -1,0 +1,6 @@
+{
+  "name": "BigDaddy Casino",
+  "description": "Production-oriented casino-style gaming platform with hierarchical RBAC, double-entry token ledger, dedicated game pools, and authoritative crash engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
