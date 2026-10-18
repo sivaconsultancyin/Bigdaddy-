@@ -129,3 +129,8 @@ $function$;
 
 COMMENT ON FUNCTION public.execute_wallet_transfer(UUID, UUID, BIGINT, public.transaction_type_enum, VARCHAR, TEXT, JSONB)
 IS 'Atomic idempotent transfer with wallet row locks, double-entry ledger entries, and fixed token supply verification.';
+
+-- This function is for the trusted backend database connection only.
+-- Do not expose wallet transfer execution to Supabase anon/authenticated clients.
+REVOKE ALL ON FUNCTION public.execute_wallet_transfer(UUID, UUID, BIGINT, public.transaction_type_enum, VARCHAR, TEXT, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.execute_wallet_transfer(UUID, UUID, BIGINT, public.transaction_type_enum, VARCHAR, TEXT, JSONB) FROM anon, authenticated;
