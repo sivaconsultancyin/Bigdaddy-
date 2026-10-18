@@ -65,7 +65,11 @@ DATABASE_URL=postgresql://user:password@host:5432/bigdaddy_casino?sslmode=requir
 Get the PostgreSQL URI from the Supabase Dashboard **Connect** panel and use its **Transaction pooler** option for transient/serverless hosts. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` alone do not replace `DATABASE_URL` for direct PostgreSQL transactions. Never paste the URI or password into GitHub.
 
 ### Step 4: Apply Database Schema & Migrations
-The schema has been applied to the connected Supabase project and the 16 tables were verified. The migration file is tracked at `database/migrations/002_supabase_schema.sql`. Do not run a genesis seed against production until the application storage adapter has been migrated and the seed is made idempotent; current application demo IDs and the schema UUID keys need a deliberate mapping.
+The base schema was applied to the connected Supabase project and the 16 tables were verified. The base migration is `database/migrations/002_supabase_schema.sql`. The additional migration `database/migrations/003_atomic_wallet_transfer.sql` defines an atomic, idempotent transfer function with wallet row locks, double-entry ledger records, and a fixed-supply check. It is committed to GitHub but has **not** been verified as applied to Supabase; review and apply it manually in the Supabase SQL Editor after confirming the base schema is present.
+
+Production CORS now requires `CORS_ORIGINS` to list the exact trusted HTTPS origins (comma-separated); wildcard origins are rejected in production. The health endpoint remains available, while readiness and financial/game APIs report not-ready until persistence is completed. Production WebSocket game streams are disabled to prevent exposing simulated game state.
+
+Do not run a genesis seed against production until the application storage adapter has been migrated, demo accounts are removed from production startup, UUID mapping is deliberate, and the seed is idempotent.
 
 ---
 
