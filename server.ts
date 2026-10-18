@@ -27,7 +27,9 @@ async function startServer() {
     await connectDatabase();
     console.log('✅ Supabase PostgreSQL connectivity check passed.');
   } else if (config.isProduction) {
-    throw new Error('DATABASE_URL is required for production PostgreSQL connectivity.');
+    // Keep liveness/readiness endpoints available; config validation below keeps
+    // every financial/game API closed until required secrets are configured.
+    console.error('Production startup blocked from financial traffic: DATABASE_URL is missing.');
   }
 
   const app = express();
