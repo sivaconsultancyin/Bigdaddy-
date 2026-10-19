@@ -1,20 +1,4 @@
-import {
-  User,
-  Wallet,
-  UserRole,
-  WalletType,
-  TokenRequest,
-  TokenRequestStatus,
-  LedgerEntry,
-  LedgerDirection,
-  GameInfo,
-  AppMode,
-  AppConfigInfo,
-  AviatorBet,
-  BetStatus,
-  AdminPaymentInfo,
-} from '../../../shared/src/types';
-import { GAMES_CATALOG, MAX_TOKEN_SUPPLY } from '../../../shared/src/constants';
+import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
 
