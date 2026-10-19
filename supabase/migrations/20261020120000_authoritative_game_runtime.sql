@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.authoritative_game_bets (
   status text NOT NULL DEFAULT 'PENDING'
     CHECK (status IN ('PENDING','WON','LOST','CANCELLED')),
   payout_amount bigint NOT NULL DEFAULT 0 CHECK (payout_amount >= 0),
+  reserved_liability bigint NOT NULL DEFAULT 0 CHECK (reserved_liability >= 0),
   idempotency_key text NOT NULL UNIQUE CHECK (length(trim(idempotency_key)) >= 8),
   escrow_transaction_id uuid REFERENCES public.wallet_transactions(id),
   stake_release_transaction_id uuid REFERENCES public.wallet_transactions(id),
