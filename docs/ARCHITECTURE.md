@@ -46,4 +46,4 @@ Crash payouts are funded from the dedicated **Crash/Aviator Game Pool**, not fro
 - **Player Cashout (Win)**: The payout is debited from the Game Pool and credited to the Player; the held stake moves from Escrow back to the Game Pool. The reservation is released when the settlement migration is applied.
 - **Plane Crash (Loss)**: The held stake moves from Escrow to the Game Pool. The reservation is released when the settlement migration is applied.
 
-The remaining games are preview/simulated in development; production routes intentionally keep unsupported games unavailable.
+The remaining game routes are not exposed by the production server until durable database-backed bet placement, settlement, history, and recovery are implemented. The production server does not mount legacy in-memory routers or simulated WebSocket streams.
