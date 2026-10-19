@@ -31,7 +31,7 @@ async function tick() {
       return;
     }
 
-    const round = rows[0] as { id: string; round_number: number; status: string; started_at: string; server_seed: string; crash_multiplier: string | number };
+    const round = rows[0] as unknown as { id: string; round_number: number; status: string; started_at: string; server_seed: string; crash_multiplier: string | number };
     const age = Date.now() - new Date(round.started_at).getTime();
     if (round.status === 'WAITING') {
       if (age >= 5000) {
