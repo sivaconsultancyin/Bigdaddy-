@@ -98,7 +98,7 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
     const number = Number(result.number);
     const numbers = Array.isArray(selection?.numbers) ? selection.numbers.map(Number) : [];
     if (['straight','split','street','corner','line','number'].includes(type)) {
-      const odds: Record<string, number> = { straight: 36, split: 18, street: 12, corner: 9, line: 6 };
+      const odds: Record<string, number> = { straight: 36, number: 36, split: 18, street: 12, corner: 9, line: 6 };
       return numbers.includes(number) ? odds[type] : 0;
     }
     if (type === 'red' || type === 'black' || type === 'green') return result.color === type ? (type === 'green' ? 36 : 2) : 0;
@@ -438,7 +438,7 @@ async function tick() {
   try {
     const sql = getDatabaseClient();
     const activeRows = await sql.unsafe(
-      "SELECT g.code,g.status FROM public.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM public.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RESULT')))", [GAME_CODES],
+      "SELECT g.code,g.status FROM public.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM public.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
     );
     for (const game of activeRows) {
       const code = game.code as GameCode;
