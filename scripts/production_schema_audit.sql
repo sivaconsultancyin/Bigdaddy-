@@ -26,7 +26,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM pg_index i
   WHERE i.indrelid=fk.conrelid AND i.indisvalid AND i.indpred IS NULL
     AND i.indnkeyatts >= cardinality(fk.conkey)
-    AND (i.indkey::smallint[])[0:cardinality(fk.conkey)-1] = fk.conkey
+    AND ARRAY(SELECT i.indkey[k]::smallint FROM generate_series(0,cardinality(fk.conkey)-1) k ORDER BY k) = fk.conkey
 )
 ORDER BY fk.table_name::text, fk.conname;
 
