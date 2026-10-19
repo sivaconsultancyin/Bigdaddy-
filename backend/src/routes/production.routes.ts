@@ -42,7 +42,7 @@ productionRouter.post('/auth/login', async (req, res: Response) => {
     const user = rows[0] as unknown as UserRow | undefined;
     if (!user || !user.is_active || !(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'INVALID_USERNAME_OR_PASSWORD' });
     const wallets = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
-    await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_LOGIN','USER',$1,$2::jsonb)", [user.id, JSON.stringify({ ip: req.ip })]);
+    await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_LOGIN','USER',$2,$3::jsonb)", [user.id, user.id, JSON.stringify({ ip: req.ip })]);
     return res.json({ token: tokenFor(user), user: safeUser(user), wallet: wallets[0] || null });
   } catch (error) {
     console.error('Production login failed:', error);
@@ -71,7 +71,7 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
       await tx.unsafe('INSERT INTO public.referral_codes(code,owner_user_id,admin_id,is_active) VALUES($1,$2,$3,true)', [newReferralCode, user.id, refs[0].admin_id]);
       user.referral_code = newReferralCode;
       await tx.unsafe('UPDATE public.referral_codes SET usage_count=usage_count+1 WHERE code=$1', [referralCode]);
-      await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'REFERRAL_REGISTRATION','USER',$1,$2::jsonb)", [user.id, JSON.stringify({ referralCode })]);
+      await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'REFERRAL_REGISTRATION','USER',$2,$3::jsonb)", [user.id, user.id, JSON.stringify({ referralCode })]);
       return user;
     });
     const user = created as unknown as UserRow;
@@ -241,7 +241,7 @@ productionRouter.post('/auth/bootstrap-owner', async (req, res: Response) => {
       user.role = UserRole.OWNER;
       await tx.unsafe("INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,'OWNER',NULL)", [user.id]);
       await tx.unsafe('INSERT INTO public.user_profiles(user_id,display_name) VALUES($1,$2)', [user.id, username.trim()]);
-      await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'OWNER_BOOTSTRAPPED','USER',$1,'{}'::jsonb)", [user.id]);
+      await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'OWNER_BOOTSTRAPPED','USER',$2,'{}'::jsonb)", [user.id, user.id]);
       return user;
     });
     return res.status(201).json({ message: 'OWNER_CREATED_LOGIN_NOW', user: safeUser(owner as unknown as UserRow) });
