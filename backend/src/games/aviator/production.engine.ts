@@ -33,6 +33,12 @@ async function tick() {
     }
 
     const round = rows[0] as unknown as { id: string; round_number: number; status: string; started_at: string; ended_at: string | null; server_seed: string; crash_multiplier: string | number };
+    // Recovery path: the process may have crashed after marking a round CRASHED
+    // but before its atomic settlement completed. Settlement is idempotent.
+    if (round.status === 'CRASHED') {
+      await sql.unsafe('SELECT public.settle_crash_round_atomic($1::uuid)', [round.id]);
+      return;
+    }
     const age = Date.now() - new Date(round.started_at).getTime();
     if (round.status === 'WAITING') {
       if (age >= 5000) {
