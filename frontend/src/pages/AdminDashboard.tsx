@@ -5,6 +5,7 @@ import { User, TokenRequest, TokenRequestStatus, UserRole } from '../../../share
 import { CreateUserModal } from '../components/common/CreateUserModal';
 import { TokenRequestModal } from '../components/common/TokenRequestModal';
 import { AdminPaymentSettingsCard } from '../components/common/AdminPaymentSettingsCard';
+import { ProofScreenshotModal } from '../components/common/ProofScreenshotModal';
 import {
   UserCheck,
   Users,
@@ -15,12 +16,15 @@ import {
   Clock,
   Send,
   RefreshCw,
+  Camera,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const { wallet, refreshWallet } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<TokenRequest[]>([]);
+  const [selectedProofRequest, setSelectedProofRequest] = useState<TokenRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -193,14 +197,37 @@ export const AdminDashboard: React.FC = () => {
                   key={req.id}
                   className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5 flex items-center justify-between gap-2"
                 >
-                  <div className="truncate">
-                    <span className="font-bold text-xs text-zinc-200 block truncate">{req.requesterUsername}</span>
+                  <div className="truncate flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-xs text-zinc-200 block truncate">{req.requesterUsername}</span>
+                      {req.proofScreenshot && (
+                        <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[8px] font-bold shrink-0">
+                          Proof Attached
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs font-mono font-bold text-amber-300 block">
                       {parseInt(req.amount).toLocaleString()} Tokens
                     </span>
+                    {req.note && (
+                      <span className="text-[10px] text-zinc-400 block truncate font-mono">
+                        UTR: {req.note}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
+                    {req.proofScreenshot && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProofRequest(req)}
+                        className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow-sm"
+                        title="View payment proof screenshot"
+                      >
+                        <Camera className="w-3 h-3 text-amber-400" />
+                        <span>Screenshot</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleApprove(req.id)}
                       className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold"

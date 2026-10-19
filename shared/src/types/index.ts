@@ -126,6 +126,7 @@ export interface TokenRequest {
   amount: string; // BIGINT string
   status: TokenRequestStatus;
   note?: string;
+  proofScreenshot?: string; // Base64 data URL or image URL of deposit receipt
   decisionNote?: string;
   transactionId?: string | null;
   createdAt: string;

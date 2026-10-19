@@ -13,6 +13,7 @@ import {
   X,
   CreditCard,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 interface PlayerAdminPaymentCardProps {
@@ -28,12 +29,32 @@ export const PlayerAdminPaymentCard: React.FC<PlayerAdminPaymentCardProps> = ({
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
+  const fetchAdminPayment = () => {
+    setIsRefreshing(true);
     ApiClient.getAdminPaymentInfo()
       .then((info) => setAdminPayment(info))
       .catch((err) => console.warn('Could not load admin payment info:', err))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setTimeout(() => setIsRefreshing(false), 400);
+      });
+  };
+
+  useEffect(() => {
+    fetchAdminPayment();
+
+    const handleUpdate = () => {
+      fetchAdminPayment();
+    };
+
+    window.addEventListener('admin_payment_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('admin_payment_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const handleCopyUpi = () => {
@@ -169,9 +190,19 @@ export const PlayerAdminPaymentCard: React.FC<PlayerAdminPaymentCardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-          <ShieldCheck className="w-3 h-3 text-emerald-400" />
-          <span>Verified Agent</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={fetchAdminPayment}
+            title="Refresh Admin Payment Details"
+            className="p-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-amber-400 transition"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+          </button>
+          <div className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            <span>Verified Agent</span>
+          </div>
         </div>
       </div>
 

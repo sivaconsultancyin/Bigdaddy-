@@ -9,6 +9,7 @@ import { TeenPattiPreview } from '../games/teen-patti/TeenPattiPreview';
 import { DicePreview } from '../games/dice/DicePreview';
 import { DragonTigerPreview } from '../games/dragon-tiger/DragonTigerPreview';
 import { AndarBaharPreview } from '../games/andar-bahar/AndarBaharPreview';
+import { PlayerAdminPaymentCard } from '../components/common/PlayerAdminPaymentCard';
 import {
   Coins,
   Gamepad2,
@@ -185,69 +186,51 @@ export const PlayerDashboard: React.FC = () => {
             </span>
           </div>
 
-          {/* Featured Live Game: Aviator / Crash */}
-          <div className="bg-gradient-to-br from-amber-950/40 via-zinc-900 to-zinc-950 border border-amber-500/40 rounded-xl p-3 mb-2.5 shadow-lg">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center text-white shadow-md">
-                  <Plane className="w-5 h-5 text-white animate-pulse" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold text-sm text-zinc-100">Aviator / Crash</span>
-                    <span className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase">
-                      ● LIVE
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-zinc-400 block">
-                    Multiplier flight curve · Instant cashout
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] font-mono bg-zinc-950/70 rounded-lg px-2.5 py-1.5 border border-zinc-800/80 mb-2.5">
-              <span className="text-zinc-400">Min Bet: 10 Tokens</span>
-              <span className="text-amber-400 font-bold">Max: 100,000</span>
-            </div>
-
-            <button
-              onClick={() => setActiveGameCode('aviator')}
-              className="w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
-            >
-              <span>Play Aviator Now</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Upcoming Games Grid (Compact mobile 2-col) */}
+          {/* All Games Grid (Uniform 2-column cards of identical size) */}
           <div className="grid grid-cols-2 gap-2">
-            {games
-              .filter((g) => g.code !== 'aviator')
-              .map((g) => (
+            {games.map((g) => {
+              const isLive = g.status === 'ACTIVE' || g.code === 'aviator';
+              return (
                 <button
                   key={g.id}
                   onClick={() => setActiveGameCode(g.code)}
-                  className="bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 rounded-xl p-2.5 text-left transition flex flex-col justify-between active:scale-[0.98]"
+                  className="bg-zinc-900/70 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-2.5 text-left transition flex flex-col justify-between active:scale-[0.98] group relative overflow-hidden"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center">
+                  <div className="flex items-center justify-between mb-2">
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center border ${
+                        g.code === 'aviator'
+                          ? 'bg-gradient-to-br from-red-600 via-rose-600 to-amber-600 border-red-500/40 text-white shadow-sm'
+                          : 'bg-zinc-800 border-zinc-700/50'
+                      }`}
+                    >
                       {getGameIcon(g.iconName)}
                     </div>
-                    <span className="text-[8px] uppercase font-bold px-1 rounded bg-zinc-800 text-zinc-500">
-                      Soon
+                    <span
+                      className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                        isLive
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {isLive ? '● LIVE' : 'Preview'}
                     </span>
                   </div>
+
                   <div>
-                    <span className="text-xs font-bold text-zinc-200 block truncate leading-tight">
+                    <span className="text-xs font-bold text-zinc-200 block truncate leading-tight group-hover:text-amber-300">
                       {g.name}
                     </span>
-                    <span className="text-[9px] text-zinc-500 font-mono">
-                      Pool: {parseInt(g.poolBalance || '0').toLocaleString()}
-                    </span>
+                    <div className="flex items-center justify-between mt-1 pt-1 border-t border-zinc-800/60 text-[9px] text-zinc-500 font-mono">
+                      <span>Pool: ₹{parseInt(g.poolBalance || '0').toLocaleString()}</span>
+                      <span className="text-amber-400 font-bold group-hover:translate-x-0.5 transition-transform flex items-center">
+                        Play &gt;
+                      </span>
+                    </div>
                   </div>
                 </button>
-              ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -290,6 +273,11 @@ export const PlayerDashboard: React.FC = () => {
             <span className="text-[10px] text-zinc-500 block leading-tight">
               Isolated in-memory balance. No real-money deposit needed.
             </span>
+          </div>
+
+          {/* Admin Deposit UPI & QR Code Photo Card */}
+          <div className="mb-3">
+            <PlayerAdminPaymentCard onRequestTokens={() => setIsRequestModalOpen(true)} />
           </div>
 
           {/* Wallet Actions */}

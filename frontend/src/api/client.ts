@@ -97,6 +97,18 @@ const mockState = {
       updatedAt: new Date().toISOString(),
     },
   } as Record<string, Wallet>,
+  adminPayment: {
+    adminId: 'user-admin-001',
+    adminUsername: 'admin_bravo',
+    upiId: 'admin.bravo@oksbi',
+    upiQrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi://pay?pa=admin.bravo@oksbi%26pn=BigDaddy%20Admin%20Bravo%26cu=INR',
+    paymentAccountName: 'BigDaddy Admin Bravo Official',
+  } as AdminPaymentInfo,
+  games: GAMES_CATALOG.map((g) => ({
+    ...g,
+    poolBalance: g.code === 'aviator' ? '2000000' : '500000',
+  })) as GameInfo[],
+  requests: [] as TokenRequest[],
 };
 
 export class ApiClient {
@@ -196,26 +208,104 @@ export class ApiClient {
     }
 
     if (endpoint === '/games/list') {
-      return {
-        games: GAMES_CATALOG.map((g) => ({
-          ...g,
-          poolBalance: g.code === 'aviator' ? '2000000' : '0',
-        })),
-      };
+      return { games: mockState.games };
     }
 
-    if (endpoint === '/requests/list') {
-      return { requests: [] };
+    if (endpoint === '/games/allocate-pool' && options.method === 'POST') {
+      try {
+        const body = JSON.parse((options.body as string) || '{}');
+        const game = mockState.games.find((g) => g.id === body.gameId);
+        if (game) {
+          const currentPool = BigInt(game.poolBalance || '0');
+          const alloc = BigInt(body.amount || '0');
+          game.poolBalance = (currentPool + alloc).toString();
+          const treasuryWallet = mockState.wallets['user-owner-001'];
+          if (treasuryWallet) {
+            const currentTreasury = BigInt(treasuryWallet.balance);
+            treasuryWallet.balance = (currentTreasury - alloc).toString();
+          }
+        }
+        return {
+          message: `Successfully allocated ${body.amount} tokens to game pool`,
+          games: mockState.games,
+        };
+      } catch {
+        return { games: mockState.games };
+      }
+    }
+
+    if (endpoint === '/auth/payment-details' && options.method === 'PUT') {
+      try {
+        const body = JSON.parse((options.body as string) || '{}');
+        if (body.upiId) mockState.adminPayment.upiId = body.upiId;
+        if (body.upiQrCode) mockState.adminPayment.upiQrCode = body.upiQrCode;
+        if (body.paymentAccountName) mockState.adminPayment.paymentAccountName = body.paymentAccountName;
+        const adminUser = mockState.users.find((u) => u.id === 'user-admin-001');
+        if (adminUser) {
+          adminUser.upiId = mockState.adminPayment.upiId;
+          adminUser.upiQrCode = mockState.adminPayment.upiQrCode || undefined;
+          adminUser.paymentAccountName = mockState.adminPayment.paymentAccountName;
+        }
+        return {
+          message: 'Payment details successfully updated',
+          user: adminUser || mockState.users[2],
+        };
+      } catch {
+        return { message: 'Updated' };
+      }
     }
 
     if (endpoint === '/auth/admin-payment-info') {
-      return {
-        adminId: 'user-admin-001',
-        adminUsername: 'admin_bravo',
-        upiId: 'admin.bravo@oksbi',
-        upiQrCode: 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=upi://pay?pa=admin.bravo@oksbi%26pn=BigDaddy%20Admin%20Bravo%26cu=INR',
-        paymentAccountName: 'BigDaddy Admin Bravo Official',
-      };
+      return mockState.adminPayment;
+    }
+
+    if (endpoint === '/requests/create' && options.method === 'POST') {
+      try {
+        const body = JSON.parse((options.body as string) || '{}');
+        const newReq: TokenRequest = {
+          id: `req-${Date.now()}`,
+          requesterId: 'user-player-001',
+          requesterUsername: 'player_charlie',
+          requesterRole: UserRole.PLAYER,
+          approverId: 'user-admin-001',
+          approverUsername: 'admin_bravo',
+          amount: body.amount || '1000',
+          status: TokenRequestStatus.PENDING,
+          note: body.note || '',
+          proofScreenshot: body.proofScreenshot,
+          createdAt: new Date().toISOString(),
+        };
+        mockState.requests.unshift(newReq);
+        return { message: 'Token request created', request: newReq };
+      } catch {
+        return { message: 'Created' };
+      }
+    }
+
+    if (endpoint === '/requests/list') {
+      return { requests: mockState.requests };
+    }
+
+    if (endpoint.startsWith('/requests/') && endpoint.endsWith('/approve') && options.method === 'POST') {
+      const parts = endpoint.split('/');
+      const reqId = parts[2];
+      const targetReq = mockState.requests.find((r) => r.id === reqId);
+      if (targetReq) {
+        targetReq.status = TokenRequestStatus.APPROVED;
+        targetReq.resolvedAt = new Date().toISOString();
+      }
+      return { message: 'Request approved', request: targetReq };
+    }
+
+    if (endpoint.startsWith('/requests/') && endpoint.endsWith('/reject') && options.method === 'POST') {
+      const parts = endpoint.split('/');
+      const reqId = parts[2];
+      const targetReq = mockState.requests.find((r) => r.id === reqId);
+      if (targetReq) {
+        targetReq.status = TokenRequestStatus.REJECTED;
+        targetReq.resolvedAt = new Date().toISOString();
+      }
+      return { message: 'Request rejected', request: targetReq };
     }
 
     if (endpoint === '/wallet/ledger') {
@@ -331,7 +421,7 @@ export class ApiClient {
   }
 
   // Token Requests
-  public static createTokenRequest(payload: { amount: string; note?: string }) {
+  public static createTokenRequest(payload: { amount: string; note?: string; proofScreenshot?: string }) {
     return this.request('/requests/create', {
       method: 'POST',
       body: JSON.stringify(payload),

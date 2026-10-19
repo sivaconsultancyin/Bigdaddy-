@@ -120,6 +120,8 @@ export const AdminPaymentSettingsCard: React.FC<AdminPaymentSettingsCardProps> =
       });
 
       await refreshUser();
+      window.dispatchEvent(new CustomEvent('admin_payment_updated'));
+      localStorage.setItem('admin_payment_updated_at', Date.now().toString());
       if (onUpdated) onUpdated();
 
       setSuccessMsg(

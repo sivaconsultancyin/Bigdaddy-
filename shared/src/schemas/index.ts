@@ -23,7 +23,8 @@ export const referralRegisterSchema = z.object({
 
 export const tokenRequestSchema = z.object({
   amount: z.string().regex(/^[1-9]\d*$/, 'Amount must be a positive integer'),
-  note: z.string().max(200).optional(),
+  note: z.string().max(500).optional(),
+  proofScreenshot: z.string().optional(),
 });
 
 export const approveTokenRequestSchema = z.object({

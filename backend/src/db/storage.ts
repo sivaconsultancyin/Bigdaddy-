@@ -618,6 +618,7 @@ export class StorageEngine {
     requesterId: string;
     amount: string;
     note?: string;
+    proofScreenshot?: string;
   }): TokenRequest {
     const requester = this.getUserById(params.requesterId);
     if (!requester) throw new Error('Requester not found');
@@ -662,6 +663,7 @@ export class StorageEngine {
       amount: params.amount,
       status: TokenRequestStatus.PENDING,
       note: params.note,
+      proofScreenshot: params.proofScreenshot,
       createdAt: new Date().toISOString(),
     };
 

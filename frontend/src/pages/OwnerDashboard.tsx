@@ -8,8 +8,10 @@ import {
   TokenRequestStatus,
   AuditLog,
   UserRole,
+  GameInfo,
 } from '../../../shared/src/types';
 import { CreateUserModal } from '../components/common/CreateUserModal';
+import { AllocatePoolModal } from '../components/common/AllocatePoolModal';
 import {
   Crown,
   Coins,
@@ -29,10 +31,12 @@ export const OwnerDashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<TokenRequest[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [games, setGames] = useState<GameInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Direct Transfer State
@@ -43,17 +47,19 @@ export const OwnerDashboard: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [suppData, usersData, reqsData, auditData] = await Promise.all([
+      const [suppData, usersData, reqsData, auditData, gamesData] = await Promise.all([
         ApiClient.getSupplySummary(),
         ApiClient.getUsers(),
         ApiClient.getTokenRequests(),
         ApiClient.getAuditLogs(),
+        ApiClient.getGames(),
       ]);
 
       setSupply(suppData);
       setUsers(usersData.users);
       setRequests(reqsData.requests);
       setAuditLogs(auditData.logs);
+      if (gamesData.games) setGames(gamesData.games);
       if (usersData.users.length > 0 && !transferTargetId) {
         setTransferTargetId(usersData.users[0].id);
       }
@@ -219,6 +225,53 @@ export const OwnerDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Game Pools Liquidity Overview (Owner Dashboard: Game pools visibility & allocation) */}
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3.5 shadow-xl">
+        <div className="flex items-center justify-between mb-2 pb-2 border-b border-zinc-800">
+          <div className="flex items-center gap-1.5">
+            <Coins className="w-3.5 h-3.5 text-amber-400" />
+            <h3 className="font-bold text-xs text-zinc-200 uppercase font-mono">
+              Game Pools Reserves ({games.length})
+            </h3>
+          </div>
+          <button
+            onClick={() => setIsAllocateModalOpen(true)}
+            className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 transition active:scale-95 flex items-center gap-1 shadow-sm"
+          >
+            <Coins className="w-3 h-3 text-zinc-950" />
+            <span>+ Allocate Pool</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {games.map((g) => (
+            <div
+              key={g.id}
+              className="bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-2.5 flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-zinc-200 truncate">{g.name}</span>
+                <span className="text-[8px] font-mono px-1 rounded bg-emerald-500/20 text-emerald-400">
+                  {g.status}
+                </span>
+              </div>
+              <div className="text-[11px] font-mono font-black text-amber-300">
+                ₹{parseInt(g.poolBalance || '0').toLocaleString()}
+              </div>
+              <div className="flex items-center justify-between mt-1 pt-1 border-t border-zinc-800/60 text-[9px] text-zinc-500 font-mono">
+                <span>Min: {g.minBet}</span>
+                <button
+                  onClick={() => setIsAllocateModalOpen(true)}
+                  className="text-amber-400 hover:underline font-bold"
+                >
+                  Transfer &gt;
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Pending Requests */}
       <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3.5 shadow-xl">
         <div className="flex items-center gap-1.5 pb-2 border-b border-zinc-800 mb-2.5">
@@ -363,6 +416,12 @@ export const OwnerDashboard: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onUserCreated={loadData}
+      />
+      <AllocatePoolModal
+        isOpen={isAllocateModalOpen}
+        games={games}
+        onClose={() => setIsAllocateModalOpen(false)}
+        onAllocated={loadData}
       />
     </div>
   );

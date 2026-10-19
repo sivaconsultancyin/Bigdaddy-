@@ -22,13 +22,14 @@ tokenRequestRouter.post('/create', authenticateJWT, async (req: AuthenticatedReq
     return res.status(400).json({ error: parseResult.error.issues[0]?.message || 'Validation error' });
   }
 
-  const { amount, note } = parseResult.data;
+  const { amount, note, proofScreenshot } = parseResult.data;
 
   try {
     const request = db.createTokenRequest({
       requesterId: user.id,
       amount,
       note,
+      proofScreenshot,
     });
 
     db.logAudit({

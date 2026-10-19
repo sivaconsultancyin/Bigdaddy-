@@ -26,6 +26,8 @@ import { AndarBaharPreview } from '../games/andar-bahar/AndarBaharPreview';
 import { MobileTab } from '../components/common/MobileBottomNav';
 import { AdminPaymentSettingsCard } from '../components/common/AdminPaymentSettingsCard';
 import { PlayerAdminPaymentCard } from '../components/common/PlayerAdminPaymentCard';
+import { AllocatePoolModal } from '../components/common/AllocatePoolModal';
+import { ProofScreenshotModal } from '../components/common/ProofScreenshotModal';
 import {
   Gamepad2,
   Coins,
@@ -54,6 +56,9 @@ import {
   Crown,
   Shield,
   UserCheck,
+  Camera,
+  Sparkles,
+  Eye,
 } from 'lucide-react';
 
 interface MobileDashboardProps {
@@ -84,6 +89,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   // Modals & Drawers
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
+  const [selectedProofRequest, setSelectedProofRequest] = useState<TokenRequest | null>(null);
+  const [selectedPoolGameId, setSelectedPoolGameId] = useState<string>('game-aviator');
   const [copiedReferral, setCopiedReferral] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -102,7 +110,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const hasStaffRole = isOwner || isSuperAdmin || isAdmin;
   const isPlayer = user?.role === UserRole.PLAYER;
 
-  // Strict Role Guard: Owner, Super Admin, and Admin dashboards must NEVER display or access games
+  // Strict Role Guard: Owner, Super Admin, and Admin dashboards must NEVER display playable game canvases
   useEffect(() => {
     if (!isPlayer) {
       if (activeGameCode) {
@@ -121,15 +129,15 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         ApiClient.getTokenRequests().catch(() => ({ requests: [] })),
       ];
 
-      // Games are STRICTLY loaded only for Player logins
-      if (isPlayer) {
+      // Games catalog and liquidity pool balances are loaded for Players (to play) and Owners (to monitor & allocate game pools)
+      if (isPlayer || isOwner || isSuperAdmin) {
         promises.push(ApiClient.getGames().catch(() => ({ games: [] })));
       }
 
       const results = await Promise.all(promises);
       const ledgerData = results[0];
       const reqsData = results[1];
-      const gamesData = isPlayer ? results[2] : null;
+      const gamesData = (isPlayer || isOwner || isSuperAdmin) ? results[2] : null;
 
       if (gamesData?.games) setGames(gamesData.games);
       if (ledgerData.entries) setLedgerEntries(ledgerData.entries);
@@ -424,6 +432,75 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             </div>
           )}
 
+          {/* Game Pools Liquidity Reserves (Owner Dashboard: Game pools visibility & allocation) */}
+          {(isOwner || isSuperAdmin) && (
+            <div className="pt-2 border-t border-zinc-800/80">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5 text-amber-400" />
+                  <h3 className="font-bold text-xs text-amber-200 uppercase font-serif tracking-wider">
+                    Game Pools Reserves (గేమ్ పూల్స్ రిజర్వ్స్)
+                  </h3>
+                </div>
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setSelectedPoolGameId(games[0]?.id || 'game-aviator');
+                      setIsAllocateModalOpen(true);
+                    }}
+                    className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 transition active:scale-95 flex items-center gap-1 shadow-sm"
+                  >
+                    <span>+ Transfer to Pool</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Game Pools Cards Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {games.map((g) => (
+                  <div
+                    key={g.id}
+                    className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5 flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-700/50">
+                        {getGameIcon(g.iconName)}
+                      </div>
+                      <span className="text-[8px] uppercase font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        ● Solvency OK
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-xs font-bold text-zinc-200 block truncate">
+                        {g.name}
+                      </span>
+                      <span className="text-[11px] font-mono font-black text-amber-300 block mt-0.5">
+                        ₹{parseInt(g.poolBalance || '0').toLocaleString()}
+                      </span>
+                      <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">
+                        Min: ₹{parseInt(g.minBet || '10').toLocaleString()}
+                      </span>
+                    </div>
+
+                    {isOwner && (
+                      <button
+                        onClick={() => {
+                          setSelectedPoolGameId(g.id);
+                          setIsAllocateModalOpen(true);
+                        }}
+                        className="mt-2 w-full py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[9px] font-bold transition flex items-center justify-center gap-1 active:scale-95"
+                      >
+                        <Coins className="w-2.5 h-2.5" />
+                        <span>Transfer Chips</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Quick Administrative Action Buttons */}
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -480,76 +557,51 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             </div>
           </div>
 
-          {/* Featured Hero Game: Crash Game */}
-          <div className="bg-gradient-to-br from-amber-950/40 via-zinc-900 to-zinc-950 border border-amber-500/40 rounded-xl p-3 mb-2.5 shadow-md">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 via-rose-600 to-amber-600 flex items-center justify-center text-white shadow-md shadow-red-500/20 shrink-0">
-                  <Plane className="w-5 h-5 text-white animate-pulse" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-sm text-zinc-100 leading-tight">Aviator / Crash</span>
-                    <span className={crashGameActive ? "text-[8px] font-black px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase" : "text-[8px] font-black px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 uppercase"}>
-                      {crashGameActive ? '● LIVE' : 'COMING SOON'}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-zinc-400 block leading-tight mt-0.5">
-                    Authoritative curve · Instant cashout
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[10px] font-mono bg-zinc-950/80 rounded-lg px-2.5 py-1.5 border border-zinc-800/80 mb-2.5">
-              <span className="text-zinc-400">Min: {crashGame?.minBet || '10'} Tokens</span>
-              <span className="text-amber-400 font-bold">Max: {Number(crashGame?.maxBet || 100000).toLocaleString()}</span>
-              <span className="text-emerald-400 font-bold">RTP 97%</span>
-            </div>
-
-            <button
-              onClick={() => setActiveGameCode('aviator')}
-              className="w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
-            >
-              <span>{crashGameActive ? 'Play Crash Now' : 'Open Crash Preview'}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Upcoming Games Grid (Compact mobile 2-col cards) */}
+          {/* All Games Grid (Uniform 2-column cards of identical size) */}
           <div className="grid grid-cols-2 gap-2">
-            {gamesForDisplay
-              .filter((g) => g.code !== 'aviator')
-              .map((g) => (
+            {gamesForDisplay.map((g) => {
+              const isLive = g.status === 'ACTIVE' || g.code === 'aviator';
+              return (
                 <button
                   key={g.id}
                   onClick={() => setActiveGameCode(g.code)}
-                  className="bg-zinc-900/70 border border-zinc-800 hover:border-amber-500/30 rounded-xl p-2 text-left transition flex flex-col justify-between active:scale-[0.98] group"
+                  className="bg-zinc-900/70 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-2.5 text-left transition flex flex-col justify-between active:scale-[0.98] group relative overflow-hidden"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-700/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center border ${
+                        g.code === 'aviator'
+                          ? 'bg-gradient-to-br from-red-600 via-rose-600 to-amber-600 border-red-500/40 text-white shadow-sm'
+                          : 'bg-zinc-800 border-zinc-700/50'
+                      }`}
+                    >
                       {getGameIcon(g.iconName)}
                     </div>
                     <span
                       className={`text-[8px] uppercase font-bold px-1.5 py-0.2 rounded ${
-                        g.status === 'ACTIVE'
+                        isLive
                           ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                           : 'bg-zinc-800 text-zinc-400'
                       }`}
                     >
-                      {g.status === 'ACTIVE' ? '● LIVE' : 'Preview'}
+                      {isLive ? '● LIVE' : 'Preview'}
                     </span>
                   </div>
+
                   <div>
                     <span className="text-xs font-bold text-zinc-200 block truncate leading-tight group-hover:text-amber-300">
                       {g.name}
                     </span>
-                    <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">
-                      Pool: {parseInt(g.poolBalance || '0').toLocaleString()}
-                    </span>
+                    <div className="flex items-center justify-between mt-1 pt-1 border-t border-zinc-800/60 text-[9px] text-zinc-500 font-mono">
+                      <span>Pool: ₹{parseInt(g.poolBalance || '0').toLocaleString()}</span>
+                      <span className="text-amber-400 font-bold group-hover:translate-x-0.5 transition-transform flex items-center">
+                        Play &gt;
+                      </span>
+                    </div>
                   </div>
                 </button>
-              ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -616,8 +668,30 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             </div>
           )}
 
-          {/* Primary Action Button */}
-          {!isOwner ? (
+          {/* Primary Action Buttons */}
+          {isOwner ? (
+            <div className="grid grid-cols-2 gap-2 mb-2.5">
+              <button
+                onClick={() => {
+                  setSelectedPoolGameId(games[0]?.id || 'game-aviator');
+                  setIsAllocateModalOpen(true);
+                }}
+                className="py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-1.5"
+              >
+                <Coins className="w-3.5 h-3.5 text-zinc-950" />
+                <span>Transfer to Game Pool</span>
+              </button>
+              <button
+                onClick={() =>
+                  setExpandedSection(expandedSection === 'transfer' ? null : 'transfer')
+                }
+                className="py-2.5 rounded-xl font-bold text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5 text-amber-400" />
+                <span>Direct Transfer</span>
+              </button>
+            </div>
+          ) : (
             <button
               onClick={() => setIsRequestModalOpen(true)}
               className="w-full py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-sm transition active:scale-[0.98] mb-2.5 flex items-center justify-center gap-1.5"
@@ -625,61 +699,97 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
               <Coins className="w-3.5 h-3.5" />
               <span>Request Additional Chips</span>
             </button>
-          ) : (
-            <div className="mb-2.5">
-              <button
-                onClick={() =>
-                  setExpandedSection(expandedSection === 'transfer' ? null : 'transfer')
-                }
-                className="w-full py-2.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5 text-zinc-950" />
-                <span>Direct Transfer</span>
-              </button>
-            </div>
           )}
 
-          {/* Pending Approvals Drawer for Staff Roles */}
-          {hasStaffRole && pendingRequests.length > 0 && (
-            <div className="mb-2.5 bg-amber-950/20 border border-amber-500/30 rounded-xl p-2.5">
+          {/* Player Token Requests & Screenshot Verification Section (Staff Roles) */}
+          {hasStaffRole && (
+            <div className="mb-2.5 bg-zinc-900/90 border border-amber-500/30 rounded-xl p-2.5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-amber-300 uppercase flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  <span>Pending Requests ({pendingRequests.length})</span>
+                <span className="text-[10px] font-bold text-amber-300 uppercase flex items-center gap-1 font-serif">
+                  <Clock className="w-3 h-3 text-amber-400" />
+                  <span>Player Token Requests ({requests.length})</span>
                 </span>
-                <span className="text-[9px] text-zinc-500">Requires Approval</span>
+                <span className="text-[9px] text-zinc-400 font-mono">
+                  {pendingRequests.length} Pending
+                </span>
               </div>
-              <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                {pendingRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className="p-2 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs flex items-center justify-between gap-2"
-                  >
-                    <div className="truncate">
-                      <div className="font-bold text-zinc-200 truncate">{req.requesterUsername}</div>
-                      <div className="text-[10px] text-amber-400 font-mono font-bold">
-                        +{parseInt(req.amount).toLocaleString()} tokens
+
+              {requests.length === 0 ? (
+                <div className="text-center py-3 text-[11px] text-zinc-500">
+                  No token requests submitted yet
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                  {requests.slice(0, 10).map((req) => (
+                    <div
+                      key={req.id}
+                      className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs flex items-center justify-between gap-2"
+                    >
+                      {/* Left: Requester Info, Chips & Note */}
+                      <div className="truncate flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-zinc-200 truncate">{req.requesterUsername}</span>
+                          <span
+                            className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                              req.status === TokenRequestStatus.PENDING
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                : req.status === TokenRequestStatus.APPROVED
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                            }`}
+                          >
+                            {req.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-amber-300 font-mono font-bold mt-0.5">
+                          ₹{parseInt(req.amount).toLocaleString()} chips
+                        </div>
+                        {req.note && (
+                          <div className="text-[9px] text-zinc-400 truncate font-mono mt-0.5">
+                            UTR: {req.note}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right: Screenshot preview & action buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {req.proofScreenshot ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProofRequest(req)}
+                            className="p-1 px-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow-sm"
+                            title="View Player Payment Screenshot"
+                          >
+                            <Camera className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Screenshot</span>
+                          </button>
+                        ) : (
+                          <span className="text-[9px] text-zinc-600 font-mono px-1">No Screenshot</span>
+                        )}
+
+                        {req.status === TokenRequestStatus.PENDING && (
+                          <>
+                            <button
+                              onClick={() => handleApproveRequest(req.id)}
+                              className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition active:scale-90"
+                              title="Approve & Credit"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleRejectRequest(req.id)}
+                              className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition active:scale-90"
+                              title="Reject"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleApproveRequest(req.id)}
-                        className="p-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30"
-                        title="Approve"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleRejectRequest(req.id)}
-                        className="p-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30"
-                        title="Reject"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -897,6 +1007,29 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onUserCreated={loadData}
+      />
+
+      {/* Owner Game Pool Liquidity Allocation Modal */}
+      <AllocatePoolModal
+        isOpen={isAllocateModalOpen}
+        games={games}
+        onClose={() => setIsAllocateModalOpen(false)}
+        onAllocated={loadData}
+      />
+
+      {/* Admin Payment Proof Screenshot Verification Modal */}
+      <ProofScreenshotModal
+        request={selectedProofRequest}
+        isOpen={!!selectedProofRequest}
+        onClose={() => setSelectedProofRequest(null)}
+        onApprove={(id) => {
+          handleApproveRequest(id);
+          setSelectedProofRequest(null);
+        }}
+        onReject={(id) => {
+          handleRejectRequest(id);
+          setSelectedProofRequest(null);
+        }}
       />
     </div>
   );
