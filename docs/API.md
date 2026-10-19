@@ -62,7 +62,7 @@ Returns current flight status, live multiplier, and recent crash history.
 Locks bet into Escrow and registers player for active round.
 
 ### `POST /api/games/aviator/cashout` (Player Only)
-Authoritatively settles the bet using the backend multiplier. The payout comes from the Aviator/Crash Game Pool; the held stake is transferred from Escrow back into that pool. The database settlement function releases the reserved maximum-liability amount.
+Authoritatively settles the bet using the backend multiplier. The payout comes from the Aviator/Crash Game Pool; the held stake is transferred from Escrow back into that pool. After the pending reservation-release migration is applied, the database settlement function releases the reserved maximum-liability amount.
 
 ---
 
