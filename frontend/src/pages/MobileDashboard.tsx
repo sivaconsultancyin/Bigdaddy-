@@ -583,7 +583,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             <span className="text-[10px] text-zinc-500 block leading-tight">
               {isOwner
                 ? 'Genesis 10 Billion max supply authority'
-                : '{configInfo?.isSimulated ? 'Isolated preview balance; simulated only.' : 'Stored in PostgreSQL with a double-entry ledger.'}'}
+                : {configInfo?.isSimulated ? 'Isolated preview balance; simulated only.' : 'Stored in PostgreSQL with a double-entry ledger.'}}
             </span>
           </div>
 
