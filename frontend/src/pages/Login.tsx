@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ApiClient } from '../api/client';
-import { UserRole } from '../../../shared/src/types';
+import { UserRole, AppMode } from '../../../shared/src/types';
 import {
   Sparkles,
   Lock,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { login, loginAsRole, loading } = useAuth();
+  const { login, loginAsRole, loading, configInfo } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export const Login: React.FC = () => {
           </h1>
           <div className="flex items-center justify-center gap-1.5 mt-1">
             <span className="text-[9px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30 uppercase tracking-widest font-mono font-bold">
-              Preview Mode · Simulated
+              {configInfo?.mode === AppMode.PRODUCTION ? 'Production · Persistent' : configInfo?.isSimulated ? 'Preview Mode · Simulated' : 'Connecting...'}
             </span>
           </div>
           <p className="text-[10px] text-zinc-400 mt-1">
@@ -152,7 +152,7 @@ export const Login: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Demo Role Switcher */}
+        {configInfo?.mode === AppMode.DEVELOPMENT_PREVIEW && (
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-center">
           <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block mb-0.5">
             1-Tap Demo Switcher
@@ -191,6 +191,7 @@ export const Login: React.FC = () => {
             </button>
           </div>
         </div>
+        )}
       </div>
 
       {/* Referral Modal */}
