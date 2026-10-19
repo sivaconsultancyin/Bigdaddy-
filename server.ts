@@ -17,6 +17,7 @@ import { dragonTigerRouter } from './backend/src/games/dragon-tiger/dragon-tiger
 import { andarBaharRouter } from './backend/src/games/andar-bahar/andar-bahar.routes';
 import { setupWebSocketServer } from './backend/src/websocket/wsServer';
 import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres';
+import { productionRouter } from './backend/src/routes/production.routes';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -80,8 +81,8 @@ async function startServer() {
       service: 'BigDaddy Casino Authority',
       mode: config.mode,
       databaseConnected: isDatabaseConnected(),
-      businessDataPersistence: 'IN_MEMORY_NOT_MIGRATED',
-      productionFinancialApisEnabled: false,
+      businessDataPersistence: isDatabaseConnected() ? 'POSTGRES_AUTH_WALLET' : 'NOT_CONNECTED',
+      productionFinancialApisEnabled: config.isProduction && config.productionValid && isDatabaseConnected(),
       timestamp: new Date().toISOString(),
     });
   });
@@ -113,13 +114,19 @@ async function startServer() {
       });
     });
   } else if (config.isProduction) {
-    app.use('/api', (req, res, next) => {
-      if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
-      return res.status(503).json({
-        error: 'PERSISTENT_STORAGE_NOT_READY',
-        message: 'PostgreSQL-backed user, wallet, ledger, bet, and settlement operations have not completed production verification.',
+    if (!isDatabaseConnected()) {
+      app.use('/api', (req, res, next) => {
+        if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
+        return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
       });
-    });
+    } else {
+      // These production routes use PostgreSQL; the in-memory demo routers are never mounted here.
+      app.use('/api', productionRouter);
+      // Keep all game types not yet backed by persistent production settlement closed.
+      app.use('/api/games', (_req, res) => res.status(503).json({ error: 'PERSISTENT_GAME_ENGINE_NOT_READY' }));
+      app.use('/api/requests', (_req, res) => res.status(503).json({ error: 'TOKEN_REQUEST_WORKFLOW_NOT_READY' }));
+      app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
+    }
   } else {
     app.use('/api/auth', authRouter);
     app.use('/api/wallet', walletRouter);
