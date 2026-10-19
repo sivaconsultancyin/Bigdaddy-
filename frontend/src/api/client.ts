@@ -16,7 +16,7 @@ import {
 } from '../../../shared/src/types';
 import { GAMES_CATALOG, MAX_TOKEN_SUPPLY } from '../../../shared/src/constants';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
 
 // In-memory fallback state for standalone offline frontend preview
 const mockState = {
@@ -142,7 +142,7 @@ export class ApiClient {
     } catch (err: any) {
       // In development/preview standalone mode, if the backend server is unreachable,
       // failover gracefully to in-memory simulated mock responses so preview never breaks.
-      if (err.name === 'TypeError' || err.message?.includes('fetch') || err.message?.includes('NetworkError')) {
+      if (!import.meta.env.PROD && (err.name === 'TypeError' || err.message?.includes('fetch') || err.message?.includes('NetworkError'))) {
         return this.handleFallbackMock(endpoint, options) as T;
       }
       throw err;
@@ -250,6 +250,15 @@ export class ApiClient {
     try {
       return await this.request<AppConfigInfo>('/config');
     } catch {
+      if (import.meta.env.PROD) {
+        return {
+          mode: AppMode.PRODUCTION,
+          isSimulated: false,
+          databaseConnected: false,
+          authProvider: 'POSTGRESQL',
+          version: '1.0.0',
+        };
+      }
       return {
         mode: AppMode.DEVELOPMENT_PREVIEW,
         isSimulated: true,
