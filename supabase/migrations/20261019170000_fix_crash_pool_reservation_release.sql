@@ -11,6 +11,7 @@ CREATE OR REPLACE FUNCTION public.place_crash_bet_atomic(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE
   v_bet_id uuid;
+  v_existing_bet public.game_bets%ROWTYPE;
   v_round public.game_rounds%ROWTYPE;
   v_player_wallet uuid;
   v_escrow_wallet uuid;
@@ -27,8 +28,16 @@ BEGIN
     RAISE EXCEPTION 'INVALID_AUTO_CASHOUT';
   END IF;
 
-  SELECT id INTO v_bet_id FROM public.game_bets WHERE idempotency_key = p_idempotency_key;
-  IF v_bet_id IS NOT NULL THEN RETURN v_bet_id; END IF;
+  SELECT * INTO v_existing_bet FROM public.game_bets WHERE idempotency_key = p_idempotency_key;
+  IF FOUND THEN
+    IF v_existing_bet.user_id IS DISTINCT FROM p_user_id
+       OR v_existing_bet.round_id IS DISTINCT FROM p_round_id
+       OR v_existing_bet.bet_amount IS DISTINCT FROM p_amount
+       OR v_existing_bet.auto_cashout IS DISTINCT FROM p_auto_cashout THEN
+      RAISE EXCEPTION 'IDEMPOTENCY_KEY_REUSE';
+    END IF;
+    RETURN v_existing_bet.id;
+  END IF;
 
   SELECT * INTO v_round FROM public.game_rounds WHERE id = p_round_id FOR UPDATE;
   IF NOT FOUND OR v_round.game_code <> 'aviator' THEN RAISE EXCEPTION 'ROUND_NOT_FOUND'; END IF;
