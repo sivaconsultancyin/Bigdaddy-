@@ -18,6 +18,7 @@ import { andarBaharRouter } from './backend/src/games/andar-bahar/andar-bahar.ro
 import { setupWebSocketServer } from './backend/src/websocket/wsServer';
 import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres';
 import { productionRouter } from './backend/src/routes/production.routes';
+import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
 import { startProductionCrashEngine } from './backend/src/games/aviator/production.engine';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -124,9 +125,9 @@ async function startServer() {
     } else {
       // These production routes use PostgreSQL; the in-memory demo routers are never mounted here.
       app.use('/api', productionRouter);
-      // Keep all game types not yet backed by persistent production settlement closed.
-      app.use('/api/games', (_req, res) => res.status(503).json({ error: 'PERSISTENT_GAME_ENGINE_NOT_READY' }));
-      app.use('/api/requests', (_req, res) => res.status(503).json({ error: 'TOKEN_REQUEST_WORKFLOW_NOT_READY' }));
+      app.use('/api', productionRequestsRouter);
+      // Keep unsupported games closed; only Crash has persistent settlement.
+      app.use('/api/games', (_req, res) => res.status(503).json({ error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION' }));
       app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
     }
   } else {
