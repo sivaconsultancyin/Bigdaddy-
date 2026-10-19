@@ -306,7 +306,7 @@ productionRouter.get('/games/aviator/state', async (_req, res: Response) => {
     const round = rounds[0] as any;
     const elapsed = Math.max(0, (Date.now() - new Date(round.startedAt).getTime()) / 1000);
     const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsed, 1.15)) * 100) / 100;
-    const currentMultiplier = round.status === 'RUNNING' ? Math.min(liveMultiplier, Number(round.crashMultiplier)) : 1;
+    const currentMultiplier = round.status === 'RUNNING' ? Math.min(liveMultiplier, Number(round.crashMultiplier)) : ['CRASHED','SETTLED'].includes(round.status) ? Number(round.crashMultiplier || 1) : 1;
     const bets = await sql.unsafe('SELECT b.id,b.round_id AS "roundId",b.bet_amount::text AS "betAmount",b.auto_cashout AS "autoCashout",b.status,b.payout_amount::text AS "payoutAmount",b.cashed_out_at AS "cashedOutAt",u.username FROM public.game_bets b JOIN public.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100', [round.id]);
     const history = await sql.unsafe("SELECT round_number AS \"roundNumber\",crash_multiplier AS \"crashMultiplier\",ended_at AS \"endedAt\",server_seed_hash AS \"serverSeedHash\",revealed_server_seed AS \"revealedServerSeed\" FROM public.game_rounds WHERE game_code='aviator' AND status='SETTLED' ORDER BY round_number DESC LIMIT 20");
     const publicRound = { id: round.id, roundNumber: round.roundNumber, status: round.status, startedAt: round.startedAt, endedAt: round.endedAt, multiplier: currentMultiplier, crashMultiplier: ['CRASHED','SETTLED'].includes(round.status) ? round.crashMultiplier : null, serverSeedHash: round.serverSeedHash, revealedServerSeed: round.revealedServerSeed };
