@@ -248,6 +248,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const connect = () => {
     if (typeof window === 'undefined') return;
+    if (import.meta.env.PROD) {
+      startProductionPolling();
+      return;
+    }
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) return;
 
     try {
@@ -450,7 +454,48 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const startProductionPolling = () => {
+    if (simIntervalRef.current) return;
+    let inFlight = false;
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 'https://bigdaddy-backend.onrender.com/api';
+    const poll = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch(apiBase + '/games/aviator/state', { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('Crash state API unavailable');
+        const data = await response.json();
+        setIsConnected(true);
+        setIsSimulatedFallback(false);
+        if (data.round) {
+          const round = data.round;
+          setRoundState({
+            id: round.id,
+            roundNumber: round.roundNumber,
+            status: round.status,
+            startTime: round.startedAt ? new Date(round.startedAt).getTime() : undefined,
+            crashMultiplier: round.crashMultiplier ?? undefined,
+          });
+          setMultiplier(Number(round.multiplier || 1));
+        }
+        if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
+        setLastEvent({ event: 'production:crash_state', data });
+      } catch {
+        setIsConnected(false);
+        setIsSimulatedFallback(false);
+      } finally {
+        inFlight = false;
+      }
+    };
+    void poll();
+    simIntervalRef.current = setInterval(() => { void poll(); }, 500);
+  };
+
   const startFallbackSimulation = () => {
+    if (import.meta.env.PROD) {
+      setIsSimulatedFallback(false);
+      return;
+    }
     if (simIntervalRef.current) return;
     setIsSimulatedFallback(true);
 
