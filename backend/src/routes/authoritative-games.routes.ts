@@ -95,7 +95,7 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
   if (code === 'roulette') {
     const number = Number(result.number);
     const numbers = Array.isArray(selection?.numbers) ? selection.numbers.map(Number) : [];
-    if (['straight','split','street','corner','line'].includes(type)) {
+    if (['straight','split','street','corner','line','number'].includes(type)) {
       const odds: Record<string, number> = { straight: 36, split: 18, street: 12, corner: 9, line: 6 };
       return numbers.includes(number) ? odds[type] : 0;
     }
@@ -264,7 +264,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
   const rawBets = Array.isArray(req.body?.bets) ? req.body.bets : [req.body];
   if (!rawBets.length || rawBets.length > 20) return res.status(400).json({ error: 'INVALID_BET_COUNT' });
   const idempotencyBase = String(req.header('Idempotency-Key') || req.body?.idempotencyKey || '').trim();
-  if (idempotencyBase.length < 8 || idempotencyBase.length > 120) return res.status(400).json({ error: 'IDEMPOTENCY_KEY_REQUIRED' });
+  if (idempotencyBase.length < 8 || idempotencyBase.length > 110) return res.status(400).json({ error: 'IDEMPOTENCY_KEY_REQUIRED' });
   for (const bet of rawBets) {
     const amount = Number(bet?.amount);
     if (!Number.isSafeInteger(amount) || amount <= 0 || !validateSelection(code, bet?.selection || bet)) {
