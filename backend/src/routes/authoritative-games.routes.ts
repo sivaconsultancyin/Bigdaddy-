@@ -199,11 +199,28 @@ async function readGameState(code: GameCode) {
   const history = await sql.unsafe(
     'SELECT id,round_number,status,result,settled_at FROM public.authoritative_game_rounds WHERE game_code=$1 AND status=\'SETTLED\' ORDER BY round_number DESC LIMIT 25', [code],
   );
-  const current = rounds[0] ? publicRound(rounds[0], code) : null;
   const bets = rounds[0] ? await sql.unsafe(
-    'SELECT b.id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",u.username FROM public.authoritative_game_bets b JOIN public.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 30',
+    'SELECT b.id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",u.username FROM public.authoritative_game_bets b JOIN public.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100',
     [rounds[0].id],
   ) : [];
+  const current = rounds[0] ? publicRound(rounds[0], code) : null;
+  if (current) {
+    const totals: Record<string, bigint> = {};
+    for (const bet of bets as any[]) {
+      const type = String(bet.selection?.type || '');
+      totals[type] = (totals[type] || 0n) + BigInt(String(bet.amount));
+    }
+    if (code === 'dragon_tiger') {
+      current.dragonBetAmount = String(totals.dragon || 0n);
+      current.tigerBetAmount = String(totals.tiger || 0n);
+      current.tieBetAmount = String((totals.tie || 0n) + (totals.suited_tie || 0n));
+    }
+    if (code === 'andar_bahar') {
+      current.andarBetAmount = String(totals.andar || 0n);
+      current.baharBetAmount = String(totals.bahar || 0n);
+    }
+    if (code === 'dice') current.numberBetsAmount = Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, String(value)]));
+  }
   return {
     round: current,
     history: history.map((r: any) => ({ roundNumber: Number(r.round_number), result: r.result, timestamp: r.settled_at })),
