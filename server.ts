@@ -28,11 +28,22 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   // Connect using a backend-only secret. The frontend must never receive DATABASE_URL.
   if (process.env.DATABASE_URL?.trim()) {
-    await connectDatabase();
-    console.log('✅ Supabase PostgreSQL connectivity check passed.');
-    if (config.isProduction) {
-      await bootstrapOwnerFromEnvironment();
-      startProductionCrashEngine();
+    try {
+      await connectDatabase();
+      console.log('✅ Supabase PostgreSQL connectivity check passed.');
+      if (config.isProduction) {
+        await bootstrapOwnerFromEnvironment();
+        startProductionCrashEngine();
+      }
+    } catch (error) {
+      // In production, keep health/readiness endpoints online when the database
+      // is temporarily unreachable. The API middleware below keeps financial
+      // traffic closed until a database connection is available.
+      if (!config.isProduction) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Production database startup check failed; financial APIs remain disabled:', message);
     }
   } else if (config.isProduction) {
     // Keep liveness/readiness endpoints available; config validation below keeps
