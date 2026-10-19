@@ -3,9 +3,10 @@ import postgres from 'postgres';
 /**
  * Supabase PostgreSQL connection for the trusted backend only.
  *
- * Set DATABASE_URL to the project's PostgreSQL connection string in the
- * hosting provider's secret/environment settings. Never expose it to Vite
- * or the browser bundle.
+ * DATABASE_URL should be the primary database URL. If the direct endpoint is
+ * unreachable from the host (for example, IPv6 is unavailable), configure
+ * DATABASE_POOLER_URL with the exact Session Pooler URI copied from Supabase.
+ * Never expose either URL to Vite or the browser bundle.
  */
 let client: ReturnType<typeof postgres> | null = null;
 let connected = false;
@@ -17,27 +18,6 @@ function createClient(connectionString: string): ReturnType<typeof postgres> {
     connect_timeout: 10,
     prepare: false,
   });
-}
-
-/**
- * Supabase direct database hosts may resolve to IPv6 addresses that a host
- * cannot route to. For this project's Sydney region, retry through the
- * Supabase session pooler while preserving the password and URL parameters.
- */
-function sessionPoolerUrl(connectionString: string): string | null {
-  try {
-    const url = new URL(connectionString);
-    const match = url.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/i);
-    if (!match) return null;
-
-    const projectRef = match[1];
-    url.hostname = 'aws-0-ap-southeast-2.pooler.supabase.com';
-    url.port = '5432';
-    url.username = `postgres.${projectRef}`;
-    return url.toString();
-  } catch {
-    return null;
-  }
 }
 
 export async function connectDatabase(): Promise<boolean> {
@@ -57,17 +37,16 @@ export async function connectDatabase(): Promise<boolean> {
     await directClient.end({ timeout: 2 }).catch(() => undefined);
 
     const message = error instanceof Error ? error.message : 'unknown error';
-    const fallbackUrl = /ENETUNREACH|EHOSTUNREACH|ENETUNREACH/i.test(message)
-      ? sessionPoolerUrl(connectionString)
-      : null;
+    const poolerUrl = process.env.DATABASE_POOLER_URL?.trim();
+    const shouldTryPooler = /ENETUNREACH|EHOSTUNREACH/i.test(message);
 
-    if (fallbackUrl) {
-      const poolerClient = createClient(fallbackUrl);
+    if (shouldTryPooler && poolerUrl) {
+      const poolerClient = createClient(poolerUrl);
       try {
         await poolerClient`select 1 as connection_check`;
         client = poolerClient;
         connected = true;
-        console.info('Supabase PostgreSQL connected through the session pooler fallback.');
+        console.info('Supabase PostgreSQL connected through the configured session pooler.');
         return true;
       } catch (fallbackError) {
         await poolerClient.end({ timeout: 2 }).catch(() => undefined);
@@ -82,6 +61,11 @@ export async function connectDatabase(): Promise<boolean> {
     }
 
     connected = false;
+    if (shouldTryPooler && !poolerUrl) {
+      throw new Error(
+        `Supabase PostgreSQL direct connection failed: ${message}. Configure DATABASE_POOLER_URL using the exact Session Pooler URI from Supabase Dashboard → Connect.`,
+      );
+    }
     throw new Error(`Supabase PostgreSQL connection failed: ${message}`);
   }
 }
