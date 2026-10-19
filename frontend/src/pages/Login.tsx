@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ApiClient } from '../api/client';
-import { UserRole, AppMode } from '../../../shared/src/types';
+import { AppMode } from '../../../shared/src/types';
 import {
   Sparkles,
   Lock,
   User as UserIcon,
-  Crown,
-  Shield,
-  UserCheck,
-  Gamepad2,
   AlertCircle,
   Share2,
   CheckCircle,
@@ -17,7 +13,7 @@ import {
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { login, loginAsRole, loading, configInfo } = useAuth();
+  const { login, loading, configInfo } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -152,46 +148,7 @@ export const Login: React.FC = () => {
           </div>
         </div>
 
-        {configInfo?.mode === AppMode.DEVELOPMENT_PREVIEW && (
-        <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-center">
-          <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block mb-0.5">
-            1-Tap Demo Switcher
-          </span>
-          <span className="text-[9px] text-zinc-500 block mb-2">
-            Switch directly to any role with simulated balance
-          </span>
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              onClick={() => loginAsRole(UserRole.PLAYER)}
-              className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95"
-            >
-              <Gamepad2 className="w-3.5 h-3.5" />
-              <span>Player</span>
-            </button>
-            <button
-              onClick={() => loginAsRole(UserRole.ADMIN)}
-              className="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Admin</span>
-            </button>
-            <button
-              onClick={() => loginAsRole(UserRole.SUPER_ADMIN)}
-              className="p-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95"
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Super Admin</span>
-            </button>
-            <button
-              onClick={() => loginAsRole(UserRole.OWNER)}
-              className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95"
-            >
-              <Crown className="w-3.5 h-3.5" />
-              <span>Owner</span>
-            </button>
-          </div>
-        </div>
-        )}
+}
       </div>
 
       {/* Referral Modal */}
