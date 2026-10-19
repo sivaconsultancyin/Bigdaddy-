@@ -147,8 +147,6 @@ export const Login: React.FC = () => {
             </button>
           </div>
         </div>
-
-}
       </div>
 
       {/* Referral Modal */}
