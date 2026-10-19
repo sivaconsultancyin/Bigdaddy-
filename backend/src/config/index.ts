@@ -118,6 +118,6 @@ export function getPublicConfigInfo(): AppConfigInfo {
     authProvider: config.isProduction
       ? 'PRODUCTION_SUPABASE_POSTGRES'
       : 'SIMULATED_LOCAL',
-    version: '1.0.0-preview',
+    version: config.isProduction ? '1.0.0' : '1.0.0-preview',
   };
 }
