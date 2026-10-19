@@ -49,7 +49,7 @@ function stableInt(seed: string, label: string, maxExclusive: number): number {
 function shuffledDeck(seed: string, deckCount = 1): Array<{ rank: number; suit: string; code: string; deckIndex: number }> {
   const suits = ['S', 'H', 'D', 'C'];
   const deck = Array.from({ length: deckCount }, (_, deckIndex) => suits.flatMap((suit) => Array.from({ length: 13 }, (_, i) => ({
-    rank: i + 1, suit, deckIndex, code: (['A','2','3','4','5','6','7','8','9','10','J','Q','K'][i] + suit),
+    rank: i + 2, suit, deckIndex, code: (['2','3','4','5','6','7','8','9','10','J','Q','K','A'][i] + suit),
   })))).flat();
   for (let i = deck.length - 1; i > 0; i--) {
     const j = stableInt(seed, 'deck:' + i, i + 1);
@@ -75,7 +75,9 @@ export function makeResult(code: GameCode, seed: string): Record<string, any> {
     const deck = shuffledDeck(seed, 8);
     const dragonCard = deck[0];
     const tigerCard = deck[1];
-    const winner = dragonCard.rank === tigerCard.rank ? (dragonCard.suit === tigerCard.suit ? 'suited_tie' : 'tie') : dragonCard.rank > tigerCard.rank ? 'dragon' : 'tiger';
+    const dragonValue = dragonCard.rank === 14 ? 1 : dragonCard.rank;
+    const tigerValue = tigerCard.rank === 14 ? 1 : tigerCard.rank;
+    const winner = dragonValue === tigerValue ? (dragonCard.suit === tigerCard.suit ? 'suited_tie' : 'tie') : dragonValue > tigerValue ? 'dragon' : 'tiger';
     return { dragonCard, tigerCard, winner };
   }
   const deck = shuffledDeck(seed);
