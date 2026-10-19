@@ -69,14 +69,14 @@ function makeResult(code: GameCode, seed: string): Record<string, unknown> {
     return { number, color: rouletteColor(number) };
   }
   if (code === 'dice') {
-    const number = stableInt(seed, 'dice', 6) + 1;
+    const number = stableInt(seed, 'dice', 10) + 1;
     return { number, rolledNumber: number };
   }
   if (code === 'dragon_tiger') {
     const deck = shuffledDeck(seed);
     const dragonCard = deck[0];
     const tigerCard = deck[1];
-    const winner = dragonCard.rank === tigerCard.rank ? 'tie' : dragonCard.rank > tigerCard.rank ? 'dragon' : 'tiger';
+    const winner = dragonCard.rank === tigerCard.rank ? (dragonCard.suit === tigerCard.suit ? 'suited_tie' : 'tie') : dragonCard.rank > tigerCard.rank ? 'dragon' : 'tiger';
     return { dragonCard, tigerCard, winner };
   }
   const deck = shuffledDeck(seed);
@@ -96,7 +96,7 @@ function payoutMultiplier(code: GameCode, selection: any, result: any): number {
   if (code === 'roulette') {
     const number = Number(result.number);
     const numbers = Array.isArray(selection?.numbers) ? selection.numbers.map(Number) : [];
-    if (type === 'straight' || type === 'number') return numbers.includes(number) ? 36 : 0;
+    if (['straight','split','street','corner','line'].includes(type)) {\n      const odds: Record<string, number> = { straight: 36, split: 18, street: 12, corner: 9, line: 6 };\n      return numbers.includes(number) ? odds[type] : 0;\n    }
     if (type === 'red' || type === 'black' || type === 'green') return result.color === type ? (type === 'green' ? 36 : 2) : 0;
     if (type === 'odd' || type === 'even') return number !== 0 && (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
     if (type === 'low' || type === '1-18') return number >= 1 && number <= 18 ? 2 : 0;
@@ -143,7 +143,7 @@ function validateSelection(code: GameCode, selection: any): boolean {
     if (type === 'over' || type === 'under') return Number.isInteger(Number(selection.value)) && Number(selection.value) >= 1 && Number(selection.value) <= 5;
     return false;
   }
-  if (code === 'dragon_tiger') return ['dragon','tiger','tie'].includes(type);
+  if (code === 'dragon_tiger') return ['dragon','tiger','tie','suited_tie','dragon_big','dragon_small','tiger_big','tiger_small'].includes(type);
   return ['andar','bahar'].includes(type);
 }
 function publicRound(row: any, code: GameCode) {
@@ -192,7 +192,7 @@ async function readGameState(code: GameCode) {
   return {
     round: current,
     history: history.map((r: any) => ({ roundNumber: Number(r.round_number), result: r.result, timestamp: r.settled_at })),
-    bets: bets.map((b: any) => ({ id: b.id, amount: b.amount, type: b.selection.type, selection: b.selection, status: b.status, payoutAmount: b.payoutAmount, username: b.username })),
+    bets: bets.map((b: any) => ({ id: b.id, amount: b.amount, type: b.selection.type, selection: b.selection, status: b.status, payoutAmount: b.payoutAmount, username: b.username })),\n    allBets: bets.map((b: any) => ({ id: b.id, amount: b.amount, type: b.selection.type, selection: b.selection, status: b.status, payoutAmount: b.payoutAmount, username: b.username })),
   };
 }
 
