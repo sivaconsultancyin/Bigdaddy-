@@ -176,6 +176,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const reconnectTimeoutRef = useRef<any>(null);
   const simIntervalRef = useRef<any>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
+  const otherGamesPollAtRef = useRef(0);
 
   const connect = () => {
     if (typeof window === 'undefined') return;
@@ -390,12 +391,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (inFlight) return;
       inFlight = true;
       try {
+        const pollOtherGames = Date.now() - otherGamesPollAtRef.current >= 1500;
+        if (pollOtherGames) otherGamesPollAtRef.current = Date.now();
         const gamePaths = [
           ['aviator', '/games/aviator/state'],
-          ['roulette', '/games/roulette/state'],
-          ['dice', '/games/dice/state'],
-          ['dragonTiger', '/games/dragon-tiger/state'],
-          ['andarBahar', '/games/andar-bahar/state'],
+          ...(pollOtherGames ? [
+            ['roulette', '/games/roulette/state'],
+            ['dice', '/games/dice/state'],
+            ['dragonTiger', '/games/dragon-tiger/state'],
+            ['andarBahar', '/games/andar-bahar/state'],
+          ] as const : []),
         ] as const;
         const results = await Promise.all(gamePaths.map(async ([key, path]) => {
           try {
