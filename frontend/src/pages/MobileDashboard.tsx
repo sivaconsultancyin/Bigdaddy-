@@ -73,7 +73,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   onOpenTokenRequest,
   setPendingRequestsCount,
 }) => {
-  const { user, wallet, refreshWallet, logout } = useAuth();
+  const { user, wallet, refreshWallet, logout, configInfo } = useAuth();
   const [games, setGames] = useState<GameInfo[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [requests, setRequests] = useState<TokenRequest[]>([]);
@@ -276,6 +276,8 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const showStaffOverviewCard = !isPlayer && activeTab === 'dashboard';
   const showWalletCard = activeTab === 'dashboard' || activeTab === 'wallet';
   const showProfileCard = activeTab === 'dashboard' || activeTab === 'profile';
+  const crashGame = games.find((game) => game.code === 'aviator');
+  const crashGameActive = crashGame?.status === 'ACTIVE';
 
   const pendingRequests = requests.filter((r) => r.status === TokenRequestStatus.PENDING);
 
@@ -354,7 +356,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                 Treasury Balance
               </span>
               <span className="text-base font-black font-mono text-amber-300 tracking-tight">
-                ₹{parseInt(wallet?.balance || '0').toLocaleString()}
+                {parseInt(wallet?.balance || '0').toLocaleString()} tokens
               </span>
             </div>
 
@@ -388,20 +390,20 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                   <span>Total Token Supply</span>
                 </span>
                 <span className="text-[9px] font-mono font-bold text-emerald-400">
-                  ₹{parseInt(supply.maxSupply || '10000000000').toLocaleString()} Max
+                  {parseInt(supply.maxSupply || '10000000000').toLocaleString()} tokens max
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
                 <div className="bg-zinc-950/60 p-1.5 rounded border border-zinc-800">
                   <span className="text-zinc-500 text-[8px] uppercase block">Circulating</span>
                   <span className="text-zinc-200 font-bold">
-                    ₹{parseInt(supply.circulating || '0').toLocaleString()}
+                    {parseInt(supply.circulating || '0').toLocaleString()}
                   </span>
                 </div>
                 <div className="bg-zinc-950/60 p-1.5 rounded border border-zinc-800">
                   <span className="text-zinc-500 text-[8px] uppercase block">In Treasury</span>
                   <span className="text-amber-400 font-bold">
-                    ₹{parseInt(supply.treasuryBalance || '0').toLocaleString()}
+                    {parseInt(supply.treasuryBalance || '0').toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -459,7 +461,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
 
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                {games.filter((g) => g.status === 'ACTIVE').length || 6} LIVE
+                {games.filter((g) => g.status === 'ACTIVE').length} LIVE
               </span>
             </div>
           </div>
@@ -475,7 +477,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-sm text-zinc-100 leading-tight">Aviator / Crash</span>
                     <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase">
-                      ● LIVE
+                      {crashGameActive ? '● LIVE' : 'COMING SOON'}
                     </span>
                   </div>
                   <span className="text-[10px] text-zinc-400 block leading-tight mt-0.5">
@@ -486,17 +488,18 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-[10px] font-mono bg-zinc-950/80 rounded-lg px-2.5 py-1.5 border border-zinc-800/80 mb-2.5">
-              <span className="text-zinc-400">Min: 10 Tokens</span>
-              <span className="text-amber-400 font-bold">Max: 100,000</span>
+              <span className="text-zinc-400">Min: {crashGame?.minBet || '10'} Tokens</span>
+              <span className="text-amber-400 font-bold">Max: {Number(crashGame?.maxBet || 100000).toLocaleString()}</span>
               <span className="text-emerald-400 font-bold">RTP 97%</span>
             </div>
 
             <button
-              onClick={() => setActiveGameCode('aviator')}
-              className="w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
+              disabled={!crashGameActive}
+              onClick={() => crashGameActive && setActiveGameCode('aviator')}
+              className="w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>Play Aviator Now</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <span>{crashGameActive ? 'Play Crash Now' : 'Crash Is Coming Soon'}</span>
+              {crashGameActive && <ArrowRight className="w-3.5 h-3.5" />}
             </button>
           </div>
 
@@ -570,7 +573,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             <div className="flex items-center justify-between text-[9px] text-zinc-400 uppercase font-semibold mb-1">
               <span>{isOwner ? 'Treasury Reserve' : 'Available Balance'}</span>
               <span className="text-[8px] font-mono font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
-                SIMULATED TOKENS
+                {configInfo?.isSimulated ? 'SIMULATED TOKENS' : 'PERSISTENT TOKENS'}
               </span>
             </div>
             <div className="text-2xl font-black font-mono text-amber-300 tracking-tight flex items-center gap-1.5 mb-1">
@@ -580,7 +583,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             <span className="text-[10px] text-zinc-500 block leading-tight">
               {isOwner
                 ? 'Genesis 10 Billion max supply authority'
-                : 'Isolated in-memory balance. Simulated preview.'}
+                : '{configInfo?.isSimulated ? 'Isolated preview balance; simulated only.' : 'Stored in PostgreSQL with a double-entry ledger.'}'}
             </span>
           </div>
 
