@@ -31,8 +31,10 @@ export const AllocatePoolModal: React.FC<AllocatePoolModalProps> = ({
     setLoading(true);
 
     try {
+      const selectedGame = games.find((game) => game.id === selectedGameId);
       await ApiClient.allocatePool({
         gameId: selectedGameId,
+        gameCode: selectedGame?.code || 'aviator',
         amount,
       });
 
