@@ -281,6 +281,23 @@ productionRouter.post('/games/aviator/activate', requireDatabaseUser, async (req
   }
 });
 
+productionRouter.get('/games/list', async (_req, res: Response) => {
+  try {
+    const sql = getDatabaseClient();
+    const rows = await sql.unsafe("SELECT g.id,g.code,g.name,g.status,g.pool_wallet_id AS \"poolWalletId\",g.min_bet::text AS \"minBet\",g.max_bet::text AS \"maxBet\",w.balance::text AS \"poolBalance\" FROM public.games g JOIN public.wallets w ON w.id=g.pool_wallet_id ORDER BY g.created_at");
+    const games = rows.map((game: any) => ({
+      ...game,
+      description: game.code === 'aviator' ? 'Crash multiplier game' : game.name,
+      iconName: 'Plane',
+      route: '/games/' + game.code,
+    }));
+    return res.json({ games });
+  } catch (error) {
+    console.error('Production game list failed:', error);
+    return res.status(503).json({ error: 'GAME_STORAGE_UNAVAILABLE' });
+  }
+});
+
 productionRouter.get('/games/aviator/state', async (_req, res: Response) => {
   try {
     const sql = getDatabaseClient();
