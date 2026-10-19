@@ -249,7 +249,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
       );
       const round = roundRows[0];
       if (!round) throw new Error('BETTING_CLOSED');
-      const poolRows = await tx.unsafe("SELECT id,balance,reserved_balance FROM public.wallets WHERE id=$1 FOR UPDATE", [game.pool_wallet_id]);
+      const poolRows = await tx.unsafe("SELECT id,balance,reserved_balance FROM public.wallets WHERE id=$1", [game.pool_wallet_id]);
       const escrowRows = await tx.unsafe("SELECT id FROM public.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1");
       if (!poolRows[0] || !escrowRows[0]) throw new Error('GAME_WALLETS_NOT_CONFIGURED');
       const result = [];
@@ -268,13 +268,15 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
           result.push({ id: prior[0].id, status: prior[0].status || 'PENDING', replay: true });
           continue;
         }
-        const fundsRows = await tx.unsafe("SELECT balance,reserved_balance FROM public.wallets WHERE id=$1 FOR UPDATE", [game.pool_wallet_id]);
+        const playerRows = await tx.unsafe("SELECT id,balance FROM public.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [req.actor!.id]);
+        if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
+        // Acquire every wallet row in one stable order before changing reservations or balances.
+        await tx.unsafe("SELECT id FROM public.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[game.pool_wallet_id, escrowRows[0].id, playerRows[0].id]]);
+        const fundsRows = await tx.unsafe("SELECT balance,reserved_balance FROM public.wallets WHERE id=$1", [game.pool_wallet_id]);
         if (!fundsRows[0] || BigInt(String(fundsRows[0].balance)) - BigInt(String(fundsRows[0].reserved_balance || 0)) < liability) {
           throw new Error('GAME_POOL_INSUFFICIENT');
         }
         await tx.unsafe("UPDATE public.wallets SET reserved_balance=reserved_balance+$2::bigint,updated_at=now() WHERE id=$1", [game.pool_wallet_id, liability.toString()]);
-        const playerRows = await tx.unsafe("SELECT id,balance FROM public.wallets WHERE user_id=$1 AND wallet_type='PLAYER' FOR UPDATE", [req.actor!.id]);
-        if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
         const betRows = await tx.unsafe(
           "INSERT INTO public.authoritative_game_bets(round_id,user_id,bet_amount,selection,idempotency_key,reserved_liability) VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING id",
           [round.id, req.actor!.id, amount.toString(), JSON.stringify(selection), key, liability.toString()],
@@ -332,10 +334,11 @@ async function settleRound(roundId: string, code: GameCode) {
     if (!poolWalletId || !escrowRows[0]) throw new Error('GAME_WALLETS_NOT_CONFIGURED');
     const bets = await tx.unsafe("SELECT * FROM public.authoritative_game_bets WHERE round_id=$1 AND status='PENDING' ORDER BY id FOR UPDATE", [roundId]);
     for (const bet of bets) {
-      const reservationRows = await tx.unsafe('UPDATE public.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id', [poolWalletId, String(bet.reserved_liability)]);
-      if (!reservationRows[0]) throw new Error('GAME_POOL_RESERVATION_INVARIANT_FAILED');
       const playerRows = await tx.unsafe("SELECT id FROM public.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [bet.user_id]);
       if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
+      await tx.unsafe("SELECT id FROM public.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[poolWalletId, escrowRows[0].id, playerRows[0].id]]);
+      const reservationRows = await tx.unsafe('UPDATE public.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id', [poolWalletId, String(bet.reserved_liability)]);
+      if (!reservationRows[0]) throw new Error('GAME_POOL_RESERVATION_INVARIANT_FAILED');
       const multiplier = payoutMultiplier(code, bet.selection, round.result);
       const amount = BigInt(String(bet.bet_amount));
       const gross = multiplier > 0 ? amount * BigInt(multiplier) : 0n;
