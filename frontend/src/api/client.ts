@@ -159,16 +159,16 @@ export class ApiClient {
     return this.request('/games/list');
   }
 
-  public static async allocatePool(payload: { gameId: string; amount: string }) {
-    const allocation = await this.request<{ transactionId: string; poolBalance: string }>('/wallet/game-pool', {
+  public static async allocatePool(payload: { gameId?: string; gameCode?: string; amount: string }) {
+    const gameCode = payload.gameCode || 'aviator';
+    const allocation = await this.request<{ transactionId: string; poolBalance: string; gameCode: string }>('/wallet/game-pool', {
       method: 'POST',
-      headers: { 'Idempotency-Key': `POOL_ALLOCATION_${crypto.randomUUID()}` },
-      body: JSON.stringify({ amount: payload.amount }),
+      headers: { 'Idempotency-Key': `POOL_ALLOCATION_${gameCode}_${crypto.randomUUID()}` },
+      body: JSON.stringify({ amount: payload.amount, gameCode }),
     });
 
-    // Production game activation is a separate Owner-only endpoint. Activate only
-    // after the Treasury-to-pool transfer has succeeded.
-    const activation = await this.request<{ status: string; poolBalance: string }>('/games/aviator/activate', {
+    // Activate only after the Treasury-to-pool transfer succeeds.
+    const activation = await this.request<{ status: string; poolBalance: string; gameCode?: string }>(`/games/${encodeURIComponent(gameCode)}/activate`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
