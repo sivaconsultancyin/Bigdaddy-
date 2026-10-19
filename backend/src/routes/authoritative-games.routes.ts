@@ -95,7 +95,10 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
   if (code === 'roulette') {
     const number = Number(result.number);
     const numbers = Array.isArray(selection?.numbers) ? selection.numbers.map(Number) : [];
-    if (['straight','split','street','corner','line'].includes(type)) {\n      const odds: Record<string, number> = { straight: 36, split: 18, street: 12, corner: 9, line: 6 };\n      return numbers.includes(number) ? odds[type] : 0;\n    }
+    if (['straight','split','street','corner','line'].includes(type)) {
+      const odds: Record<string, number> = { straight: 36, split: 18, street: 12, corner: 9, line: 6 };
+      return numbers.includes(number) ? odds[type] : 0;
+    }
     if (type === 'red' || type === 'black' || type === 'green') return result.color === type ? (type === 'green' ? 36 : 2) : 0;
     if (type === 'odd' || type === 'even') return number !== 0 && (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
     if (type === 'low' || type === '1-18') return number >= 1 && number <= 18 ? 2 : 0;
@@ -205,7 +208,14 @@ async function readGameState(code: GameCode) {
   ) : [];
   const current: any = rounds[0] ? publicRound(rounds[0], code) : null;
   if (current) {
-    const aggregateRows = await sql.unsafe(\n      'SELECT selection->>\'type\' AS type, COALESCE(sum(bet_amount),0)::text AS amount FROM public.authoritative_game_bets WHERE round_id=$1 GROUP BY selection->>\'type\'',\n      [rounds[0].id],\n    );\n    const totals: Record<string, bigint> = {};\n    for (const row of aggregateRows as any[]) {\n      totals[String(row.type || '')] = BigInt(String(row.amount || 0));\n    }
+    const aggregateRows = await sql.unsafe(
+      'SELECT selection->>\'type\' AS type, COALESCE(sum(bet_amount),0)::text AS amount FROM public.authoritative_game_bets WHERE round_id=$1 GROUP BY selection->>\'type\'',
+      [rounds[0].id],
+    );
+    const totals: Record<string, bigint> = {};
+    for (const row of aggregateRows as any[]) {
+      totals[String(row.type || '')] = BigInt(String(row.amount || 0));
+    }
     if (code === 'dragon_tiger') {
       current.dragonBetAmount = String(totals.dragon || 0n);
       current.tigerBetAmount = String(totals.tiger || 0n);
@@ -220,7 +230,8 @@ async function readGameState(code: GameCode) {
   return {
     round: current,
     history: history.map((r: any) => ({ roundNumber: Number(r.round_number), result: r.result, timestamp: r.settled_at })),
-    bets: bets.map((b: any) => ({ id: b.id, amount: b.amount, type: b.selection.type, selection: b.selection, status: b.status, payoutAmount: b.payoutAmount, username: b.username })),\n    allBets: bets.map((b: any) => ({ id: b.id, amount: b.amount, type: b.selection.type, selection: b.selection, status: b.status, payoutAmount: b.payoutAmount, username: b.username })),
+    bets: bets.map((b: any) => ({ id: b.id, amount: b.amount, type: b.selection.type, selection: b.selection, status: b.status, payoutAmount: b.payoutAmount, username: b.username })),
+    allBets: bets.map((b: any) => ({ id: b.id, amount: b.amount, type: b.selection.type, selection: b.selection, status: b.status, payoutAmount: b.payoutAmount, username: b.username })),
   };
 }
 
