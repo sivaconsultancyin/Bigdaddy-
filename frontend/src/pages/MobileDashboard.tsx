@@ -279,6 +279,20 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const crashGame = games.find((game) => game.code === 'aviator');
   const crashGameActive = crashGame?.status === 'ACTIVE';
 
+  // Keep all six games visible when the API catalog is incomplete; this does not activate them.
+  const playerGameCatalog: GameInfo[] = [
+    { id: 'catalog-aviator', code: 'aviator', name: 'Aviator / Crash', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-aviator-pool', poolBalance: '0', minBet: 10, maxBet: 100000, description: 'Crash game', iconName: 'Plane', route: '/games/aviator' },
+    { id: 'catalog-roulette', code: 'roulette', name: 'European Roulette', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-roulette-pool', poolBalance: '0', minBet: 10, maxBet: 100000, description: 'European roulette', iconName: 'Disc', route: '/games/roulette' },
+    { id: 'catalog-teen-patti', code: 'teen-patti', name: 'Teen Patti', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-teen-patti-pool', poolBalance: '0', minBet: 10, maxBet: 100000, description: 'Teen Patti card game', iconName: 'Club', route: '/games/teen-patti' },
+    { id: 'catalog-dice', code: 'dice', name: 'Dice', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-dice-pool', poolBalance: '0', minBet: 10, maxBet: 100000, description: 'Dice game', iconName: 'Dice5', route: '/games/dice' },
+    { id: 'catalog-dragon-tiger', code: 'dragon-tiger', name: 'Dragon Tiger', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-dragon-tiger-pool', poolBalance: '0', minBet: 10, maxBet: 100000, description: 'Dragon Tiger card game', iconName: 'Flame', route: '/games/dragon-tiger' },
+    { id: 'catalog-andar-bahar', code: 'andar-bahar', name: 'Andar Bahar', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-andar-bahar-pool', poolBalance: '0', minBet: 10, maxBet: 100000, description: 'Andar Bahar card game', iconName: 'Layers', route: '/games/andar-bahar' },
+  ];
+  const gamesForDisplay = playerGameCatalog.map((catalogGame) => {
+    const apiGame = games.find((game) => game.code === catalogGame.code);
+    return apiGame ? { ...catalogGame, ...apiGame } : catalogGame;
+  });
+
   const pendingRequests = requests.filter((r) => r.status === TokenRequestStatus.PENDING);
 
   return (
@@ -461,7 +475,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
 
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                {games.filter((g) => g.status === 'ACTIVE').length} LIVE
+                {gamesForDisplay.filter((g) => g.status === 'ACTIVE').length} LIVE
               </span>
             </div>
           </div>
@@ -505,7 +519,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
 
           {/* Upcoming Games Grid (Compact mobile 2-col cards) */}
           <div className="grid grid-cols-2 gap-2">
-            {games
+            {gamesForDisplay
               .filter((g) => g.code !== 'aviator')
               .map((g) => (
                 <button
@@ -519,12 +533,12 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                     </div>
                     <span
                       className={`text-[8px] uppercase font-bold px-1.5 py-0.2 rounded ${
-                        g.status === 'ACTIVE' || g.code === 'roulette' || g.code === 'teen-patti' || g.code === 'andar-bahar'
+                        g.status === 'ACTIVE'
                           ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                           : 'bg-zinc-800 text-zinc-400'
                       }`}
                     >
-                      {g.status === 'ACTIVE' || g.code === 'roulette' || g.code === 'teen-patti' || g.code === 'andar-bahar' ? '● LIVE' : 'Preview'}
+                      {g.status === 'ACTIVE' ? '● LIVE' : 'Preview'}
                     </span>
                   </div>
                   <div>
