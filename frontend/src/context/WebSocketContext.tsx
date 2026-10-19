@@ -88,10 +88,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // European Roulette initial state
   const [rouletteRound, setRouletteRound] = useState<RouletteLiveState>({
-    id: 'round-roulette-421',
-    roundNumber: 421,
+    id: '',
+    roundNumber: 0,
     status: 'BETTING',
-    bettingEndsAt: Date.now() + 14000,
+    bettingEndsAt: 0,
     spinEndsAt: null,
     winningNumber: null,
     color: null,
@@ -105,11 +105,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Andar Bahar initial synchronized multiplayer state
   const [andarBaharRound, setAndarBaharRound] = useState<AndarBaharRound>({
-    id: 'round-ab-init',
-    roundNumber: 301,
+    id: '',
+    roundNumber: 0,
     status: AndarBaharRoundStatus.BETTING,
-    jokerCard: { suit: 'H', rank: 8 },
-    bettingEndsAt: Date.now() + 13000,
+    jokerCard: null,
+    bettingEndsAt: 0,
     dealCards: [],
     winningSide: null,
     winningCard: null,
@@ -127,10 +127,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Dragon Tiger initial synchronized multiplayer state
   const [dragonTigerRound, setDragonTigerRound] = useState<DragonTigerRound>({
-    id: 'round-dt-init',
-    roundNumber: 501,
+    id: '',
+    roundNumber: 0,
     status: DragonTigerRoundStatus.BETTING,
-    bettingEndsAt: Date.now() + 12000,
+    bettingEndsAt: 0,
     dragonCard: null,
     tigerCard: null,
     winner: null,
@@ -147,10 +147,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Lucky 10 Dice initial synchronized multiplayer state
   const [diceRound, setDiceRound] = useState<DiceRound>({
-    id: 'round-dice-init',
-    roundNumber: 601,
+    id: '',
+    roundNumber: 0,
     status: DiceRoundStatus.BETTING,
-    bettingEndsAt: Date.now() + 14000,
+    bettingEndsAt: 0,
     rolledNumber: null,
     totalBetsCount: 0,
     totalBetAmount: '0',
