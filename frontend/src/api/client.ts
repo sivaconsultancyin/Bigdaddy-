@@ -255,7 +255,7 @@ export class ApiClient {
           mode: AppMode.PRODUCTION,
           isSimulated: false,
           databaseConnected: false,
-          authProvider: 'POSTGRESQL',
+          authProvider: 'PRODUCTION_SUPABASE_POSTGRES',
           version: '1.0.0',
         };
       }
