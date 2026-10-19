@@ -31,7 +31,7 @@ async function auth(req: AuthRequest, res: Response, next: NextFunction) {
       'SELECT id,username FROM public.users WHERE id=$1 AND is_active=true LIMIT 1', [token.id],
     );
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
-    req.actor = rows[0] as Actor;
+    req.actor = rows[0] as unknown as Actor;
     return next();
   } catch (error) {
     console.error('Authoritative game auth failed:', error);
@@ -300,7 +300,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
         success: true,
         betCount: replayBets.length,
         totalBet: rawBets.reduce((sum: number, bet: any) => sum + Number(bet.amount), 0).toString(),
-        bets: replayBets,
+        placedBets: replayBets,
         ...(await readGameState(code)),
       });
     }
@@ -361,7 +361,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
       );
       return result;
     });
-    return res.status(201).json({ success: true, betCount: placed.length, totalBet: rawBets.reduce((sum: number, bet: any) => sum + Number(bet.amount), 0).toString(), bets: placed, ...(await readGameState(code)) });
+    return res.status(201).json({ success: true, betCount: placed.length, totalBet: rawBets.reduce((sum: number, bet: any) => sum + Number(bet.amount), 0).toString(), placedBets: placed, ...(await readGameState(code)) });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     const known = ['GAME_NOT_CONFIGURED','BETTING_CLOSED','GAME_WALLETS_NOT_CONFIGURED','BET_OUT_OF_RANGE','GAME_POOL_INSUFFICIENT','IDEMPOTENCY_KEY_REUSE','PLAYER_WALLET_NOT_FOUND'];
