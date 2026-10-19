@@ -25,7 +25,7 @@ async function requireDatabaseUser(req: AuthReq, res: Response, next: NextFuncti
     const sql = getDatabaseClient();
     const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.id=$1 AND u.is_active=true LIMIT 1', [payload.id]);
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
-    req.authUser = rows[0] as UserRow;
+    req.authUser = rows[0] as unknown as UserRow;
     next();
   } catch (error) {
     console.error('Production authentication failed:', error);
@@ -39,7 +39,7 @@ productionRouter.post('/auth/login', async (req, res: Response) => {
   try {
     const sql = getDatabaseClient();
     const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE lower(u.username)=lower($1) LIMIT 1', [parsed.data.username]);
-    const user = rows[0] as UserRow | undefined;
+    const user = rows[0] as unknown as UserRow | undefined;
     if (!user || !user.is_active || !(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'INVALID_USERNAME_OR_PASSWORD' });
     const wallets = await sql.unsafe('SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance,game_code FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
     await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_LOGIN','USER',$1,$2::jsonb)", [user.id, JSON.stringify({ ip: req.ip })]);
@@ -63,7 +63,7 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
       if (duplicates[0]) throw new Error('DUPLICATE_ACCOUNT');
       const passwordHash = await bcrypt.hash(password, 12);
       const users = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id,referred_by_user_id) VALUES($1,$2,$3,$4,$5) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username, email, passwordHash, refs[0].admin_id, refs[0].owner_user_id]);
-      const user = users[0] as UserRow;
+      const user = users[0] as unknown as UserRow;
       await tx.unsafe("INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,'PLAYER',$2)", [user.id, refs[0].admin_id]);
       await tx.unsafe("INSERT INTO public.wallets(user_id,wallet_type,balance) VALUES($1,'PLAYER',0)", [user.id]);
       await tx.unsafe('INSERT INTO public.user_profiles(user_id,display_name) VALUES($1,$2)', [user.id, username]);
@@ -71,7 +71,7 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'REFERRAL_REGISTRATION','USER',$1,$2::jsonb)", [user.id, JSON.stringify({ referralCode })]);
       return user;
     });
-    const user = created as UserRow;
+    const user = created as unknown as UserRow;
     const wallets = await sql.unsafe('SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
     return res.status(201).json({ token: tokenFor(user), user: safeUser(user), wallet: wallets[0] || null });
   } catch (error) {
@@ -112,7 +112,7 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
       if (dup[0]) throw new Error('DUPLICATE_ACCOUNT');
       const hash = await bcrypt.hash(password, 12);
       const rows = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id) VALUES($1,$2,$3,$4) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username, email, hash, actor.id]);
-      const created = rows[0] as UserRow;
+      const created = rows[0] as unknown as UserRow;
       const walletType = role === UserRole.SUPER_ADMIN ? 'SUPER_ADMIN' : role === UserRole.ADMIN ? 'ADMIN' : 'PLAYER';
       await tx.unsafe('INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,$2,$3)', [created.id, role, actor.id]);
       await tx.unsafe('INSERT INTO public.wallets(user_id,wallet_type,balance) VALUES($1,$2,0)', [created.id, walletType]);
@@ -130,7 +130,7 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_CREATED','USER',$2,$3::jsonb)", [actor.id, created.id, JSON.stringify({ role, initialTokens: amount.toString() })]);
       return created;
     });
-    return res.status(201).json({ user: safeUser(user as UserRow) });
+    return res.status(201).json({ user: safeUser(user as unknown as UserRow) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'USER_CREATION_FAILED';
     if (message.includes('DUPLICATE_ACCOUNT') || message.includes('unique')) return res.status(409).json({ error: 'USERNAME_OR_EMAIL_ALREADY_REGISTERED' });
