@@ -180,12 +180,13 @@ export function validateSelection(code: GameCode, selection: any): boolean {
 
 function publicRound(row: any, code: GameCode) {
   const state = row.state || {};
-  const result = row.status === 'RESULT' || row.status === 'SETTLED' ? row.result : null;
+  const result = ['RUNNING','RESULT','SETTLED'].includes(row.status) ? row.result : null;
   return {
     id: row.id,
     roundNumber: Number(row.round_number),
-    status: row.status === 'SETTLED' ? 'RESULT' : row.status,
+    status: row.status === 'SETTLED' ? 'RESULT' : row.status === 'RUNNING' ? (code === 'roulette' ? 'SPINNING' : code === 'dice' ? 'ROLLING' : code === 'dragon_tiger' ? 'REVEALING' : 'DEALING') : row.status,
     bettingEndsAt: new Date(row.betting_closes_at).getTime(),
+    ...(code === 'roulette' ? { spinEndsAt: new Date(row.betting_closes_at).getTime() + 1500 } : {}),
     openedAt: new Date(row.opened_at).getTime(),
     ...(code === 'roulette' ? {
       winningNumber: result?.number ?? null, color: result?.color ?? null,
@@ -446,8 +447,14 @@ async function tick() {
       if (latest?.status === 'BETTING' && new Date(latest.betting_closes_at).getTime() <= Date.now()) {
         const seed = String(latest.server_seed || '');
         const result = makeResult(code, seed);
-        await sql.unsafe("UPDATE public.authoritative_game_rounds SET status='RESULT',result=$2::jsonb WHERE id=$1 AND status='BETTING'", [latest.id, JSON.stringify(result)]);
-      } else if (latest?.status === 'RESULT' && Date.now() - new Date(latest.betting_closes_at).getTime() >= 1200) {
+        await sql.unsafe("UPDATE public.authoritative_game_rounds SET status='RUNNING',result=$2::jsonb WHERE id=$1 AND status='BETTING'", [latest.id, JSON.stringify(result)]);
+      } else if (latest?.status === 'RUNNING' && Date.now() - new Date(latest.betting_closes_at).getTime() >= 1500) {
+        if (!latest.result) {
+          const recoveredResult = makeResult(code, String(latest.server_seed || ''));
+          await sql.unsafe("UPDATE public.authoritative_game_rounds SET result=$2::jsonb WHERE id=$1 AND status='RUNNING' AND result IS NULL", [latest.id, JSON.stringify(recoveredResult)]);
+        }
+        await sql.unsafe("UPDATE public.authoritative_game_rounds SET status='RESULT' WHERE id=$1 AND status='RUNNING' AND result IS NOT NULL", [latest.id]);
+      } else if (latest?.status === 'RESULT' && Date.now() - new Date(latest.betting_closes_at).getTime() >= 2700) {
         await settleRound(latest.id, code);
       } else if (game.status === 'ACTIVE' && (!latest || latest.status === 'SETTLED' || latest.status === 'CANCELLED') &&
           (!latest || !latest.settled_at || Date.now() - new Date(latest.settled_at).getTime() >= 2500)) {
