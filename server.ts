@@ -154,18 +154,19 @@ async function startServer() {
   // Retry the initial database connection instead of leaving production APIs permanently closed.
   if (config.isProduction && config.productionValid && process.env.DATABASE_URL?.trim()) {
     setInterval(async () => {
-      if (isDatabaseConnected()) return;
       try {
-        await connectDatabase();
-        console.log('Supabase PostgreSQL connection recovered.');
-        if (!productionServicesStarted) {
+        if (!isDatabaseConnected()) {
+          await connectDatabase();
+          console.log('Supabase PostgreSQL connection recovered.');
+        }
+        if (isDatabaseConnected() && !productionServicesStarted) {
           await bootstrapOwnerFromEnvironment();
           startProductionCrashEngine();
           productionServicesStarted = true;
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error('Supabase PostgreSQL reconnect attempt failed:', message);
+        console.error('Supabase PostgreSQL reconnect/service initialization attempt failed:', message);
       }
     }, 10000);
   }
