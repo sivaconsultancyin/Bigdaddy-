@@ -389,24 +389,77 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (inFlight) return;
       inFlight = true;
       try {
-        const response = await fetch(apiBase + '/games/aviator/state', { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error('Crash state API unavailable');
-        const data = await response.json();
-        setIsConnected(true);
-        setIsSimulatedFallback(false);
-        if (data.round) {
-          const round = data.round;
-          setRoundState({
-            id: round.id,
-            roundNumber: round.roundNumber,
-            status: round.status,
-            startTime: round.startedAt ? new Date(round.startedAt).getTime() : undefined,
-            crashMultiplier: round.crashMultiplier ?? undefined,
-          });
-          setMultiplier(Number(round.multiplier || 1));
+        const gamePaths = [
+          ['aviator', '/games/aviator/state'],
+          ['roulette', '/games/roulette/state'],
+          ['dice', '/games/dice/state'],
+          ['dragonTiger', '/games/dragon-tiger/state'],
+          ['andarBahar', '/games/andar-bahar/state'],
+        ] as const;
+        const results = await Promise.all(gamePaths.map(async ([key, path]) => {
+          try {
+            const response = await fetch(apiBase + path, { headers: { Accept: 'application/json' } });
+            if (!response.ok) return { key, data: null };
+            return { key, data: await response.json() };
+          } catch {
+            return { key, data: null };
+          }
+        }));
+        let anySuccess = false;
+        for (const { key, data } of results) {
+          if (!data) continue;
+          anySuccess = true;
+          if (key === 'aviator') {
+            if (data.round) {
+              const round = data.round;
+              setRoundState({
+                id: round.id,
+                roundNumber: round.roundNumber,
+                status: round.status,
+                startTime: round.startedAt ? new Date(round.startedAt).getTime() : undefined,
+                crashMultiplier: round.crashMultiplier ?? undefined,
+              });
+              setMultiplier(Number(round.multiplier || 1));
+            }
+            if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
+            setLastEvent({ event: 'production:crash_state', data });
+          } else if (key === 'roulette') {
+            if (data.round) setRouletteRound(data.round);
+            if (Array.isArray(data.history)) {
+              setRouletteHistory(data.history.map((item: any) => ({
+                number: Number(item.result?.number ?? item.number),
+                color: (item.result?.color ?? item.color ?? 'black'),
+                timestamp: item.timestamp,
+              })));
+            }
+            if (Array.isArray(data.bets)) setRouletteLiveBets(data.bets.map((b: any) => ({
+              id: b.id, username: b.username || 'Player', type: b.type,
+              amount: String(b.amount), numbers: b.selection?.numbers,
+            })));
+          } else if (key === 'dice') {
+            if (data.round) setDiceRound(data.round as any);
+            if (Array.isArray(data.history)) setDiceHistory(data.history.map((h: any) => ({
+              ...h, rolledNumber: h.result?.number ?? h.rolledNumber,
+            })) as any);
+            if (Array.isArray(data.allBets || data.bets)) setDiceLiveBets((data.allBets || data.bets) as any);
+          } else if (key === 'dragonTiger') {
+            if (data.round) setDragonTigerRound(data.round as any);
+            if (Array.isArray(data.history)) setDragonTigerHistory(data.history.map((h: any) => ({
+              ...h, dragonCard: h.result?.dragonCard, tigerCard: h.result?.tigerCard,
+              winner: h.result?.winner,
+            })) as any);
+            if (Array.isArray(data.bets)) setDragonTigerLiveBets(data.bets as any);
+          } else if (key === 'andarBahar') {
+            if (data.round) setAndarBaharRound(data.round as any);
+            if (Array.isArray(data.history)) setAndarBaharHistory(data.history.map((h: any) => ({
+              ...h, jokerCard: h.result?.jokerCard, dealCards: h.result?.dealCards,
+              winningSide: h.result?.winner, totalCardsDealt: h.result?.totalCardsDealt,
+            })) as any);
+            if (Array.isArray(data.bets)) setAndarBaharLiveBets(data.bets as any);
+          }
         }
-        if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
-        setLastEvent({ event: 'production:crash_state', data });
+        setIsConnected(anySuccess);
+        setIsSimulatedFallback(false);
       } catch {
         setIsConnected(false);
         setIsSimulatedFallback(false);
