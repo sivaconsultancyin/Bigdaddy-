@@ -208,6 +208,7 @@ export class ApiClient {
   public static spinRoulette(payload: { bets: Array<{ type: string; numbers: number[]; amount: string }> }) {
     return this.request('/games/roulette/spin', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'roulette-spin-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -215,6 +216,7 @@ export class ApiClient {
   public static placeRouletteBet(payload: { bets: Array<{ type: string; numbers: number[]; amount: string }> }) {
     return this.request('/games/roulette/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'roulette-bet-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -246,6 +248,7 @@ export class ApiClient {
   public static placeAndarBaharBet(payload: { bets: Array<{ type: string; amount: string }> }) {
     return this.request('/games/andar-bahar/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'andar-bahar-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -258,6 +261,7 @@ export class ApiClient {
   public static placeDragonTigerBet(payload: { bets: Array<{ type: string; amount: string }> }) {
     return this.request('/games/dragon-tiger/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'dragon-tiger-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -278,6 +282,7 @@ export class ApiClient {
   }) {
     return this.request('/games/dice/roll', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'dice-roll-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -285,6 +290,7 @@ export class ApiClient {
   public static placeDiceBet(payload: { bets: Array<{ type: string; amount: string }> }) {
     return this.request('/games/dice/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'dice-bet-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
