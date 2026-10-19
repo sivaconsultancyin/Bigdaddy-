@@ -256,6 +256,8 @@ productionRouter.post('/auth/bootstrap-owner', async (req, res: Response) => {
 productionRouter.post('/wallet/game-pool', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const actor = req.authUser!;
   if (actor.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
+  const gameCode = String(req.body?.gameCode ?? 'aviator').trim();
+  if (!['aviator','roulette','dice','dragon_tiger','andar_bahar'].includes(gameCode)) return res.status(400).json({ error: 'UNKNOWN_GAME' });
   const amountText = String(req.body?.amount ?? '');
   if (!/^[1-9][0-9]*$/.test(amountText) || !Number.isSafeInteger(Number(amountText))) {
     return res.status(400).json({ error: 'POSITIVE_SAFE_INTEGER_AMOUNT_REQUIRED' });
@@ -268,18 +270,18 @@ productionRouter.post('/wallet/game-pool', requireDatabaseUser, async (req: Auth
     const sql = getDatabaseClient();
     const result = await sql.begin(async (tx) => {
       const source = await tx.unsafe("SELECT id FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1 FOR UPDATE");
-      const target = await tx.unsafe("SELECT w.id FROM public.wallets w JOIN public.games g ON g.pool_wallet_id=w.id WHERE g.code='aviator' LIMIT 1 FOR UPDATE OF w");
+      const target = await tx.unsafe('SELECT w.id FROM public.wallets w JOIN public.games g ON g.pool_wallet_id=w.id WHERE g.code=$1 LIMIT 1 FOR UPDATE OF w', [gameCode]);
       if (!source[0] || !target[0]) throw new Error('GAME_POOL_WALLET_MISSING');
       const moved = await tx.unsafe(
         "SELECT public.wallet_transfer_atomic($1,'POOL_ALLOCATION'::public.transaction_type_enum,$2::bigint,$3::uuid,$4::uuid,$5::jsonb) AS id",
-        [suppliedKey.trim(), amountText, source[0].id, target[0].id, JSON.stringify({ allocatedBy: actor.id, game: 'aviator' })]
+        [suppliedKey.trim(), amountText, source[0].id, target[0].id, JSON.stringify({ allocatedBy: actor.id, game: gameCode })]
       );
       const balance = await tx.unsafe('SELECT balance::text AS balance FROM public.wallets WHERE id=$1', [target[0].id]);
       await tx.unsafe(
         "INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'GAME_POOL_ALLOCATION','WALLET',$2,$3::jsonb)",
         [actor.id, target[0].id, JSON.stringify({ amount: amountText, transactionId: moved[0].id, idempotencyKey: suppliedKey.trim() })]
       );
-      return { transactionId: moved[0].id, poolBalance: balance[0]?.balance };
+      return { transactionId: moved[0].id, poolBalance: balance[0]?.balance, gameCode };
     });
     return res.json(result);
   } catch (error) {
@@ -303,6 +305,24 @@ productionRouter.post('/games/aviator/activate', requireDatabaseUser, async (req
     return res.json({ status: 'ACTIVE', poolBalance: rows[0].balance });
   } catch (error) {
     console.error('Crash activation failed:', error);
+    return res.status(503).json({ error: 'GAME_ACTIVATION_FAILED' });
+  }
+});
+
+productionRouter.post('/games/:gameCode/activate', requireDatabaseUser, async (req: AuthReq, res: Response) => {
+  const actor = req.authUser!;
+  if (actor.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
+  const code = String(req.params.gameCode || '').replace(/-/g, '_');
+  if (!['roulette','dice','dragon_tiger','andar_bahar'].includes(code)) return res.status(404).json({ error: 'UNKNOWN_GAME' });
+  try {
+    const sql = getDatabaseClient();
+    const rows = await sql.unsafe("SELECT g.id,w.balance::text AS balance FROM public.games g JOIN public.wallets w ON w.id=g.pool_wallet_id WHERE g.code=$1 LIMIT 1", [code]);
+    if (!rows[0] || BigInt(rows[0].balance) <= 0n) return res.status(400).json({ error: 'ALLOCATE_GAME_POOL_TOKENS_FIRST' });
+    await sql.unsafe("UPDATE public.games SET status='ACTIVE',updated_at=now() WHERE code=$1", [code]);
+    await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) SELECT $1,'GAME_ACTIVATED','GAME',id,$2::jsonb FROM public.games WHERE code=$3", [actor.id, JSON.stringify({ poolBalance: rows[0].balance }), code]);
+    return res.json({ status: 'ACTIVE', gameCode: code, poolBalance: rows[0].balance });
+  } catch (error) {
+    console.error('Game activation failed:', error);
     return res.status(503).json({ error: 'GAME_ACTIVATION_FAILED' });
   }
 });
