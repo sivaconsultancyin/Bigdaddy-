@@ -211,7 +211,16 @@ export class ApiClient {
       return { games: mockState.games };
     }
 
-    if (endpoint === '/games/allocate-pool' && options.method === 'POST') {
+    if (endpoint === '/games/aviator/activate' && options.method === 'POST') {
+      const game = mockState.games.find((g) => g.code === 'aviator');
+      if (!game || BigInt(game.poolBalance || '0') <= 0n) {
+        throw new Error('ALLOCATE_GAME_POOL_TOKENS_FIRST');
+      }
+      game.status = 'ACTIVE' as any;
+      return { status: 'ACTIVE', poolBalance: game.poolBalance };
+    }
+
+    if ((endpoint === '/games/allocate-pool' || endpoint === '/wallet/game-pool') && options.method === 'POST') {
       try {
         const body = JSON.parse((options.body as string) || '{}');
         const game = mockState.games.find((g) => g.id === body.gameId);
@@ -467,11 +476,21 @@ export class ApiClient {
     return this.request('/games/list');
   }
 
-  public static allocatePool(payload: { gameId: string; amount: string }) {
-    return this.request('/games/allocate-pool', {
+  public static async allocatePool(payload: { gameId: string; amount: string }) {
+    const allocation = await this.request<{ transactionId: string; poolBalance: string }>('/wallet/game-pool', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      headers: { 'Idempotency-Key': `POOL_ALLOCATION_${crypto.randomUUID()}` },
+      body: JSON.stringify({ amount: payload.amount }),
     });
+
+    // Production game activation is a separate Owner-only endpoint. Activate only
+    // after the Treasury-to-pool transfer has succeeded.
+    const activation = await this.request<{ status: string; poolBalance: string }>('/games/aviator/activate', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    return { ...allocation, ...activation };
   }
 
   // Audit
