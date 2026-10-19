@@ -18,6 +18,7 @@ import { andarBaharRouter } from './backend/src/games/andar-bahar/andar-bahar.ro
 import { setupWebSocketServer } from './backend/src/websocket/wsServer';
 import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres';
 import { productionRouter } from './backend/src/routes/production.routes';
+import { startProductionCrashEngine } from './backend/src/games/aviator/production.engine';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,7 @@ async function startServer() {
   if (process.env.DATABASE_URL?.trim()) {
     await connectDatabase();
     console.log('✅ Supabase PostgreSQL connectivity check passed.');
+    if (config.isProduction) startProductionCrashEngine();
   } else if (config.isProduction) {
     // Keep liveness/readiness endpoints available; config validation below keeps
     // every financial/game API closed until required secrets are configured.
@@ -89,10 +91,10 @@ async function startServer() {
 
   // Readiness remains false until durable storage and game settlement are implemented.
   app.get('/api/ready', (_req, res) => {
-    const ready = !config.isProduction;
+    const ready = !config.isProduction || (config.productionValid && isDatabaseConnected());
     res.status(ready ? 200 : 503).json({
       ready,
-      reason: ready ? null : 'PERSISTENT_STORAGE_AND_SETTLEMENT_NOT_READY',
+      reason: ready ? null : 'PRODUCTION_CONFIGURATION_OR_DATABASE_NOT_READY',
       databaseConnected: isDatabaseConnected(),
       timestamp: new Date().toISOString(),
     });
