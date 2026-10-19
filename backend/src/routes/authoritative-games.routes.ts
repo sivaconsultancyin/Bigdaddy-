@@ -103,29 +103,39 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
     if (type === 'odd' || type === 'even') return number !== 0 && (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
     if (type === 'low' || type === '1-18') return number >= 1 && number <= 18 ? 2 : 0;
     if (type === 'high' || type === '19-36') return number >= 19 && number <= 36 ? 2 : 0;
-    if (type === 'dozen') {
-      const dozen = Number(selection?.dozen || selection?.value);
+    if (type.startsWith('dozen')) {
+      const dozen = Number(type.replace('dozen', '') || selection?.dozen || selection?.value);
       return number > 0 && Math.ceil(number / 12) === dozen ? 3 : 0;
     }
-    if (type === 'column') {
-      const column = Number(selection?.column || selection?.value);
+    if (type.startsWith('col')) {
+      const column = Number(type.replace('col', '') || selection?.column || selection?.value);
       return number > 0 && (number - 1) % 3 + 1 === column ? 3 : 0;
     }
     return 0;
   }
   if (code === 'dice') {
     const number = Number(result.number);
-    if (type === 'number') return Number(selection?.value) === number ? 6 : 0;
+    if (type === 'number' || /^\d+$/.test(type)) return Number(selection?.value ?? type) === number ? 10 : 0;
     if (type === 'odd' || type === 'even') return (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
+    if (type === 'small') return number <= 5 ? 2 : 0;
+    if (type === 'big') return number >= 6 ? 2 : 0;
     if (type === 'over') return number > Number(selection?.value) ? 2 : 0;
     if (type === 'under') return number < Number(selection?.value) ? 2 : 0;
     return 0;
   }
   if (code === 'dragon_tiger') {
-    return type === result.winner ? (type === 'tie' ? 9 : 2) : 0;
+    if (type === 'dragon' || type === 'tiger') return type === result.winner ? 2 : 0;
+    if (type === 'tie') return result.winner === 'tie' || result.winner === 'suited_tie' ? 9 : 0;
+    if (type === 'suited_tie') return result.winner === 'suited_tie' ? 51 : 0;
+    if (type === 'dragon_big') return result.dragonCard.rank >= 8 ? 2 : 0;
+    if (type === 'dragon_small') return result.dragonCard.rank <= 6 ? 2 : 0;
+    if (type === 'tiger_big') return result.tigerCard.rank >= 8 ? 2 : 0;
+    if (type === 'tiger_small') return result.tigerCard.rank <= 6 ? 2 : 0;
+    return 0;
   }
   return type === result.winner ? 2 : 0;
 }
+
 function maxLiabilityMultiplier(code: GameCode, selection: any): number {
   const type = String(selection?.type || '').toLowerCase();
   if (code === 'roulette') {
@@ -138,7 +148,7 @@ function maxLiabilityMultiplier(code: GameCode, selection: any): number {
     if (type === 'green') return 36;
     return 2;
   }
-  if (code === 'dice') return (type === 'number' || /^\\d+$/.test(type)) ? 10 : 2;
+  if (code === 'dice') return (type === 'number' || /^\d+$/.test(type)) ? 10 : 2;
   if (code === 'dragon_tiger') return type === 'suited_tie' ? 51 : type === 'tie' ? 9 : 2;
   return 2;
 }
@@ -146,9 +156,10 @@ export function validateSelection(code: GameCode, selection: any): boolean {
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return false;
   const type = String(selection.type || '').toLowerCase();
   if (code === 'roulette') {
-    if (['red','black','green','odd','even','low','high','1-18','19-36'].includes(type)) return true;
-    if ((type === 'straight' || type === 'number') && Array.isArray(selection.numbers)) {
-      return selection.numbers.length >= 1 && selection.numbers.length <= 6 &&
+    if (['red','black','green','odd','even','low','high','1-18','19-36','dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return true;
+    if (['straight','split','street','corner','line','number'].includes(type) && Array.isArray(selection.numbers)) {
+      const expected: Record<string, number> = { straight: 1, split: 2, street: 3, corner: 4, line: 6, number: 1 };
+      return selection.numbers.length === expected[type] &&
         selection.numbers.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 36);
     }
     if (type === 'dozen') return [1,2,3].includes(Number(selection.dozen || selection.value));
@@ -156,14 +167,15 @@ export function validateSelection(code: GameCode, selection: any): boolean {
     return false;
   }
   if (code === 'dice') {
-    if (type === 'number') return Number.isInteger(Number(selection.value)) && Number(selection.value) >= 1 && Number(selection.value) <= 6;
-    if (type === 'odd' || type === 'even') return true;
-    if (type === 'over' || type === 'under') return Number.isInteger(Number(selection.value)) && Number(selection.value) >= 1 && Number(selection.value) <= 5;
+    if (type === 'number' || /^\d+$/.test(type)) return Number.isInteger(Number(selection.value ?? type)) && Number(selection.value ?? type) >= 1 && Number(selection.value ?? type) <= 10;
+    if (['odd','even','small','big'].includes(type)) return true;
+    if (type === 'over' || type === 'under') return Number.isInteger(Number(selection.value)) && Number(selection.value) >= 1 && Number(selection.value) <= 9;
     return false;
   }
   if (code === 'dragon_tiger') return ['dragon','tiger','tie','suited_tie','dragon_big','dragon_small','tiger_big','tiger_small'].includes(type);
   return ['andar','bahar'].includes(type);
 }
+
 function publicRound(row: any, code: GameCode) {
   const state = row.state || {};
   const result = row.status === 'RESULT' || row.status === 'SETTLED' ? row.result : null;
