@@ -182,7 +182,7 @@ function publicRound(row: any, code: GameCode) {
   return {
     id: row.id,
     roundNumber: Number(row.round_number),
-    status: row.status,
+    status: row.status === 'SETTLED' ? 'RESULT' : row.status,
     bettingEndsAt: new Date(row.betting_closes_at).getTime(),
     openedAt: new Date(row.opened_at).getTime(),
     ...(code === 'roulette' ? {
