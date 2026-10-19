@@ -353,7 +353,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5">
               <span className="text-[9px] text-zinc-500 uppercase font-bold block mb-0.5">
-                Treasury Balance
+                {isOwner ? 'Treasury Balance' : 'Wallet Balance'}
               </span>
               <span className="text-base font-black font-mono text-amber-300 tracking-tight">
                 {parseInt(wallet?.balance || '0').toLocaleString()} tokens
@@ -466,7 +466,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             </div>
           </div>
 
-          {/* Featured Hero Game: Aviator / Crash */}
+          {/* Featured Hero Game: Crash Game */}
           <div className="bg-gradient-to-br from-amber-950/40 via-zinc-900 to-zinc-950 border border-amber-500/40 rounded-xl p-3 mb-2.5 shadow-md">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2.5">
@@ -476,7 +476,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-sm text-zinc-100 leading-tight">Aviator / Crash</span>
-                    <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase">
+                    <span className={crashGameActive ? "text-[8px] font-black px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase" : "text-[8px] font-black px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 uppercase"}>
                       {crashGameActive ? '● LIVE' : 'COMING SOON'}
                     </span>
                   </div>
