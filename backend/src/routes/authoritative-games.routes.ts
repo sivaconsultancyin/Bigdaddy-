@@ -259,20 +259,20 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
         if (amount < BigInt(game.min_bet) || amount > BigInt(game.max_bet)) throw new Error('BET_OUT_OF_RANGE');
         const selection = input.selection || input;
         const liability = amount * BigInt(maxLiabilityMultiplier(code, selection));
-        const fundsRows = await tx.unsafe("SELECT balance,reserved_balance FROM public.wallets WHERE id=$1 FOR UPDATE", [game.pool_wallet_id]);
-        if (!fundsRows[0] || BigInt(String(fundsRows[0].balance)) - BigInt(String(fundsRows[0].reserved_balance || 0)) < liability) {
-          throw new Error('GAME_POOL_INSUFFICIENT');
-        }
-        await tx.unsafe("UPDATE public.wallets SET reserved_balance=reserved_balance+$2::bigint,updated_at=now() WHERE id=$1", [game.pool_wallet_id, liability.toString()]);
         const key = rawBets.length === 1 ? idempotencyBase : idempotencyBase + '_' + i;
         const prior = await tx.unsafe('SELECT id,user_id,round_id,bet_amount,selection FROM public.authoritative_game_bets WHERE idempotency_key=$1', [key]);
         if (prior[0]) {
           if (prior[0].user_id !== req.actor!.id || prior[0].round_id !== round.id ||
               String(prior[0].bet_amount) !== String(amount) ||
               JSON.stringify(prior[0].selection) !== JSON.stringify(selection)) throw new Error('IDEMPOTENCY_KEY_REUSE');
-          result.push({ id: prior[0].id, status: 'PENDING', replay: true });
+          result.push({ id: prior[0].id, status: prior[0].status || 'PENDING', replay: true });
           continue;
         }
+        const fundsRows = await tx.unsafe("SELECT balance,reserved_balance FROM public.wallets WHERE id=$1 FOR UPDATE", [game.pool_wallet_id]);
+        if (!fundsRows[0] || BigInt(String(fundsRows[0].balance)) - BigInt(String(fundsRows[0].reserved_balance || 0)) < liability) {
+          throw new Error('GAME_POOL_INSUFFICIENT');
+        }
+        await tx.unsafe("UPDATE public.wallets SET reserved_balance=reserved_balance+$2::bigint,updated_at=now() WHERE id=$1", [game.pool_wallet_id, liability.toString()]);
         const playerRows = await tx.unsafe("SELECT id,balance FROM public.wallets WHERE user_id=$1 AND wallet_type='PLAYER' FOR UPDATE", [req.actor!.id]);
         if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
         const betRows = await tx.unsafe(
