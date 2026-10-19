@@ -17,8 +17,8 @@ export class ProductionConfigError extends Error {
   }
 }
 
-// Mode determination: Default to DEVELOPMENT_PREVIEW unless explicitly configured as production
-const rawMode = (process.env.APP_MODE || process.env.NODE_ENV || 'production').toLowerCase();
+// Default to production. Preview mode must never be selected implicitly by NODE_ENV.
+const rawMode = (process.env.APP_MODE || 'production').toLowerCase();
 export const appMode: AppMode =
   rawMode === 'production' ? AppMode.PRODUCTION : AppMode.DEVELOPMENT_PREVIEW;
 
