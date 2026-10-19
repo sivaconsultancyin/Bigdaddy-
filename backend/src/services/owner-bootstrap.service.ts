@@ -2,24 +2,34 @@ import bcrypt from 'bcryptjs';
 import { getDatabaseClient } from '../db/postgres';
 
 export async function bootstrapOwnerFromEnvironment(): Promise<void> {
-  const username = process.env.OWNER_BOOTSTRAP_USERNAME?.trim();
-  const email = process.env.OWNER_BOOTSTRAP_EMAIL?.trim().toLowerCase();
-  const password = process.env.OWNER_BOOTSTRAP_PASSWORD;
-  if (!username || !email || !password) return;
-  if (password.length < 12 || !email.includes('@')) {
-    throw new Error('OWNER_BOOTSTRAP_USERNAME, valid OWNER_BOOTSTRAP_EMAIL and 12+ character OWNER_BOOTSTRAP_PASSWORD are required together');
-  }
-
   const sql = getDatabaseClient();
+
+  // Do not require bootstrap credentials on every restart once an Owner exists.
   const existing = await sql.unsafe("SELECT u.id FROM public.users u JOIN public.role_assignments r ON r.user_id=u.id WHERE r.role='OWNER' LIMIT 1");
   if (existing[0]) {
     console.log('Owner bootstrap skipped: an Owner account already exists.');
     return;
   }
 
+  // A new production database must never become "ready" with no way to administer it.
+  const username = process.env.OWNER_BOOTSTRAP_USERNAME?.trim();
+  const email = process.env.OWNER_BOOTSTRAP_EMAIL?.trim().toLowerCase();
+  const password = process.env.OWNER_BOOTSTRAP_PASSWORD;
+  if (!username || !email || !password) {
+    throw new Error('OWNER_BOOTSTRAP_USERNAME, OWNER_BOOTSTRAP_EMAIL and OWNER_BOOTSTRAP_PASSWORD are required until the first Owner account exists.');
+  }
+  if (password.length < 12 || !email.includes('@')) {
+    throw new Error('OWNER_BOOTSTRAP_USERNAME, valid OWNER_BOOTSTRAP_EMAIL and 12+ character OWNER_BOOTSTRAP_PASSWORD are required together');
+  }
+
   await sql.begin(async (tx) => {
+    // Re-check inside the transaction to reduce duplicate bootstrap attempts.
+    const ownerRows = await tx.unsafe("SELECT u.id FROM public.users u JOIN public.role_assignments r ON r.user_id=u.id WHERE r.role='OWNER' LIMIT 1 FOR UPDATE OF u");
+    if (ownerRows[0]) return;
+
     const duplicate = await tx.unsafe('SELECT id FROM public.users WHERE lower(username)=lower($1) OR lower(email)=lower($2) LIMIT 1', [username, email]);
     if (duplicate[0]) throw new Error('Owner bootstrap identity already exists; resolve it before continuing.');
+
     const hash = await bcrypt.hash(password, 12);
     const rows = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id) VALUES($1,$2,$3,NULL) RETURNING id', [username, email, hash]);
     const ownerId = rows[0].id as string;
