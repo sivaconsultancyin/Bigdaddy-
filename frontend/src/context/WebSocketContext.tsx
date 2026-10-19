@@ -469,8 +469,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           } else if (key === 'andarBahar') {
             if (data.round) setAndarBaharRound(data.round as any);
             if (Array.isArray(data.history)) setAndarBaharHistory(data.history.map((h: any) => ({
-              ...h, jokerCard: h.result?.jokerCard, dealCards: h.result?.dealCards,
-              winningSide: h.result?.winner, totalCardsDealt: h.result?.totalCardsDealt,
+              ...h,
+              jokerCard: h.result?.jokerCard,
+              winningSide: h.result?.winner,
+              winningCard: h.result?.dealCards?.[Math.max(0, (h.result?.dealCards?.length || 1) - 1)]?.card,
+              totalCards: h.result?.totalCardsDealt,
+              timestamp: h.timestamp,
             })) as any);
             if (Array.isArray(data.bets)) setAndarBaharLiveBets(data.bets as any);
           }
