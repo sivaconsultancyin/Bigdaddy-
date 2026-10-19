@@ -167,7 +167,8 @@ productionRouter.get('/wallet/summary', requireDatabaseUser, async (req: AuthReq
   const rows = await sql.unsafe("SELECT ts.max_supply::text AS \"maxSupply\",ts.total_minted::text AS \"totalMinted\",COALESCE(sum(w.balance),0)::text AS \"totalWalletBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type='TREASURY'),0)::text AS \"treasuryBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type='GAME_POOL'),0)::text AS \"gamePoolsBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type IN ('SUPER_ADMIN','ADMIN','PLAYER')),0)::text AS \"roleWalletsBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type='ESCROW'),0)::text AS \"escrowBalance\",(SELECT count(*)::int FROM public.users) AS \"userCount\" FROM public.token_supply ts CROSS JOIN public.wallets w WHERE ts.id=1 GROUP BY ts.max_supply,ts.total_minted");
   const row = rows[0];
   const valid = !!row && row.maxSupply === row.totalMinted && row.totalMinted === row.totalWalletBalance;
-  return res.json({ ...row, totalCalculated: row?.totalWalletBalance, isSupplyValid: valid, invariantHolds: valid });
+  const circulating = Math.max(0, Number(row?.totalWalletBalance || 0) - Number(row?.treasuryBalance || 0));
+  return res.json({ ...row, circulating: String(circulating), totalCalculated: row?.totalWalletBalance, isSupplyValid: valid, invariantHolds: valid });
 });
 
 productionRouter.get('/wallet/ledger', requireDatabaseUser, async (req: AuthReq, res: Response) => {
