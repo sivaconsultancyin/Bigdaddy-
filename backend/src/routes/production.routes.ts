@@ -7,11 +7,11 @@ import { loginSchema, createUserSchema, referralRegisterSchema, directTransferSc
 import { UserRole, TransactionType } from '../../../shared/src/types';
 
 export const productionRouter = Router();
-type UserRow = { id: string; username: string; email: string; password_hash: string; role: UserRole; parent_id: string | null; referred_by_user_id: string | null; is_active: boolean };
+type UserRow = { id: string; username: string; email: string; password_hash: string; role: UserRole; parent_id: string | null; referred_by_user_id: string | null; referral_code?: string | null; is_active: boolean };
 type AuthReq = Request & { authUser?: UserRow };
 
 function safeUser(user: UserRow) {
-  return { id: user.id, username: user.username, email: user.email, role: user.role, parentId: user.parent_id, referredBy: user.referred_by_user_id };
+  return { id: user.id, username: user.username, email: user.email, role: user.role, parentId: user.parent_id, referredBy: user.referred_by_user_id, referralCode: user.referral_code || (user as any).referralCode || null };
 }
 function tokenFor(user: UserRow) {
   return AuthService.generateToken({ ...safeUser(user), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as any);
@@ -23,7 +23,7 @@ async function requireDatabaseUser(req: AuthReq, res: Response, next: NextFuncti
     const payload = AuthService.verifyToken(header.slice(7));
     if (!payload || !payload.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
     const sql = getDatabaseClient();
-    const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.id=$1 AND u.is_active=true LIMIT 1', [payload.id]);
+    const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE u.id=$1 AND u.is_active=true LIMIT 1', [payload.id]);
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
     req.authUser = rows[0] as unknown as UserRow;
     next();
@@ -38,7 +38,7 @@ productionRouter.post('/auth/login', async (req, res: Response) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
   try {
     const sql = getDatabaseClient();
-    const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE lower(u.username)=lower($1) LIMIT 1', [parsed.data.username]);
+    const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE lower(u.username)=lower($1) LIMIT 1', [parsed.data.username]);
     const user = rows[0] as unknown as UserRow | undefined;
     if (!user || !user.is_active || !(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'INVALID_USERNAME_OR_PASSWORD' });
     const wallets = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
@@ -67,6 +67,9 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
       await tx.unsafe("INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,'PLAYER',$2)", [user.id, refs[0].admin_id]);
       await tx.unsafe("INSERT INTO public.wallets(user_id,wallet_type,balance) VALUES($1,'PLAYER',0)", [user.id]);
       await tx.unsafe('INSERT INTO public.user_profiles(user_id,display_name) VALUES($1,$2)', [user.id, username]);
+      const newReferralCode = 'BD' + randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase();
+      await tx.unsafe('INSERT INTO public.referral_codes(code,owner_user_id,admin_id,is_active) VALUES($1,$2,$3,true)', [newReferralCode, user.id, refs[0].admin_id]);
+      user.referral_code = newReferralCode;
       await tx.unsafe('UPDATE public.referral_codes SET usage_count=usage_count+1 WHERE code=$1', [referralCode]);
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'REFERRAL_REGISTRATION','USER',$1,$2::jsonb)", [user.id, JSON.stringify({ referralCode })]);
       return user;
@@ -122,7 +125,7 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
       if (role === UserRole.PLAYER) {
         const referralCode = 'BD' + randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase();
         await tx.unsafe('INSERT INTO public.referral_codes(code,owner_user_id,admin_id,is_active) VALUES($1,$2,$3,true)', [referralCode, created.id, actor.id]);
-        (created as any).referralCode = referralCode;
+        created.referral_code = referralCode;
       }
       const amount = BigInt(initialTokens || '0');
       if (amount > 0n) {
@@ -139,7 +142,7 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
     });
     const createdUser = user as unknown as UserRow;
     const createdWallet = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [createdUser.id]);
-    return res.status(201).json({ user: { ...safeUser(createdUser), role, referralCode: (createdUser as any).referralCode || null }, wallet: createdWallet[0] || null });
+    return res.status(201).json({ user: { ...safeUser(createdUser), role, referralCode: createdUser.referral_code || null }, wallet: createdWallet[0] || null });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'USER_CREATION_FAILED';
     if (message.includes('DUPLICATE_ACCOUNT') || message.includes('unique')) return res.status(409).json({ error: 'USERNAME_OR_EMAIL_ALREADY_REGISTERED' });
