@@ -173,7 +173,7 @@ function publicRound(row: any, code: GameCode) {
     ...(code === 'roulette' ? {
       winningNumber: result?.number ?? null, color: result?.color ?? null,
     } : {}),
-    ...(code === 'dice' ? { rolledNumber: result?.number ?? null } : {}),
+    ...(code === 'dice' ? { rolledNumber: result?.number ?? null, numberBetsAmount: {} } : {}),
     ...(code === 'dragon_tiger' ? {
       dragonCard: result?.dragonCard ?? null, tigerCard: result?.tigerCard ?? null, winner: result?.winner ?? null,
     } : {}),
@@ -203,13 +203,9 @@ async function readGameState(code: GameCode) {
     'SELECT b.id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",u.username FROM public.authoritative_game_bets b JOIN public.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100',
     [rounds[0].id],
   ) : [];
-  const current = rounds[0] ? publicRound(rounds[0], code) : null;
+  const current: any = rounds[0] ? publicRound(rounds[0], code) : null;
   if (current) {
-    const totals: Record<string, bigint> = {};
-    for (const bet of bets as any[]) {
-      const type = String(bet.selection?.type || '');
-      totals[type] = (totals[type] || 0n) + BigInt(String(bet.amount));
-    }
+    const aggregateRows = await sql.unsafe(\n      'SELECT selection->>\'type\' AS type, COALESCE(sum(bet_amount),0)::text AS amount FROM public.authoritative_game_bets WHERE round_id=$1 GROUP BY selection->>\'type\'',\n      [rounds[0].id],\n    );\n    const totals: Record<string, bigint> = {};\n    for (const row of aggregateRows as any[]) {\n      totals[String(row.type || '')] = BigInt(String(row.amount || 0));\n    }
     if (code === 'dragon_tiger') {
       current.dragonBetAmount = String(totals.dragon || 0n);
       current.tigerBetAmount = String(totals.tiger || 0n);
