@@ -202,6 +202,21 @@ BEGIN
   RETURN v_count;
 END $$;
 
+-- Reconcile the stored reservation to the liabilities of bets that are still
+-- pending. This repairs stale reservations left by older settlement functions
+-- without changing any token balances or ledger entries.
+UPDATE public.wallets AS pool
+SET reserved_balance = COALESCE((
+      SELECT SUM(CEIL(b.bet_amount::numeric * COALESCE(b.auto_cashout, 50))::bigint)
+      FROM public.game_bets AS b
+      JOIN public.game_rounds AS r ON r.id = b.round_id
+      WHERE r.game_code = 'aviator' AND b.status = 'PENDING'
+    ), 0),
+    updated_at = now()
+WHERE pool.id = (
+  SELECT g.pool_wallet_id FROM public.games AS g WHERE g.code = 'aviator' LIMIT 1
+);
+
 REVOKE ALL ON FUNCTION public.place_crash_bet_atomic(uuid,uuid,bigint,text,numeric) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.cashout_crash_bet_atomic(uuid,uuid,text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.settle_crash_round_atomic(uuid) FROM PUBLIC, anon, authenticated;
