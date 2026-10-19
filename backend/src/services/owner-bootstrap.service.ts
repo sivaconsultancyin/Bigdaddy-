@@ -11,7 +11,7 @@ export async function bootstrapOwnerFromEnvironment(): Promise<void> {
     return;
   }
 
-  // A new production database must never become "ready" with no way to administer it.
+  // A new production database must never become ready without an administrator.
   const username = process.env.OWNER_BOOTSTRAP_USERNAME?.trim();
   const email = process.env.OWNER_BOOTSTRAP_EMAIL?.trim().toLowerCase();
   const password = process.env.OWNER_BOOTSTRAP_PASSWORD;
@@ -23,8 +23,9 @@ export async function bootstrapOwnerFromEnvironment(): Promise<void> {
   }
 
   await sql.begin(async (tx) => {
-    // Re-check inside the transaction to reduce duplicate bootstrap attempts.
-    const ownerRows = await tx.unsafe("SELECT u.id FROM public.users u JOIN public.role_assignments r ON r.user_id=u.id WHERE r.role='OWNER' LIMIT 1 FOR UPDATE OF u");
+    // Advisory transaction lock serializes first-owner creation across service instances.
+    await tx.unsafe("SELECT pg_advisory_xact_lock(hashtext('bigdaddy-owner-bootstrap'))");
+    const ownerRows = await tx.unsafe("SELECT u.id FROM public.users u JOIN public.role_assignments r ON r.user_id=u.id WHERE r.role='OWNER' LIMIT 1");
     if (ownerRows[0]) return;
 
     const duplicate = await tx.unsafe('SELECT id FROM public.users WHERE lower(username)=lower($1) OR lower(email)=lower($2) LIMIT 1', [username, email]);
