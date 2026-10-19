@@ -13,6 +13,8 @@ import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-boot
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+let productionServicesStarted = false;
+
 async function startServer() {
   // Connect using a backend-only secret. The frontend must never receive DATABASE_URL.
   if (process.env.DATABASE_URL?.trim()) {
@@ -22,6 +24,7 @@ async function startServer() {
       if (config.isProduction) {
         await bootstrapOwnerFromEnvironment();
         startProductionCrashEngine();
+        productionServicesStarted = true;
       }
     } catch (error) {
       // In production, keep health/readiness endpoints online when the database
@@ -109,7 +112,6 @@ async function startServer() {
   });
 
   // Production-only API surface: never mount the legacy in-memory routers.
-  // When configuration/database is unavailable, all business APIs fail closed.
   if (!config.isProduction || !config.productionValid) {
     app.use('/api', (req, res, next) => {
       if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
@@ -119,12 +121,13 @@ async function startServer() {
         missingVariables: config.productionMissingVars,
       });
     });
-  } else if (!isDatabaseConnected()) {
+  } else {
+    // Check readiness per request so the API can recover if PostgreSQL reconnects.
     app.use('/api', (req, res, next) => {
       if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
-      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+      if (!isDatabaseConnected()) return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+      next();
     });
-  } else {
     app.use('/api', productionRouter);
     app.use('/api', productionRequestsRouter);
     // Unsupported games remain unavailable until persistent settlement is implemented.
@@ -146,6 +149,25 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+  }
+
+  // Retry the initial database connection instead of leaving production APIs permanently closed.
+  if (config.isProduction && config.productionValid && process.env.DATABASE_URL?.trim()) {
+    setInterval(async () => {
+      if (isDatabaseConnected()) return;
+      try {
+        await connectDatabase();
+        console.log('Supabase PostgreSQL connection recovered.');
+        if (!productionServicesStarted) {
+          await bootstrapOwnerFromEnvironment();
+          startProductionCrashEngine();
+          productionServicesStarted = true;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('Supabase PostgreSQL reconnect attempt failed:', message);
+      }
+    }, 10000);
   }
 
   const port = config.port;
