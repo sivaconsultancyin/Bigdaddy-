@@ -175,6 +175,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
   const simIntervalRef = useRef<any>(null);
+  const productionResultIdsRef = useRef<Record<string, string>>({});
 
   const connect = () => {
     if (typeof window === 'undefined') return;
@@ -424,7 +425,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
             setLastEvent({ event: 'production:crash_state', data });
           } else if (key === 'roulette') {
-            if (data.round) setRouletteRound(data.round);
+            if (data.round) {
+              setRouletteRound(data.round);
+              if (data.round.status === 'RESULT' && productionResultIdsRef.current.roulette !== data.round.id) {
+                productionResultIdsRef.current.roulette = data.round.id;
+                setLastEvent({ event: 'roulette:round_result', data: {
+                  round: data.round,
+                  winningNumber: data.round.winningNumber,
+                  color: data.round.color,
+                  history: data.history,
+                } });
+              }
+            }
             if (Array.isArray(data.history)) {
               setRouletteHistory(data.history.map((item: any) => ({
                 number: Number(item.result?.number ?? item.number),
