@@ -1012,12 +1012,12 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
               </p>
               <div className="p-2.5 rounded-lg bg-zinc-950 font-mono text-[11px] text-zinc-400 space-y-1 border border-zinc-800">
                 <div>Current Round: #{rouletteRound.roundNumber}</div>
-                <div>Algorithm: crypto.randomInt(0, 37)</div>
+                <div>Outcome: server-seeded result persisted in Supabase</div>
                 <div>Pocket Range: 0 to 36 (European 37-pocket)</div>
                 <div>House Edge: 2.70% (Single Zero)</div>
               </div>
               <p className="text-[11px] text-zinc-400">
-                All connected players receive the exact identical round phase, spin timing, and outcome simultaneously via WebSockets.
+                All players receive the same persisted round phase and winning pocket from the backend; wallet settlement is server-owned.
               </p>
             </div>
             <button
