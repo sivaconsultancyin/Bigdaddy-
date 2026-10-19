@@ -94,7 +94,7 @@ productionRouter.get('/auth/users', requireDatabaseUser, async (req: AuthReq, re
   const actor = req.authUser!;
   if (actor.role === UserRole.PLAYER) return res.status(403).json({ error: 'PLAYERS_CANNOT_LIST_USERS' });
   const sql = getDatabaseClient();
-  const rows = await sql.unsafe('WITH RECURSIVE descendants AS (SELECT u.id,u.username,u.email,u.parent_id,u.is_active,u.created_at,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.parent_id=$1 UNION ALL SELECT c.id,c.username,c.email,c.parent_id,c.is_active,c.created_at,cr.role FROM public.users c JOIN public.role_assignments cr ON cr.user_id=c.id JOIN descendants d ON c.parent_id=d.id) SELECT d.id,d.username,d.email,d.parent_id AS "parentId",d.role,d.is_active AS "isActive",w.id AS "walletId",w.balance::text AS "walletBalance" FROM descendants d LEFT JOIN public.wallets w ON w.user_id=d.id ORDER BY d.created_at DESC', [actor.id]);
+  const rows = await sql.unsafe('WITH RECURSIVE descendants AS (SELECT u.id,u.username,u.email,u.parent_id,u.is_active,u.created_at,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.parent_id=$1 UNION ALL SELECT c.id,c.username,c.email,c.parent_id,c.is_active,c.created_at,cr.role FROM public.users c JOIN public.role_assignments cr ON cr.user_id=c.id JOIN descendants d ON c.parent_id=d.id) SELECT d.id,d.username,d.email,d.parent_id AS "parentId",d.role,d.is_active AS "isActive",rc.code AS "referralCode",w.id AS "walletId",w.balance::text AS "walletBalance" FROM descendants d LEFT JOIN public.wallets w ON w.user_id=d.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=d.id AND rc.is_active=true ORDER BY d.created_at DESC', [actor.id]);
   return res.json({ users: rows });
 });
 
@@ -117,6 +117,11 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
       await tx.unsafe('INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,$2,$3)', [created.id, role, actor.id]);
       await tx.unsafe('INSERT INTO public.wallets(user_id,wallet_type,balance) VALUES($1,$2,0)', [created.id, walletType]);
       await tx.unsafe('INSERT INTO public.user_profiles(user_id,display_name) VALUES($1,$2)', [created.id, username]);
+      if (role === UserRole.PLAYER) {
+        const referralCode = 'BD' + randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase();
+        await tx.unsafe('INSERT INTO public.referral_codes(code,owner_user_id,admin_id,is_active) VALUES($1,$2,$3,true)', [referralCode, created.id, actor.id]);
+        (created as any).referralCode = referralCode;
+      }
       const amount = BigInt(initialTokens || '0');
       if (amount > 0n) {
         const source = actor.role === UserRole.OWNER
@@ -130,7 +135,7 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_CREATED','USER',$2,$3::jsonb)", [actor.id, created.id, JSON.stringify({ role, initialTokens: amount.toString() })]);
       return created;
     });
-    return res.status(201).json({ user: safeUser(user as unknown as UserRow) });
+    return res.status(201).json({ user: { ...safeUser(user as unknown as UserRow), referralCode: (user as any).referralCode || null } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'USER_CREATION_FAILED';
     if (message.includes('DUPLICATE_ACCOUNT') || message.includes('unique')) return res.status(409).json({ error: 'USERNAME_OR_EMAIL_ALREADY_REGISTERED' });
