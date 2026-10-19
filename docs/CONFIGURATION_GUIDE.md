@@ -1,37 +1,21 @@
-# BigDaddy Casino — Configuration & Production Deployment Guide
+# BigDaddy Casino — Production Configuration & Deployment Guide
 
-## 1. Dual-Mode Architecture Overview
+## 1. Production-only architecture
 
-BigDaddy has a simulated development/preview mode and a production mode backed by PostgreSQL. Production mode mounts database-backed authentication, wallet/request, and Crash/Aviator routes only when required configuration is valid and the database connects. Unsupported games and production WebSocket streams remain disabled. Treat production settlement as not fully verified until the migrations and end-to-end database tests described below have passed.
+The server defaults to production mode. The frontend has no in-memory API fallback or demo auto-login. The backend exposes only PostgreSQL-backed production routes; when configuration or the database is unavailable, business APIs fail closed. Legacy in-memory game engines and simulated WebSocket streams are not mounted by the production server.
 
-| Capability | Development & Preview Mode (`APP_MODE=development`) | Production Mode (`APP_MODE=production`) |
-|---|---|---|
-| **Environment Variables** | **Zero required** | **Mandatory validation** |
-| **Database** | Isolated in-memory preview store | PostgreSQL-backed routes; schema/migration readiness must be checked separately |
-| **Token Balances & Wallets** | Simulated demo tokens (clearly labeled) | Database-backed operations with atomic ledger functions |
-| **Game Outcomes (Aviator/Crash)** | In-memory preview simulator | Persistent Crash settlement routes; unsupported games and WebSockets remain disabled |
-| **Missing Secrets Behavior** | Runs out of the box with safe defaults | **Fails safely** with `ProductionConfigError` |
-| **Real Money Risk** | None (Non-real money preview) | Not certified for real-money use; migration and end-to-end verification required |
+Production currently supports the persistent authentication, wallet/request, and Crash/Aviator paths implemented in the production routers. Other games remain unavailable until their rounds, bets, settlements, history, and restart recovery are persisted and verified in Supabase PostgreSQL.
 
----
+## 2. Production readiness requirements
 
-## 2. Development & Preview Mode (Default)
+- Set `APP_MODE=production` and `NODE_ENV=production`.
+- Configure a valid Supabase PostgreSQL `DATABASE_URL` on the backend only.
+- Set strong, unique `JWT_SECRET` and `SESSION_SECRET` values.
+- Set exact trusted HTTPS origins in `CORS_ORIGINS`; wildcard origins are rejected.
+- Apply and verify pending migrations before enabling financial traffic.
+- Verify wallet-supply invariants and run end-to-end authentication, bet, cashout, loss, and restart-recovery tests.
 
-In Development and Preview mode:
-- **No `.env` file or environment variables are required.**
-- The application automatically initializes in-memory system wallets, the 10 Billion token master supply, and 4 hierarchical demo accounts (`owner`, `superadmin_alpha`, `admin_bravo`, `player_charlie`).
-- The frontend renders the complete UI, games lobby, Aviator flight canvas, and administrative dashboards.
-- All balances, bets, token requests, and settlements are explicitly labeled with `[SIMULATED]` / `[DEMO]` badges.
-
-### Running in Preview Mode:
-```bash
-npm run dev
-```
-Open `http://localhost:3000` to preview the live application immediately.
-
----
-
-## 3. Transitioning to Production Mode
+## 3. Configuring Production Mode
 
 Production mode uses separate PostgreSQL-backed routes rather than the in-memory preview StorageEngine. The connection module verifies database connectivity; the route handlers use the public schema and atomic SQL functions for supported operations. Do not launch live financial traffic until the migration history is aligned, the pending SQL fixes are applied and verified, and end-to-end wallet/Crash settlement tests pass.
 

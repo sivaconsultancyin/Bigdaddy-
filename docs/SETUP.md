@@ -1,46 +1,34 @@
-# BigDaddy Casino — Local Development & Deployment Setup
+# BigDaddy Casino — Production Setup
 
-## 1. Quick Start (Development & Preview Mode)
-BigDaddy Casino runs out of the box in **Development & Preview Mode** with **zero required environment variables or database setup**:
+## Production-only runtime
+
+The application no longer auto-logs into demo accounts and the frontend does not fabricate users, wallets, balances, requests, or game history when the backend is unavailable. Business APIs require a valid production configuration and a reachable Supabase PostgreSQL database; otherwise they return an error instead of simulated data.
+
+## Configure the backend
+
+1. Copy `.env.example` to `.env` for local configuration, or set the same variables in your hosting provider.
+2. Set `APP_MODE=production` and `NODE_ENV=production`.
+3. Set `DATABASE_URL` to the PostgreSQL connection URI from Supabase Dashboard → Connect. Keep it server-side; never put it in a `VITE_` variable.
+4. Generate unique `JWT_SECRET` and `SESSION_SECRET` values and configure the exact HTTPS origin in `CORS_ORIGINS`.
+5. Configure `OWNER_BOOTSTRAP_USERNAME`, `OWNER_BOOTSTRAP_EMAIL`, and `OWNER_BOOTSTRAP_PASSWORD` for the initial owner if needed.
+6. Apply and verify the pending migrations through the approved Supabase migration workflow before enabling financial traffic.
+
+## Build and verify
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Start full-stack dev server (Express + Vite + WebSockets on port 3000)
-npm run dev
-```
-
-Visit `http://localhost:3000` to interact with the complete live casino UI, Aviator flight canvas, and administrative dashboards.
-
-In this mode:
-- An isolated in-memory authoritative store handles the 10 Billion token master supply.
-- All balances, bets, and settlements are simulated and clearly labeled as `[SIMULATED]`.
-- No real-money transactions, external PostgreSQL database, or Supabase credentials are required.
-
----
-
-## 2. Default Seed Accounts for Testing
-
-Use the **1-Click Role Inspector** at the top of the application to test any role instantly, or sign in using:
-
-| Role | Username | Password | Notes |
-|---|---|---|---|
-| **OWNER** | `owner` | `Owner@1234` | Master Treasury, Audit, Game Pools |
-| **SUPER_ADMIN** | `superadmin_alpha` | `SuperAdmin@1234` | Subordinate to Owner |
-| **ADMIN** | `admin_bravo` | `Admin@1234` | Subordinate to Super Admin |
-| **PLAYER** | `player_charlie` | `Player@1234` | Referral Code: `BIGDADDY777` |
-
----
-
-## 3. Automated Invariant & Security Tests
-Run the automated test suite verifying all 12 core invariants:
-```bash
+npm run lint
 npm test
+npm run build
 ```
 
----
+`npm run dev` may start the Vite development UI, but it does not enable a simulated backend. Without production credentials and a connected database, business APIs remain closed.
 
-## 4. Production Mode Deployment
-For full production deployment instructions, environment variable validation, and database migrations, see:
-👉 [docs/CONFIGURATION_GUIDE.md](docs/CONFIGURATION_GUIDE.md)
+## Production scope and safety
+
+- Authentication, wallet, ledger, user management, and supported Crash/Aviator settlement use backend PostgreSQL operations.
+- Other game routes remain unavailable until persistent settlement and recovery have been implemented and tested for each game.
+- The old in-memory storage/game modules remain in the repository for legacy/test code but are not mounted by the production server.
+- A new Supabase project is not yet reproducible from `supabase/migrations` alone because the initial baseline schema still lives in `database/migrations/002_supabase_schema.sql`.
+
+Never use demo credentials or simulated balances for a production deployment.

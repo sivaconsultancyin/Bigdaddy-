@@ -4,18 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { config, getPublicConfigInfo } from './backend/src/config';
-import { authRouter } from './backend/src/routes/auth.routes';
-import { walletRouter } from './backend/src/routes/wallet.routes';
-import { tokenRequestRouter } from './backend/src/routes/tokenRequest.routes';
-import { gameRouter } from './backend/src/routes/game.routes';
-import { auditRouter } from './backend/src/routes/audit.routes';
-import { aviatorRouter } from './backend/src/games/aviator/aviator.routes';
-import { rouletteRouter } from './backend/src/games/roulette/roulette.routes';
-import { teenPattiRouter } from './backend/src/games/teen-patti/teen-patti.routes';
-import { diceRouter } from './backend/src/games/dice/dice.routes';
-import { dragonTigerRouter } from './backend/src/games/dragon-tiger/dragon-tiger.routes';
-import { andarBaharRouter } from './backend/src/games/andar-bahar/andar-bahar.routes';
-import { setupWebSocketServer } from './backend/src/websocket/wsServer';
 import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres';
 import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
@@ -24,6 +12,8 @@ import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-boot
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let productionServicesStarted = false;
 
 async function startServer() {
   // Connect using a backend-only secret. The frontend must never receive DATABASE_URL.
@@ -34,6 +24,7 @@ async function startServer() {
       if (config.isProduction) {
         await bootstrapOwnerFromEnvironment();
         startProductionCrashEngine();
+        productionServicesStarted = true;
       }
     } catch (error) {
       // In production, keep health/readiness endpoints online when the database
@@ -107,7 +98,7 @@ async function startServer() {
 
   // Readiness remains false until durable storage and game settlement are implemented.
   app.get('/api/ready', (_req, res) => {
-    const ready = !config.isProduction || (config.productionValid && isDatabaseConnected());
+    const ready = config.isProduction && config.productionValid && isDatabaseConnected();
     res.status(ready ? 200 : 503).json({
       ready,
       reason: ready ? null : 'PRODUCTION_CONFIGURATION_OR_DATABASE_NOT_READY',
@@ -120,51 +111,31 @@ async function startServer() {
     res.json(getPublicConfigInfo());
   });
 
-  // Fail closed in production: no mock/in-memory financial or game operations.
-  if (config.isProduction && !config.productionValid) {
-    console.error('Production configuration invalid:', config.productionMissingVars.join(', '));
+  // Production-only API surface: never mount the legacy in-memory routers.
+  if (!config.isProduction || !config.productionValid) {
     app.use('/api', (req, res, next) => {
       if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
       return res.status(503).json({
         error: 'PRODUCTION_CONFIGURATION_ERROR',
-        message: 'Production configuration is incomplete. Financial and game APIs remain disabled.',
+        message: 'Production mode with valid Supabase PostgreSQL configuration is required.',
         missingVariables: config.productionMissingVars,
       });
     });
-  } else if (config.isProduction) {
-    if (!isDatabaseConnected()) {
-      app.use('/api', (req, res, next) => {
-        if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
-        return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
-      });
-    } else {
-      // These production routes use PostgreSQL; the in-memory demo routers are never mounted here.
-      app.use('/api', productionRouter);
-      app.use('/api', productionRequestsRouter);
-      // Keep unsupported games closed; only Crash has persistent settlement.
-      app.use('/api/games', (_req, res) => res.status(503).json({ error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION' }));
-      app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
-    }
   } else {
-    app.use('/api/auth', authRouter);
-    app.use('/api/wallet', walletRouter);
-    app.use('/api/requests', tokenRequestRouter);
-    app.use('/api/games', gameRouter);
-    app.use('/api/audit', auditRouter);
-    app.use('/api/games/aviator', aviatorRouter);
-    app.use('/api/games/roulette', rouletteRouter);
-    app.use('/api/games/teen-patti', teenPattiRouter);
-    app.use('/api/games/dice', diceRouter);
-    app.use('/api/games/dragon-tiger', dragonTigerRouter);
-    app.use('/api/games/andar-bahar', andarBaharRouter);
+    // Check readiness per request so the API can recover if PostgreSQL reconnects.
+    app.use('/api', (req, res, next) => {
+      if (req.path === '/health' || req.path === '/ready' || req.path === '/config') return next();
+      if (!isDatabaseConnected()) return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+      next();
+    });
+    app.use('/api', productionRouter);
+    app.use('/api', productionRequestsRouter);
+    // Unsupported games remain unavailable until persistent settlement is implemented.
+    app.use('/api/games', (_req, res) => res.status(503).json({ error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION' }));
+    app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
   }
 
   const server = http.createServer(app);
-
-  // WebSocket game streams are simulated and must not be exposed in production.
-  if (!config.isProduction) {
-    setupWebSocketServer(server);
-  }
 
   // Mount Vite middleware for dev or serve static dist in production
   if (process.env.NODE_ENV === 'production' && !process.env.DEV_MODE && !config.isDevelopmentOrPreview) {
@@ -180,16 +151,31 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
+  // Retry the initial database connection instead of leaving production APIs permanently closed.
+  if (config.isProduction && config.productionValid && process.env.DATABASE_URL?.trim()) {
+    setInterval(async () => {
+      try {
+        if (!isDatabaseConnected()) {
+          await connectDatabase();
+          console.log('Supabase PostgreSQL connection recovered.');
+        }
+        if (isDatabaseConnected() && !productionServicesStarted) {
+          await bootstrapOwnerFromEnvironment();
+          startProductionCrashEngine();
+          productionServicesStarted = true;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('Supabase PostgreSQL reconnect/service initialization attempt failed:', message);
+      }
+    }, 10000);
+  }
+
   const port = config.port;
   server.listen(port, '0.0.0.0', () => {
     console.log(`🎰 BigDaddy Casino authoritative server listening on http://0.0.0.0:${port}`);
     console.log(`📌 Operational Mode: ${config.mode.toUpperCase()}`);
-    if (config.isDevelopmentOrPreview) {
-      console.log(`💡 Mode Info: Development & Preview mode active.`);
-      console.log(`   - Zero external credentials required.`);
-      console.log(`   - All balances, bets, and token transfers are SIMULATED in-memory.`);
-    }
-    console.log(`⚡ WebSocket available at ws://0.0.0.0:${port}/ws`);
+    console.log('Business APIs require production mode and persistent Supabase PostgreSQL storage.');
   });
 }
 

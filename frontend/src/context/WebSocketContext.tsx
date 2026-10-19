@@ -83,25 +83,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     status: 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED';
     startTime?: number;
     crashMultiplier?: number;
-  }>({
-    id: 'round-aviator-init',
-    roundNumber: 101,
-    status: 'WAITING',
-    startTime: Date.now() + 5000,
-  });
-  const [recentHistory, setRecentHistory] = useState<Array<{ roundNumber: number; crashMultiplier: number }>>([
-    { roundNumber: 97, crashMultiplier: 1.35 },
-    { roundNumber: 98, crashMultiplier: 5.62 },
-    { roundNumber: 99, crashMultiplier: 1.12 },
-    { roundNumber: 100, crashMultiplier: 3.48 },
-  ]);
+  }>({ status: 'WAITING' });
+  const [recentHistory, setRecentHistory] = useState<Array<{ roundNumber: number; crashMultiplier: number }>>([]);
 
   // European Roulette initial state
   const [rouletteRound, setRouletteRound] = useState<RouletteLiveState>({
-    id: 'round-roulette-421',
-    roundNumber: 421,
+    id: '',
+    roundNumber: 0,
     status: 'BETTING',
-    bettingEndsAt: Date.now() + 14000,
+    bettingEndsAt: 0,
     spinEndsAt: null,
     winningNumber: null,
     color: null,
@@ -109,26 +99,17 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     totalBetAmount: '0',
   });
 
-  const [rouletteHistory, setRouletteHistory] = useState<Array<{ number: number; color: 'red' | 'black' | 'green'; timestamp?: string }>>([
-    { number: 17, color: 'black' },
-    { number: 32, color: 'red' },
-    { number: 0, color: 'green' },
-    { number: 7, color: 'red' },
-    { number: 23, color: 'red' },
-    { number: 14, color: 'red' },
-    { number: 2, color: 'black' },
-    { number: 35, color: 'black' },
-  ]);
+  const [rouletteHistory, setRouletteHistory] = useState<Array<{ number: number; color: 'red' | 'black' | 'green'; timestamp?: string }>>([]);
 
   const [rouletteLiveBets, setRouletteLiveBets] = useState<RouletteBetFeedItem[]>([]);
 
   // Andar Bahar initial synchronized multiplayer state
   const [andarBaharRound, setAndarBaharRound] = useState<AndarBaharRound>({
-    id: 'round-ab-init',
-    roundNumber: 301,
+    id: '',
+    roundNumber: 0,
     status: AndarBaharRoundStatus.BETTING,
-    jokerCard: { suit: 'H', rank: 8 },
-    bettingEndsAt: Date.now() + 13000,
+    jokerCard: null,
+    bettingEndsAt: 0,
     dealCards: [],
     winningSide: null,
     winningCard: null,
@@ -140,41 +121,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     baharBetAmount: '0',
   });
 
-  const [andarBaharHistory, setAndarBaharHistory] = useState<AndarBaharHistoryItem[]>([
-    {
-      roundNumber: 298,
-      jokerCard: { suit: 'H', rank: 8 },
-      winningSide: 'andar',
-      winningCard: { suit: 'S', rank: 8 },
-      totalCards: 5,
-      timestamp: new Date().toISOString(),
-    },
-    {
-      roundNumber: 299,
-      jokerCard: { suit: 'S', rank: 13 },
-      winningSide: 'bahar',
-      winningCard: { suit: 'C', rank: 13 },
-      totalCards: 8,
-      timestamp: new Date().toISOString(),
-    },
-    {
-      roundNumber: 300,
-      jokerCard: { suit: 'D', rank: 2 },
-      winningSide: 'andar',
-      winningCard: { suit: 'H', rank: 2 },
-      totalCards: 3,
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  const [andarBaharHistory, setAndarBaharHistory] = useState<AndarBaharHistoryItem[]>([]);
 
   const [andarBaharLiveBets, setAndarBaharLiveBets] = useState<AndarBaharRoundBet[]>([]);
 
   // Dragon Tiger initial synchronized multiplayer state
   const [dragonTigerRound, setDragonTigerRound] = useState<DragonTigerRound>({
-    id: 'round-dt-init',
-    roundNumber: 501,
+    id: '',
+    roundNumber: 0,
     status: DragonTigerRoundStatus.BETTING,
-    bettingEndsAt: Date.now() + 12000,
+    bettingEndsAt: 0,
     dragonCard: null,
     tigerCard: null,
     winner: null,
@@ -185,49 +141,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     tieBetAmount: '0',
   });
 
-  const [dragonTigerHistory, setDragonTigerHistory] = useState<DragonTigerHistoryItem[]>([
-    {
-      roundNumber: 498,
-      dragonCard: { rank: 13, suit: 'H' },
-      tigerCard: { rank: 9, suit: 'S' },
-      winner: 'dragon',
-      timestamp: new Date().toISOString(),
-    },
-    {
-      roundNumber: 499,
-      dragonCard: { rank: 4, suit: 'D' },
-      tigerCard: { rank: 11, suit: 'C' },
-      winner: 'tiger',
-      timestamp: new Date().toISOString(),
-    },
-    {
-      roundNumber: 500,
-      dragonCard: { rank: 8, suit: 'S' },
-      tigerCard: { rank: 8, suit: 'H' },
-      winner: 'tie',
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  const [dragonTigerHistory, setDragonTigerHistory] = useState<DragonTigerHistoryItem[]>([]);
 
   const [dragonTigerLiveBets, setDragonTigerLiveBets] = useState<DragonTigerRoundBet[]>([]);
 
   // Lucky 10 Dice initial synchronized multiplayer state
   const [diceRound, setDiceRound] = useState<DiceRound>({
-    id: 'round-dice-init',
-    roundNumber: 601,
+    id: '',
+    roundNumber: 0,
     status: DiceRoundStatus.BETTING,
-    bettingEndsAt: Date.now() + 14000,
+    bettingEndsAt: 0,
     rolledNumber: null,
     totalBetsCount: 0,
     totalBetAmount: '0',
     numberBetsAmount: {},
   });
 
-  const [diceHistory, setDiceHistory] = useState<DiceHistoryItem[]>([
-    { roundNumber: 600, rolledNumber: 4, timestamp: new Date().toISOString() },
-    { roundNumber: 599, rolledNumber: 1, timestamp: new Date().toISOString() },
-    { roundNumber: 598, rolledNumber: 9, timestamp: new Date().toISOString() },
-  ]);
+  const [diceHistory, setDiceHistory] = useState<DiceHistoryItem[]>([]);
 
   const [diceLiveBets, setDiceLiveBets] = useState<DiceRoundBet[]>([]);
   const [lastEvent, setLastEvent] = useState<{ event: string; data: any } | null>(null);
@@ -439,17 +369,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       ws.onclose = () => {
         setIsConnected(false);
         socketRef.current = null;
-        startFallbackSimulation();
         reconnectTimeoutRef.current = setTimeout(connect, 4000);
       };
 
       ws.onerror = () => {
         setIsConnected(false);
-        startFallbackSimulation();
       };
     } catch (e) {
       setIsConnected(false);
-      startFallbackSimulation();
       reconnectTimeoutRef.current = setTimeout(connect, 4000);
     }
   };
@@ -489,42 +416,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     void poll();
     simIntervalRef.current = setInterval(() => { void poll(); }, 500);
-  };
-
-  const startFallbackSimulation = () => {
-    if (import.meta.env.PROD) {
-      setIsSimulatedFallback(false);
-      return;
-    }
-    if (simIntervalRef.current) return;
-    setIsSimulatedFallback(true);
-
-    let currentM = 1.0;
-    let crashTarget = 2.45;
-    let phase: 'WAITING' | 'RUNNING' | 'CRASHED' = 'RUNNING';
-
-    simIntervalRef.current = setInterval(() => {
-      if (phase === 'RUNNING') {
-        currentM = Math.round((currentM + 0.04) * 100) / 100;
-        setMultiplier(currentM);
-        if (currentM >= crashTarget) {
-          phase = 'CRASHED';
-          setRoundState((prev) => ({ ...prev, status: 'CRASHED', crashMultiplier: crashTarget }));
-          setRecentHistory((prev) => [...prev.slice(-9), { roundNumber: (prev[prev.length - 1]?.roundNumber || 100) + 1, crashMultiplier: crashTarget }]);
-          setTimeout(() => {
-            phase = 'WAITING';
-            setRoundState((prev) => ({ ...prev, status: 'WAITING', multiplier: 1.0 }));
-            setMultiplier(1.0);
-            setTimeout(() => {
-              phase = 'RUNNING';
-              currentM = 1.0;
-              crashTarget = Math.round((1.5 + Math.random() * 4) * 100) / 100;
-              setRoundState((prev) => ({ ...prev, status: 'RUNNING', multiplier: 1.0 }));
-            }, 3000);
-          }, 3000);
-        }
-      }
-    }, 120);
   };
 
   useEffect(() => {

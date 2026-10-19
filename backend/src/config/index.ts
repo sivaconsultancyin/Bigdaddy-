@@ -10,15 +10,15 @@ export class ProductionConfigError extends Error {
     super(
       `PRODUCTION CONFIGURATION ERROR: Cannot run in Production Mode because mandatory production credentials are missing:\n- ${missingVariables.join(
         '\n- '
-      )}\n\nTo run safely without credentials, set APP_MODE=development or APP_MODE=preview.`
+      )}\n\nConfigure valid Supabase PostgreSQL credentials and set APP_MODE=production.`
     );
     this.name = 'ProductionConfigError';
     this.missingVariables = missingVariables;
   }
 }
 
-// Mode determination: Default to DEVELOPMENT_PREVIEW unless explicitly configured as production
-const rawMode = (process.env.APP_MODE || process.env.NODE_ENV || 'development').toLowerCase();
+// Default to production. Preview mode must never be selected implicitly by NODE_ENV.
+const rawMode = (process.env.APP_MODE || 'production').toLowerCase();
 export const appMode: AppMode =
   rawMode === 'production' ? AppMode.PRODUCTION : AppMode.DEVELOPMENT_PREVIEW;
 
