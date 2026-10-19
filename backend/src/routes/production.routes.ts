@@ -257,20 +257,36 @@ productionRouter.post('/wallet/game-pool', requireDatabaseUser, async (req: Auth
   const actor = req.authUser!;
   if (actor.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
   const amountText = String(req.body?.amount ?? '');
-  if (!/^[1-9][0-9]*$/.test(amountText)) return res.status(400).json({ error: 'POSITIVE_INTEGER_AMOUNT_REQUIRED' });
+  if (!/^[1-9][0-9]*$/.test(amountText) || !Number.isSafeInteger(Number(amountText))) {
+    return res.status(400).json({ error: 'POSITIVE_SAFE_INTEGER_AMOUNT_REQUIRED' });
+  }
+  const suppliedKey = req.headers['idempotency-key'];
+  if (typeof suppliedKey !== 'string' || suppliedKey.trim().length < 8 || suppliedKey.length > 200) {
+    return res.status(400).json({ error: 'IDEMPOTENCY_KEY_REQUIRED' });
+  }
   try {
     const sql = getDatabaseClient();
-    const source = await sql.unsafe("SELECT id FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1");
-    const target = await sql.unsafe("SELECT w.id FROM public.wallets w JOIN public.games g ON g.pool_wallet_id=w.id WHERE g.code='aviator' LIMIT 1");
-    if (!source[0] || !target[0]) return res.status(503).json({ error: 'GAME_POOL_WALLET_MISSING' });
-    const key = String(req.headers['idempotency-key'] || ('POOL_' + randomUUID()));
-    const moved = await sql.unsafe("SELECT public.wallet_transfer_atomic($1,'POOL_ALLOCATION'::public.transaction_type_enum,$2::bigint,$3::uuid,$4::uuid,$5::jsonb) AS id", [key, amountText, source[0].id, target[0].id, JSON.stringify({ allocatedBy: actor.id, game: 'aviator' })]);
-    const balance = await sql.unsafe('SELECT balance::text AS balance FROM public.wallets WHERE id=$1', [target[0].id]);
-    await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'GAME_POOL_ALLOCATION','WALLET',$2,$3::jsonb)", [actor.id, target[0].id, JSON.stringify({ amount: amountText, transactionId: moved[0].id })]);
-    return res.json({ transactionId: moved[0].id, poolBalance: balance[0]?.balance });
+    const result = await sql.begin(async (tx) => {
+      const source = await tx.unsafe("SELECT id FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1 FOR UPDATE");
+      const target = await tx.unsafe("SELECT w.id FROM public.wallets w JOIN public.games g ON g.pool_wallet_id=w.id WHERE g.code='aviator' LIMIT 1 FOR UPDATE OF w");
+      if (!source[0] || !target[0]) throw new Error('GAME_POOL_WALLET_MISSING');
+      const moved = await tx.unsafe(
+        "SELECT public.wallet_transfer_atomic($1,'POOL_ALLOCATION'::public.transaction_type_enum,$2::bigint,$3::uuid,$4::uuid,$5::jsonb) AS id",
+        [suppliedKey.trim(), amountText, source[0].id, target[0].id, JSON.stringify({ allocatedBy: actor.id, game: 'aviator' })]
+      );
+      const balance = await tx.unsafe('SELECT balance::text AS balance FROM public.wallets WHERE id=$1', [target[0].id]);
+      await tx.unsafe(
+        "INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'GAME_POOL_ALLOCATION','WALLET',$2,$3::jsonb)",
+        [actor.id, target[0].id, JSON.stringify({ amount: amountText, transactionId: moved[0].id, idempotencyKey: suppliedKey.trim() })]
+      );
+      return { transactionId: moved[0].id, poolBalance: balance[0]?.balance };
+    });
+    return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'POOL_ALLOCATION_FAILED';
     if (message.includes('INSUFFICIENT_FUNDS')) return res.status(400).json({ error: 'INSUFFICIENT_TREASURY_FUNDS' });
+    if (message.includes('GAME_POOL_WALLET_MISSING')) return res.status(503).json({ error: message });
+    if (message.includes('unique') || message.includes('duplicate')) return res.status(409).json({ error: 'IDEMPOTENCY_KEY_ALREADY_USED' });
     console.error('Game pool allocation failed:', error);
     return res.status(400).json({ error: 'POOL_ALLOCATION_FAILED' });
   }
