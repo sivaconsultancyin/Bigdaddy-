@@ -7,7 +7,6 @@ export const authoritativeGamesRouter = Router();
 type Actor = { id: string; username: string };
 type AuthRequest = Request & { actor?: Actor };
 export type GameCode = 'roulette' | 'dice' | 'dragon_tiger' | 'andar_bahar';
-type Db = ReturnType<typeof getDatabaseClient>;
 
 const GAME_CODES: GameCode[] = ['roulette', 'dice', 'dragon_tiger', 'andar_bahar'];
 const CODE_ALIASES: Record<string, GameCode> = {
@@ -47,11 +46,11 @@ function stableInt(seed: string, label: string, maxExclusive: number): number {
   const hex = createHmac('sha256', seed).update(label).digest('hex').slice(0, 13);
   return Number(BigInt('0x' + hex) % BigInt(maxExclusive));
 }
-function shuffledDeck(seed: string): Array<{ rank: number; suit: string; code: string }> {
+function shuffledDeck(seed: string, deckCount = 1): Array<{ rank: number; suit: string; code: string; deckIndex: number }> {
   const suits = ['S', 'H', 'D', 'C'];
-  const deck = suits.flatMap((suit) => Array.from({ length: 13 }, (_, i) => ({
-    rank: i + 1, suit, code: (['A','2','3','4','5','6','7','8','9','10','J','Q','K'][i] + suit),
-  })));
+  const deck = Array.from({ length: deckCount }, (_, deckIndex) => suits.flatMap((suit) => Array.from({ length: 13 }, (_, i) => ({
+    rank: i + 1, suit, deckIndex, code: (['A','2','3','4','5','6','7','8','9','10','J','Q','K'][i] + suit),
+  })))).flat();
   for (let i = deck.length - 1; i > 0; i--) {
     const j = stableInt(seed, 'deck:' + i, i + 1);
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -73,7 +72,7 @@ export function makeResult(code: GameCode, seed: string): Record<string, any> {
     return { number, rolledNumber: number };
   }
   if (code === 'dragon_tiger') {
-    const deck = shuffledDeck(seed);
+    const deck = shuffledDeck(seed, 8);
     const dragonCard = deck[0];
     const tigerCard = deck[1];
     const winner = dragonCard.rank === tigerCard.rank ? (dragonCard.suit === tigerCard.suit ? 'suited_tie' : 'tie') : dragonCard.rank > tigerCard.rank ? 'dragon' : 'tiger';
