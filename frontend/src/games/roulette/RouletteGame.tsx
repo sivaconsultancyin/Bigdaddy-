@@ -78,25 +78,14 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
   }, [rouletteHistory, lastSettledNumber]);
 
   const handleTestSpin = () => {
-    if (rouletteRound.status === 'SPINNING' || isTestSpinning) return;
-    const randNum = WHEEL_NUMBERS[Math.floor(Math.random() * WHEEL_NUMBERS.length)];
-    setTestSpinNumber(randNum);
-    setIsTestSpinning(true);
-    setMyWinResult(null);
-    setSuccessMessage(`Wheel spin preview activated! Ball rolling to pocket #${randNum}...`);
-    setTimeout(() => setSuccessMessage(null), 3000);
+    setErrorMessage('Preview spins are disabled. The winning number comes only from the authoritative server round.');
+    setTimeout(() => setErrorMessage(null), 3000);
   };
 
   const handleSpinComplete = (landedNum: number) => {
     setLastSettledNumber(landedNum);
 
-    // Record landed number in history so history immediately matches the ball!
-    const color = landedNum === 0 ? 'green' : RED_SET.has(landedNum) ? 'red' : 'black';
-    addRouletteHistoryItem({
-      number: landedNum,
-      color,
-      timestamp: new Date().toISOString(),
-    });
+    // History is populated only from backend-persisted round results.
 
     if (isTestSpinning) {
       setIsTestSpinning(false);
