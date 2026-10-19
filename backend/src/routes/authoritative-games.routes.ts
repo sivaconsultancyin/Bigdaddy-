@@ -273,6 +273,35 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
   }
   try {
     const sql = getDatabaseClient();
+    const replayKeys = rawBets.map((_: any, index: number) => rawBets.length === 1 ? idempotencyBase : idempotencyBase + '_' + index);
+    const existingRows = await sql.unsafe(
+      'SELECT id,user_id,round_id,bet_amount::text AS amount,selection,status,payout_amount::text AS "payoutAmount",idempotency_key FROM public.authoritative_game_bets WHERE idempotency_key = ANY($1::text[])',
+      [replayKeys],
+    );
+    if (existingRows.length > 0) {
+      if (existingRows.length !== rawBets.length) throw new Error('IDEMPOTENCY_KEY_REUSE');
+      const replayBets = [];
+      for (let i = 0; i < rawBets.length; i++) {
+        const existing = existingRows.find((row: any) => row.idempotency_key === replayKeys[i]);
+        const selection = rawBets[i].selection || rawBets[i];
+        if (!existing || existing.user_id !== req.actor!.id || String(existing.amount) !== String(rawBets[i].amount)) {
+          throw new Error('IDEMPOTENCY_KEY_REUSE');
+        }
+        const same = await sql.unsafe(
+          'SELECT selection=$2::jsonb AS same FROM public.authoritative_game_bets WHERE id=$1',
+          [existing.id, JSON.stringify(selection)],
+        );
+        if (!same[0]?.same) throw new Error('IDEMPOTENCY_KEY_REUSE');
+        replayBets.push({ id: existing.id, status: existing.status, amount: existing.amount, payoutAmount: existing.payoutAmount, selection, replay: true });
+      }
+      return res.status(200).json({
+        success: true,
+        betCount: replayBets.length,
+        totalBet: rawBets.reduce((sum: number, bet: any) => sum + Number(bet.amount), 0).toString(),
+        bets: replayBets,
+        ...(await readGameState(code)),
+      });
+    }
     const placed = await sql.begin(async (tx) => {
       const gameRows = await tx.unsafe(
         "SELECT id,pool_wallet_id,min_bet,max_bet FROM public.games WHERE code=$1 AND status='ACTIVE' LIMIT 1", [code],
