@@ -56,3 +56,34 @@ COMMENT ON TABLE public.authoritative_game_rounds IS
   'Durable server-owned round lifecycle/results for Roulette, Dice, Dragon Tiger, and Andar Bahar.';
 COMMENT ON TABLE public.authoritative_game_bets IS
   'Durable server-validated bets and settlement transaction references; no client writes.';
+
+-- Provision zero-balance pool wallets and non-active game catalog entries when absent.
+-- These rows do not mint tokens or activate games; an Owner must fund each pool.
+INSERT INTO public.wallets (wallet_type, game_code, balance, reserved_balance)
+SELECT 'GAME_POOL'::public.wallet_type_enum, v.code, 0, 0
+FROM (VALUES
+  ('roulette'), ('dice'), ('dragon_tiger'), ('andar_bahar')
+) AS v(code)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.wallets w
+  WHERE w.wallet_type = 'GAME_POOL'::public.wallet_type_enum AND w.game_code = v.code
+);
+
+INSERT INTO public.games (code, name, status, pool_wallet_id, min_bet, max_bet, config)
+SELECT v.code, v.name, 'COMING_SOON'::public.game_status_enum, w.id, 10, 100000,
+       jsonb_build_object('runtime', 'authoritative', 'payouts', 'server-defined')
+FROM (VALUES
+  ('roulette', 'European Roulette'),
+  ('dice', 'Lucky 10 Dice'),
+  ('dragon_tiger', 'Dragon Tiger'),
+  ('andar_bahar', 'Andar Bahar')
+) AS v(code, name)
+JOIN public.wallets w
+  ON w.wallet_type = 'GAME_POOL'::public.wallet_type_enum AND w.game_code = v.code
+WHERE NOT EXISTS (SELECT 1 FROM public.games g WHERE g.code = v.code);
+
+INSERT INTO public.game_pools (game_code, wallet_id)
+SELECT g.code, g.pool_wallet_id
+FROM public.games g
+WHERE g.code IN ('roulette','dice','dragon_tiger','andar_bahar')
+  AND NOT EXISTS (SELECT 1 FROM public.game_pools gp WHERE gp.game_code = g.code);
