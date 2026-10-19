@@ -20,6 +20,14 @@ const CODE_ALIASES: Record<string, GameCode> = {
 const BETTING_MS = 15000;
 let engineTimer: NodeJS.Timeout | null = null;
 let engineBusy = false;
+let lastSchemaWarningAt = 0;
+
+async function hasRuntimeSchema(): Promise<boolean> {
+  const rows = await getDatabaseClient().unsafe(
+    "SELECT to_regclass('public.authoritative_game_rounds') AS rounds, to_regclass('public.authoritative_game_bets') AS bets",
+  );
+  return Boolean(rows[0]?.rounds && rows[0]?.bets);
+}
 
 async function auth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -254,6 +262,7 @@ authoritativeGamesRouter.get('/games/:gameCode/state', async (req, res) => {
   const code = codeFromParam(req.params.gameCode);
   if (!code) return res.status(404).json({ error: 'UNKNOWN_GAME' });
   try {
+    if (!(await hasRuntimeSchema())) return res.status(503).json({ error: 'GAME_RUNTIME_MIGRATION_REQUIRED' });
     const data = await readGameState(code);
     if (!data.round) return res.status(503).json({ error: 'GAME_NOT_CONFIGURED', gameCode: code });
     return res.json(data);
@@ -276,6 +285,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
   }
   try {
     const sql = getDatabaseClient();
+    if (!(await hasRuntimeSchema())) return res.status(503).json({ error: 'GAME_RUNTIME_MIGRATION_REQUIRED' });
     const replayKeys = rawBets.map((_: any, index: number) => rawBets.length === 1 ? idempotencyBase : idempotencyBase + '_' + index);
     const existingRows = await sql.unsafe(
       'SELECT id,user_id,round_id,bet_amount::text AS amount,selection,status,payout_amount::text AS "payoutAmount",idempotency_key FROM public.authoritative_game_bets WHERE idempotency_key = ANY($1::text[])',
@@ -437,6 +447,13 @@ async function tick() {
   engineBusy = true;
   try {
     const sql = getDatabaseClient();
+    if (!(await hasRuntimeSchema())) {
+      if (Date.now() - lastSchemaWarningAt > 60000) {
+        console.warn('Authoritative game runtime migration is not applied yet; game engine remains idle.');
+        lastSchemaWarningAt = Date.now();
+      }
+      return;
+    }
     const activeRows = await sql.unsafe(
       "SELECT g.code,g.status FROM public.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM public.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
     );
