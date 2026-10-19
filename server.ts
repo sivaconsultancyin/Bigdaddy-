@@ -20,6 +20,7 @@ import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres'
 import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
 import { startProductionCrashEngine } from './backend/src/games/aviator/production.engine';
+import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +30,10 @@ async function startServer() {
   if (process.env.DATABASE_URL?.trim()) {
     await connectDatabase();
     console.log('✅ Supabase PostgreSQL connectivity check passed.');
-    if (config.isProduction) startProductionCrashEngine();
+    if (config.isProduction) {
+      await bootstrapOwnerFromEnvironment();
+      startProductionCrashEngine();
+    }
   } else if (config.isProduction) {
     // Keep liveness/readiness endpoints available; config validation below keeps
     // every financial/game API closed until required secrets are configured.
