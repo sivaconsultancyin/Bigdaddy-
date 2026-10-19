@@ -52,8 +52,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ApiClient.clearToken();
       setUser(null);
       setWallet(null);
-      // Auto-relogin in preview/dev mode to restore demo player session
-      loginAsRole(UserRole.PLAYER).catch(() => setLoading(false));
     } finally {
       setLoading(false);
     }
@@ -80,7 +78,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ApiClient.clearToken();
         setUser(null);
         setWallet(null);
-        loginAsRole(UserRole.PLAYER).catch(() => {});
         return;
       }
       console.warn('Could not refresh wallet:', msg);
@@ -88,15 +85,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    loadConfig();
-    const token = ApiClient.getToken();
-    if (token) {
-      refreshUser();
-    } else {
-      // In Development/Preview Mode, automatically sign in to demo Player account
-      // for an effortless, instant UI preview experience with simulated tokens!
-      loginAsRole(UserRole.PLAYER).catch(() => setLoading(false));
-    }
+    const initialize = async () => {
+      let cfg: AppConfigInfo | null = null;
+      try {
+        cfg = await ApiClient.getConfig();
+        setConfigInfo(cfg);
+      } catch (err: any) {
+        if (err.message?.includes('PRODUCTION_CONFIGURATION_ERROR')) setConfigError(err.message);
+      }
+      const token = ApiClient.getToken();
+      if (token) {
+        await refreshUser();
+      } else if (cfg?.mode === AppMode.DEVELOPMENT_PREVIEW) {
+        // Demo auto-login is allowed only in preview mode; production always requires real credentials.
+        loginAsRole(UserRole.PLAYER).catch(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    };
+    void initialize();
   }, []);
 
   const login = async (credentials: { username: string; password: string }) => {
