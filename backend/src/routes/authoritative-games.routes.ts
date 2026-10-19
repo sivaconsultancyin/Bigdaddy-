@@ -180,7 +180,7 @@ function publicRound(row: any, code: GameCode) {
     } : {}),
     ...(code === 'andar_bahar' ? {
       jokerCard: result?.jokerCard ?? null, dealCards: result?.dealCards ?? [],
-      winningSide: result?.winner ?? null, winningCard: result?.dealCards?.at(-1)?.card ?? null,
+      winningSide: result?.winner ?? null, winningCard: result?.dealCards?.[Math.max(0, (result?.dealCards?.length || 1) - 1)]?.card ?? null,
       totalCardsDealt: result?.totalCardsDealt ?? 0, firstSide: 'bahar',
     } : {}),
     totalBetsCount: Number(state.totalBetsCount || 0),
@@ -229,7 +229,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
   const rawBets = Array.isArray(req.body?.bets) ? req.body.bets : [req.body];
   if (!rawBets.length || rawBets.length > 20) return res.status(400).json({ error: 'INVALID_BET_COUNT' });
   const idempotencyBase = String(req.header('Idempotency-Key') || req.body?.idempotencyKey || '').trim();
-  if (idempotencyBase.length < 8) return res.status(400).json({ error: 'IDEMPOTENCY_KEY_REQUIRED' });
+  if (idempotencyBase.length < 8 || idempotencyBase.length > 120) return res.status(400).json({ error: 'IDEMPOTENCY_KEY_REQUIRED' });
   for (const bet of rawBets) {
     const amount = Number(bet?.amount);
     if (!Number.isSafeInteger(amount) || amount <= 0 || !validateSelection(code, bet?.selection || bet)) {
@@ -260,11 +260,11 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
         const selection = input.selection || input;
         const liability = amount * BigInt(maxLiabilityMultiplier(code, selection));
         const key = rawBets.length === 1 ? idempotencyBase : idempotencyBase + '_' + i;
-        const prior = await tx.unsafe('SELECT id,user_id,round_id,bet_amount,selection FROM public.authoritative_game_bets WHERE idempotency_key=$1', [key]);
+        const prior = await tx.unsafe('SELECT id,user_id,round_id,bet_amount,status,(selection=$2::jsonb) AS same_selection FROM public.authoritative_game_bets WHERE idempotency_key=$1', [key, JSON.stringify(selection)]);
         if (prior[0]) {
           if (prior[0].user_id !== req.actor!.id || prior[0].round_id !== round.id ||
               String(prior[0].bet_amount) !== String(amount) ||
-              JSON.stringify(prior[0].selection) !== JSON.stringify(selection)) throw new Error('IDEMPOTENCY_KEY_REUSE');
+              !prior[0].same_selection) throw new Error('IDEMPOTENCY_KEY_REUSE');
           result.push({ id: prior[0].id, status: prior[0].status || 'PENDING', replay: true });
           continue;
         }
