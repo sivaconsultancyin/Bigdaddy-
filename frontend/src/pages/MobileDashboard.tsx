@@ -508,12 +508,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
             </div>
 
             <button
-              disabled={!crashGameActive}
-              onClick={() => crashGameActive && setActiveGameCode('aviator')}
-              className="w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setActiveGameCode('aviator')}
+              className="w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
             >
-              <span>{crashGameActive ? 'Play Crash Now' : 'Crash Is Coming Soon'}</span>
-              {crashGameActive && <ArrowRight className="w-3.5 h-3.5" />}
+              <span>{crashGameActive ? 'Play Crash Now' : 'Open Crash Preview'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
