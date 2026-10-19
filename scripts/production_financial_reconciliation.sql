@@ -12,8 +12,9 @@ SELECT
   ((SELECT COALESCE(SUM(balance), 0) FROM public.wallets)
     = (SELECT max_supply FROM public.token_supply WHERE id = 1)) AS wallet_sum_matches_supply;
 
--- 2) Find wallet transactions whose ledger entries do not balance.
--- Transactions without both a debit and a credit are surfaced as mismatches.
+-- 2) Find wallet transactions whose ledger entries do not match their accounting shape.
+-- Genesis SYSTEM_INITIALIZATION intentionally has one CREDIT entry and no source wallet.
+-- Ordinary transfers must have exactly one DEBIT and one CREDIT for the transaction amount.
 SELECT
   wt.id AS transaction_id,
   wt.idempotency_key,
@@ -25,9 +26,17 @@ SELECT
 FROM public.wallet_transactions wt
 LEFT JOIN public.ledger_entries le ON le.transaction_id = wt.id
 GROUP BY wt.id, wt.idempotency_key, wt.type, wt.amount
-HAVING COUNT(le.id) <> 2
-    OR COALESCE(SUM(le.amount) FILTER (WHERE le.direction = 'DEBIT'), 0)
-       <> COALESCE(SUM(le.amount) FILTER (WHERE le.direction = 'CREDIT'), 0)
+HAVING CASE
+  WHEN wt.type = 'SYSTEM_INITIALIZATION'
+       AND wt.source_wallet_id IS NULL
+       AND wt.target_wallet_id IS NOT NULL
+    THEN COUNT(le.id) <> 1
+      OR COALESCE(SUM(le.amount) FILTER (WHERE le.direction = 'DEBIT'), 0) <> 0
+      OR COALESCE(SUM(le.amount) FILTER (WHERE le.direction = 'CREDIT'), 0) <> wt.amount
+  ELSE COUNT(le.id) <> 2
+      OR COALESCE(SUM(le.amount) FILTER (WHERE le.direction = 'DEBIT'), 0) <> wt.amount
+      OR COALESCE(SUM(le.amount) FILTER (WHERE le.direction = 'CREDIT'), 0) <> wt.amount
+END
 ORDER BY wt.created_at, wt.id;
 
 -- 3) Compare each game pool's reserved balance with liabilities implied by PENDING bets.
