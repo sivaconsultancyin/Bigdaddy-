@@ -29,7 +29,7 @@ Do not manually set a game to ACTIVE with a zero-balance or shared pool.
 
 - **Roulette:** European wheel 0–36. Straight 36x gross; split 18x; street 12x; corner 9x; six-line 6x; dozen/column 3x; red/black/odd/even/low/high 2x; green 36x. The zero pocket loses even-money and outside bets.
 - **Dice:** server result 1–10. Exact number 10x gross; odd/even/small/big/over/under 2x gross.
-- **Dragon Tiger:** cards are server-dealt from a deterministic shuffled multi-deck shoe. Dragon/Tiger 2x gross; tie 9x gross; suited tie 51x gross; big/small side bets 2x gross. Ace is represented as rank 1.
+- **Dragon Tiger:** cards are server-dealt from a deterministic shuffled multi-deck shoe. Dragon/Tiger 2x gross; tie 9x gross; suited tie 51x gross; big/small side bets 2x gross. Ace is represented as rank 14 and compared low.
 - **Andar Bahar:** one server-shuffled deck; a joker is selected and cards alternate Bahar/Andar until its rank matches. Winning side pays 2x gross.
 
 These multipliers are backend policy, not frontend instructions. Before production activation, product owners should confirm the displayed rules and local regulatory requirements.
