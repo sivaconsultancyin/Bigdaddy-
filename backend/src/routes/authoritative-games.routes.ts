@@ -6,7 +6,7 @@ import { AuthService } from '../services/auth.service';
 export const authoritativeGamesRouter = Router();
 type Actor = { id: string; username: string };
 type AuthRequest = Request & { actor?: Actor };
-type GameCode = 'roulette' | 'dice' | 'dragon_tiger' | 'andar_bahar';
+export type GameCode = 'roulette' | 'dice' | 'dragon_tiger' | 'andar_bahar';
 type Db = ReturnType<typeof getDatabaseClient>;
 
 const GAME_CODES: GameCode[] = ['roulette', 'dice', 'dragon_tiger', 'andar_bahar'];
@@ -63,7 +63,7 @@ function rouletteColor(number: number): 'red' | 'black' | 'green' {
   const red = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
   return red.has(number) ? 'red' : 'black';
 }
-function makeResult(code: GameCode, seed: string): Record<string, unknown> {
+export function makeResult(code: GameCode, seed: string): Record<string, any> {
   if (code === 'roulette') {
     const number = stableInt(seed, 'roulette', 37);
     return { number, color: rouletteColor(number) };
@@ -91,7 +91,7 @@ function makeResult(code: GameCode, seed: string): Record<string, unknown> {
   }
   return { jokerCard, dealCards, winner, totalCardsDealt: dealCards.length };
 }
-function payoutMultiplier(code: GameCode, selection: any, result: any): number {
+export function payoutMultiplier(code: GameCode, selection: any, result: any): number {
   const type = String(selection?.type || '').toLowerCase();
   if (code === 'roulette') {
     const number = Number(result.number);
@@ -140,7 +140,7 @@ function maxLiabilityMultiplier(code: GameCode, selection: any): number {
   if (code === 'dragon_tiger') return type === 'suited_tie' ? 51 : type === 'tie' ? 9 : 2;
   return 2;
 }
-function validateSelection(code: GameCode, selection: any): boolean {
+export function validateSelection(code: GameCode, selection: any): boolean {
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return false;
   const type = String(selection.type || '').toLowerCase();
   if (code === 'roulette') {
