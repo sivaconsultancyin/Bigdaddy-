@@ -36,7 +36,7 @@ export async function bootstrapOwnerFromEnvironment(): Promise<void> {
     const ownerId = rows[0].id as string;
     await tx.unsafe("INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,'OWNER',NULL)", [ownerId]);
     await tx.unsafe('INSERT INTO public.user_profiles(user_id,display_name) VALUES($1,$2)', [ownerId, username]);
-    await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'OWNER_BOOTSTRAPPED','USER',$1,$2::jsonb)", [ownerId, JSON.stringify({ source: 'environment_bootstrap' })]);
+    await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'OWNER_BOOTSTRAPPED','USER',$2,$3::jsonb)", [ownerId, ownerId, JSON.stringify({ source: 'environment_bootstrap' })]);
   });
   console.log('Owner bootstrap completed. Remove OWNER_BOOTSTRAP_PASSWORD from the service environment after confirming login.');
 }
