@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Wallet, UserRole, AppConfigInfo, AppMode } from '../../../shared/src/types';
+import { User, Wallet, AppConfigInfo } from '../../../shared/src/types';
 import { ApiClient } from '../api/client';
 
 interface AuthContextType {
@@ -9,7 +9,6 @@ interface AuthContextType {
   configError: string | null;
   loading: boolean;
   login: (credentials: { username: string; password: string }) => Promise<void>;
-  loginAsRole: (role: UserRole) => Promise<void>;
   logout: () => void;
   refreshWallet: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -38,7 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshUser = async () => {
     const token = ApiClient.getToken();
     if (!token) {
-      loginAsRole(UserRole.PLAYER).catch(() => setLoading(false));
+      setLoading(false);
       return;
     }
     try {
@@ -96,9 +95,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = ApiClient.getToken();
       if (token) {
         await refreshUser();
-      } else if (cfg?.mode === AppMode.DEVELOPMENT_PREVIEW) {
-        // Demo auto-login is allowed only in preview mode; production always requires real credentials.
-        loginAsRole(UserRole.PLAYER).catch(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -123,17 +119,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginAsRole = async (role: UserRole) => {
-    const credentialsMap: Record<UserRole, { username: string; password: string }> = {
-      [UserRole.OWNER]: { username: 'owner', password: 'Owner@1234' },
-      [UserRole.SUPER_ADMIN]: { username: 'superadmin_alpha', password: 'SuperAdmin@1234' },
-      [UserRole.ADMIN]: { username: 'admin_bravo', password: 'Admin@1234' },
-      [UserRole.PLAYER]: { username: 'player_charlie', password: 'Player@1234' },
-    };
-
-    await login(credentialsMap[role]);
-  };
-
   const logout = () => {
     ApiClient.clearToken();
     setUser(null);
@@ -149,7 +134,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         configError,
         loading,
         login,
-        loginAsRole,
         logout,
         refreshWallet,
         refreshUser,
