@@ -41,7 +41,9 @@ $$\sum \text{Balance}(\text{Treasury}) + \sum \text{Balance}(\text{Roles}) + \su
 
 ## 4. Game Settlement Engine & Pool Isolation
 
-Winnings are paid exclusively from **dedicated Game Pools**, never from the Owner Treasury:
-- **Bet Placed**: Player balance debited $\to$ Bet Escrow credited. Game Pool verified for maximum liability solvency.
-- **Player Cashout (Win)**: Stake refunded from Bet Escrow $\to$ Player. Net profit debited from Game Pool $\to$ Player.
-- **Plane Crash (Loss)**: Unsettled bet stakes in Bet Escrow transferred directly to Owner Treasury. Game Pool is untouched.
+Crash payouts are funded from the dedicated **Crash/Aviator Game Pool**, not from the Owner Treasury:
+- **Bet Placed**: Player wallet debited and Bet Escrow credited. The pool reserves the maximum possible payout liability for the pending bet.
+- **Player Cashout (Win)**: The payout is debited from the Game Pool and credited to the Player; the held stake moves from Escrow back to the Game Pool. The reservation is released when the settlement migration is applied.
+- **Plane Crash (Loss)**: The held stake moves from Escrow to the Game Pool. The reservation is released when the settlement migration is applied.
+
+The remaining games are preview/simulated in development; production routes intentionally keep unsupported games unavailable.

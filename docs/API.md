@@ -62,13 +62,13 @@ Returns current flight status, live multiplier, and recent crash history.
 Locks bet into Escrow and registers player for active round.
 
 ### `POST /api/games/aviator/cashout` (Player Only)
-Authoritatively settles bet at backend multiplier, credits original stake from Escrow and net win from Aviator Pool.
+Authoritatively settles the bet using the backend multiplier. The payout comes from the Aviator/Crash Game Pool; the held stake is transferred from Escrow back into that pool. After the pending reservation-release migration is applied, the database settlement function releases the reserved maximum-liability amount.
 
 ---
 
 ## WebSocket API (`/ws`)
 
-Connect to `ws://<host>/ws` for real-time state:
+Connect to `ws://<host>/ws` for development/preview real-time state. Production WebSocket game streams are disabled:
 - `aviator:tick`: `{ multiplier: 1.84, roundId: "..." }`
 - `aviator:crashed`: `{ crashMultiplier: 2.45, ... }`
 - `aviator:round_waiting`: Next round betting phase initialized

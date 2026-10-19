@@ -2,16 +2,16 @@
 
 ## 1. Dual-Mode Architecture Overview
 
-BigDaddy has a development preview mode and a fail-closed production guard. Production financial APIs remain disabled until PostgreSQL-backed user, wallet, ledger, bet, and settlement storage is implemented and verified.
+BigDaddy has a simulated development/preview mode and a production mode backed by PostgreSQL. Production mode mounts database-backed authentication, wallet/request, and Crash/Aviator routes only when required configuration is valid and the database connects. Unsupported games and production WebSocket streams remain disabled. Treat production settlement as not fully verified until the migrations and end-to-end database tests described below have passed.
 
 | Capability | Development & Preview Mode (`APP_MODE=development`) | Production Mode (`APP_MODE=production`) |
 |---|---|---|
 | **Environment Variables** | **Zero required** | **Mandatory validation** |
-| **Database** | Isolated in-memory preview store | PostgreSQL connectivity only; business storage migration still pending |
-| **Token Balances & Wallets** | Simulated demo tokens (clearly labeled) | APIs disabled until persistent ledger integration is complete |
-| **Game Outcomes (Aviator)** | In-memory preview simulator | Game APIs/WebSockets disabled pending durable settlement integration |
+| **Database** | Isolated in-memory preview store | PostgreSQL-backed routes; schema/migration readiness must be checked separately |
+| **Token Balances & Wallets** | Simulated demo tokens (clearly labeled) | Database-backed operations with atomic ledger functions |
+| **Game Outcomes (Aviator/Crash)** | In-memory preview simulator | Persistent Crash settlement routes; unsupported games and WebSockets remain disabled |
 | **Missing Secrets Behavior** | Runs out of the box with safe defaults | **Fails safely** with `ProductionConfigError` |
-| **Real Money Risk** | None (Non-real money preview) | Authorized production settlement |
+| **Real Money Risk** | None (Non-real money preview) | Not certified for real-money use; migration and end-to-end verification required |
 
 ---
 
@@ -33,7 +33,7 @@ Open `http://localhost:3000` to preview the live application immediately.
 
 ## 3. Transitioning to Production Mode
 
-Production API routes remain intentionally disabled until the in-memory StorageEngine is fully replaced with PostgreSQL-backed business operations. The current connection module checks connectivity only; it does not yet persist wallet, user, bet, or settlement data. Do not launch live financial traffic until that migration and its tests are complete.
+Production mode uses separate PostgreSQL-backed routes rather than the in-memory preview StorageEngine. The connection module verifies database connectivity; the route handlers use the public schema and atomic SQL functions for supported operations. Do not launch live financial traffic until the migration history is aligned, the pending SQL fixes are applied and verified, and end-to-end wallet/Crash settlement tests pass.
 
 To configure the database connection for the next integration stage, follow these steps:
 
@@ -65,9 +65,9 @@ DATABASE_URL=postgresql://user:password@host:5432/bigdaddy_casino?sslmode=requir
 Get the PostgreSQL URI from the Supabase Dashboard **Connect** panel and use its **Transaction pooler** option for transient/serverless hosts. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` alone do not replace `DATABASE_URL` for direct PostgreSQL transactions. Never paste the URI or password into GitHub.
 
 ### Step 4: Apply Database Schema & Migrations
-The base schema was applied to the connected Supabase project and the 16 tables were verified. The base migration is `database/migrations/002_supabase_schema.sql`. Migrations `003_atomic_wallet_transfer.sql` and `004_production_database_hardening.sql` have been applied to Supabase and are recorded in its migration history. Migration 003 defines an atomic, idempotent transfer function with wallet row locks, double-entry ledger records, a fixed-supply check, and execution revoked from browser roles. Migration 004 revokes public execution of the RLS helper and adds indexes for uncovered foreign keys.
+The base schema was applied separately from the tracked Supabase migration history; its source is `database/migrations/002_supabase_schema.sql`. The repository now mirrors the 12 migration versions recorded by the connected Supabase project. The current public schema has 16 tables with RLS enabled. The base schema is not yet a tracked `supabase/migrations` baseline, so a brand-new Supabase project cannot be rebuilt from that directory alone without a deliberate baseline migration.
 
-Production CORS now requires `CORS_ORIGINS` to list the exact trusted HTTPS origins (comma-separated); wildcard origins are rejected in production. The health endpoint remains available, while readiness and financial/game APIs report not-ready until persistence is completed. Production WebSocket game streams are disabled to prevent exposing simulated game state.
+Production CORS requires `CORS_ORIGINS` to list exact trusted HTTPS origins (comma-separated); wildcard origins are rejected in production. `/api/health` remains a liveness endpoint. `/api/ready` currently checks configuration and database connectivity, not every schema migration/function, so verify the migration ledger and required functions before deployment. Financial/game routes return 503 when production configuration or the database is unavailable. Production WebSocket game streams are disabled.
 
 Do not run a genesis seed against production until the application storage adapter has been migrated, demo accounts are removed from production startup, UUID mapping is deliberate, and the seed is idempotent.
 
@@ -81,8 +81,8 @@ To prevent accidental financial anomalies or mock data leakage, the server stric
 if (config.isProduction && !config.productionValid) {
   // Missing secrets: return 503.
 }
-// Even with valid secrets, production business APIs return 503 until
-// PostgreSQL-backed storage replaces the simulated in-memory engine.
+// With valid secrets and a connected database, supported production routes
+// are mounted; unsupported games remain closed. Verify schema/migration state.
 ```
 
 If any mandatory variable is omitted or if default preview placeholders are used:
