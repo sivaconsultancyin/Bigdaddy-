@@ -67,7 +67,8 @@ FROM (VALUES
 WHERE NOT EXISTS (
   SELECT 1 FROM public.wallets w
   WHERE w.wallet_type = 'GAME_POOL'::public.wallet_type_enum AND w.game_code = v.code
-);
+)
+AND NOT EXISTS (SELECT 1 FROM public.games g WHERE g.code = v.code);
 
 INSERT INTO public.games (code, name, status, pool_wallet_id, min_bet, max_bet, config)
 SELECT v.code, v.name, 'COMING_SOON'::public.game_status_enum, w.id, 10, 100000,
