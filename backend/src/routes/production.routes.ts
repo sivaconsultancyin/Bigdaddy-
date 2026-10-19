@@ -41,7 +41,7 @@ productionRouter.post('/auth/login', async (req, res: Response) => {
     const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE lower(u.username)=lower($1) LIMIT 1', [parsed.data.username]);
     const user = rows[0] as unknown as UserRow | undefined;
     if (!user || !user.is_active || !(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'INVALID_USERNAME_OR_PASSWORD' });
-    const wallets = await sql.unsafe('SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance,game_code FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
+    const wallets = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
     await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_LOGIN','USER',$1,$2::jsonb)", [user.id, JSON.stringify({ ip: req.ip })]);
     return res.json({ token: tokenFor(user), user: safeUser(user), wallet: wallets[0] || null });
   } catch (error) {
@@ -72,7 +72,8 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
       return user;
     });
     const user = created as unknown as UserRow;
-    const wallets = await sql.unsafe('SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
+    user.role = UserRole.PLAYER;
+    const wallets = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
     return res.status(201).json({ token: tokenFor(user), user: safeUser(user), wallet: wallets[0] || null });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'REGISTRATION_FAILED';
@@ -113,6 +114,7 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
       const hash = await bcrypt.hash(password, 12);
       const rows = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id) VALUES($1,$2,$3,$4) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username, email, hash, actor.id]);
       const created = rows[0] as unknown as UserRow;
+      created.role = role;
       const walletType = role === UserRole.SUPER_ADMIN ? 'SUPER_ADMIN' : role === UserRole.ADMIN ? 'ADMIN' : 'PLAYER';
       await tx.unsafe('INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,$2,$3)', [created.id, role, actor.id]);
       await tx.unsafe('INSERT INTO public.wallets(user_id,wallet_type,balance) VALUES($1,$2,0)', [created.id, walletType]);
@@ -135,7 +137,9 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_CREATED','USER',$2,$3::jsonb)", [actor.id, created.id, JSON.stringify({ role, initialTokens: amount.toString() })]);
       return created;
     });
-    return res.status(201).json({ user: { ...safeUser(user as unknown as UserRow), referralCode: (user as any).referralCode || null } });
+    const createdUser = user as unknown as UserRow;
+    const createdWallet = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [createdUser.id]);
+    return res.status(201).json({ user: { ...safeUser(createdUser), role, referralCode: (createdUser as any).referralCode || null }, wallet: createdWallet[0] || null });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'USER_CREATION_FAILED';
     if (message.includes('DUPLICATE_ACCOUNT') || message.includes('unique')) return res.status(409).json({ error: 'USERNAME_OR_EMAIL_ALREADY_REGISTERED' });
@@ -148,7 +152,7 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
   const actor = req.authUser!;
   const sql = getDatabaseClient();
   const rows = actor.role === UserRole.OWNER
-    ? await sql.unsafe("SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1")
+    ? await sql.unsafe("SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1")
     : await sql.unsafe('SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance FROM public.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
   if (!rows[0]) return res.status(404).json({ error: 'WALLET_NOT_FOUND' });
   return res.json({ wallet: rows[0] });
@@ -157,9 +161,10 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
 productionRouter.get('/wallet/summary', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   if (req.authUser!.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
   const sql = getDatabaseClient();
-  const rows = await sql.unsafe('SELECT ts.max_supply::text AS "maxSupply",ts.total_minted::text AS "totalMinted",COALESCE(sum(w.balance),0)::text AS "totalWalletBalance",(SELECT count(*)::int FROM public.users) AS "userCount" FROM public.token_supply ts CROSS JOIN public.wallets w WHERE ts.id=1 GROUP BY ts.max_supply,ts.total_minted');
+  const rows = await sql.unsafe("SELECT ts.max_supply::text AS \"maxSupply\",ts.total_minted::text AS \"totalMinted\",COALESCE(sum(w.balance),0)::text AS \"totalWalletBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type='TREASURY'),0)::text AS \"treasuryBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type='GAME_POOL'),0)::text AS \"gamePoolsBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type IN ('SUPER_ADMIN','ADMIN','PLAYER')),0)::text AS \"roleWalletsBalance\",COALESCE(sum(w.balance) FILTER (WHERE w.wallet_type='ESCROW'),0)::text AS \"escrowBalance\",(SELECT count(*)::int FROM public.users) AS \"userCount\" FROM public.token_supply ts CROSS JOIN public.wallets w WHERE ts.id=1 GROUP BY ts.max_supply,ts.total_minted");
   const row = rows[0];
-  return res.json({ ...row, invariantHolds: !!row && row.maxSupply === row.totalMinted && row.totalMinted === row.totalWalletBalance });
+  const valid = !!row && row.maxSupply === row.totalMinted && row.totalMinted === row.totalWalletBalance;
+  return res.json({ ...row, totalCalculated: row?.totalWalletBalance, isSupplyValid: valid, invariantHolds: valid });
 });
 
 productionRouter.get('/wallet/ledger', requireDatabaseUser, async (req: AuthReq, res: Response) => {
@@ -229,6 +234,7 @@ productionRouter.post('/auth/bootstrap-owner', async (req, res: Response) => {
       const hash = await bcrypt.hash(password, 12);
       const rows = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id) VALUES($1,$2,$3,NULL) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username.trim(), email.trim().toLowerCase(), hash]);
       const user = rows[0] as unknown as UserRow;
+      user.role = UserRole.OWNER;
       await tx.unsafe("INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,'OWNER',NULL)", [user.id]);
       await tx.unsafe('INSERT INTO public.user_profiles(user_id,display_name) VALUES($1,$2)', [user.id, username.trim()]);
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'OWNER_BOOTSTRAPPED','USER',$1,'{}'::jsonb)", [user.id]);
