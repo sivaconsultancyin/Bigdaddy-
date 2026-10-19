@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import { getDatabaseClient } from '../db/postgres';
 import { AuthService } from '../services/auth.service';
-import { loginSchema, createUserSchema, referralRegisterSchema, directTransferSchema } from '../../../shared/src/schemas';
+import { loginSchema, createUserSchema, referralRegisterSchema, directTransferSchema, aviatorBetSchema, aviatorCashoutSchema } from '../../../shared/src/schemas';
 import { UserRole, TransactionType } from '../../../shared/src/types';
 
 export const productionRouter = Router();
@@ -200,5 +200,147 @@ productionRouter.post('/wallet/transfer', requireDatabaseUser, async (req: AuthR
     if (message.includes('RECIPIENT_NOT_FOUND')) return res.status(404).json({ error: message });
     console.error('Production transfer failed:', error);
     return res.status(400).json({ error: 'TRANSFER_FAILED' });
+  }
+});
+
+
+productionRouter.post('/auth/bootstrap-owner', async (req, res: Response) => {
+  const expectedSecret = process.env.OWNER_BOOTSTRAP_SECRET;
+  const suppliedSecret = req.headers['x-bootstrap-secret'];
+  if (!expectedSecret || typeof suppliedSecret !== 'string' || suppliedSecret !== expectedSecret) {
+    return res.status(403).json({ error: 'BOOTSTRAP_NOT_AUTHORIZED' });
+  }
+  const { username, email, password } = req.body || {};
+  if (typeof username !== 'string' || username.trim().length < 3 ||
+      typeof email !== 'string' || !email.includes('@') ||
+      typeof password !== 'string' || password.length < 12) {
+    return res.status(400).json({ error: 'USERNAME_EMAIL_AND_12_CHARACTER_PASSWORD_REQUIRED' });
+  }
+  try {
+    const sql = getDatabaseClient();
+    const owner = await sql.begin(async (tx) => {
+      const exists = await tx.unsafe("SELECT user_id FROM public.role_assignments WHERE role='OWNER' LIMIT 1 FOR UPDATE");
+      if (exists[0]) throw new Error('OWNER_ALREADY_INITIALIZED');
+      const hash = await bcrypt.hash(password, 12);
+      const rows = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id) VALUES($1,$2,$3,NULL) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username.trim(), email.trim().toLowerCase(), hash]);
+      const user = rows[0] as unknown as UserRow;
+      await tx.unsafe("INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,'OWNER',NULL)", [user.id]);
+      await tx.unsafe('INSERT INTO public.user_profiles(user_id,display_name) VALUES($1,$2)', [user.id, username.trim()]);
+      await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'OWNER_BOOTSTRAPPED','USER',$1,'{}'::jsonb)", [user.id]);
+      return user;
+    });
+    return res.status(201).json({ message: 'OWNER_CREATED_LOGIN_NOW', user: safeUser(owner as unknown as UserRow) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'BOOTSTRAP_FAILED';
+    if (message.includes('OWNER_ALREADY_INITIALIZED') || message.includes('unique')) return res.status(409).json({ error: 'OWNER_ALREADY_INITIALIZED_OR_DUPLICATE_ACCOUNT' });
+    console.error('Owner bootstrap failed:', error);
+    return res.status(400).json({ error: 'OWNER_BOOTSTRAP_FAILED' });
+  }
+});
+
+productionRouter.post('/wallet/game-pool', requireDatabaseUser, async (req: AuthReq, res: Response) => {
+  const actor = req.authUser!;
+  if (actor.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
+  const amountText = String(req.body?.amount ?? '');
+  if (!/^[1-9][0-9]*$/.test(amountText)) return res.status(400).json({ error: 'POSITIVE_INTEGER_AMOUNT_REQUIRED' });
+  try {
+    const sql = getDatabaseClient();
+    const source = await sql.unsafe("SELECT id FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1");
+    const target = await sql.unsafe("SELECT w.id FROM public.wallets w JOIN public.games g ON g.pool_wallet_id=w.id WHERE g.code='aviator' LIMIT 1");
+    if (!source[0] || !target[0]) return res.status(503).json({ error: 'GAME_POOL_WALLET_MISSING' });
+    const key = String(req.headers['idempotency-key'] || ('POOL_' + randomUUID()));
+    const moved = await sql.unsafe("SELECT public.wallet_transfer_atomic($1,'POOL_ALLOCATION'::public.transaction_type_enum,$2::bigint,$3::uuid,$4::uuid,$5::jsonb) AS id", [key, amountText, source[0].id, target[0].id, JSON.stringify({ allocatedBy: actor.id, game: 'aviator' })]);
+    const balance = await sql.unsafe('SELECT balance::text AS balance FROM public.wallets WHERE id=$1', [target[0].id]);
+    await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'GAME_POOL_ALLOCATION','WALLET',$2,$3::jsonb)", [actor.id, target[0].id, JSON.stringify({ amount: amountText, transactionId: moved[0].id })]);
+    return res.json({ transactionId: moved[0].id, poolBalance: balance[0]?.balance });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'POOL_ALLOCATION_FAILED';
+    if (message.includes('INSUFFICIENT_FUNDS')) return res.status(400).json({ error: 'INSUFFICIENT_TREASURY_FUNDS' });
+    console.error('Game pool allocation failed:', error);
+    return res.status(400).json({ error: 'POOL_ALLOCATION_FAILED' });
+  }
+});
+
+productionRouter.post('/games/aviator/activate', requireDatabaseUser, async (req: AuthReq, res: Response) => {
+  if (req.authUser!.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
+  try {
+    const sql = getDatabaseClient();
+    const rows = await sql.unsafe("SELECT g.id,w.balance::text AS balance FROM public.games g JOIN public.wallets w ON w.id=g.pool_wallet_id WHERE g.code='aviator' LIMIT 1");
+    if (!rows[0] || BigInt(rows[0].balance) <= 0n) return res.status(400).json({ error: 'ALLOCATE_GAME_POOL_TOKENS_FIRST' });
+    await sql.unsafe("UPDATE public.games SET status='ACTIVE',updated_at=now() WHERE code='aviator'");
+    await sql.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) SELECT $1,'GAME_ACTIVATED','GAME',id,$2::jsonb FROM public.games WHERE code='aviator'", [req.authUser!.id, JSON.stringify({ poolBalance: rows[0].balance })]);
+    return res.json({ status: 'ACTIVE', poolBalance: rows[0].balance });
+  } catch (error) {
+    console.error('Crash activation failed:', error);
+    return res.status(503).json({ error: 'GAME_ACTIVATION_FAILED' });
+  }
+});
+
+productionRouter.get('/games/aviator/state', async (_req, res: Response) => {
+  try {
+    const sql = getDatabaseClient();
+    const rounds = await sql.unsafe("SELECT id,game_code AS \"gameCode\",round_number AS \"roundNumber\",status,started_at AS \"startedAt\",ended_at AS \"endedAt\",server_seed_hash AS \"serverSeedHash\",revealed_server_seed AS \"revealedServerSeed\",crash_multiplier AS \"crashMultiplier\" FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
+    if (!rounds[0]) return res.json({ round: null, bets: [], history: [] });
+    const round = rounds[0] as any;
+    const elapsed = Math.max(0, (Date.now() - new Date(round.startedAt).getTime()) / 1000);
+    const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsed, 1.15)) * 100) / 100;
+    const currentMultiplier = round.status === 'RUNNING' ? Math.min(liveMultiplier, Number(round.crashMultiplier)) : 1;
+    const bets = await sql.unsafe('SELECT b.id,b.round_id AS "roundId",b.bet_amount::text AS "betAmount",b.auto_cashout AS "autoCashout",b.status,b.payout_amount::text AS "payoutAmount",b.cashed_out_at AS "cashedOutAt",u.username FROM public.game_bets b JOIN public.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100', [round.id]);
+    const history = await sql.unsafe("SELECT round_number AS \"roundNumber\",crash_multiplier AS \"crashMultiplier\",ended_at AS \"endedAt\",server_seed_hash AS \"serverSeedHash\",revealed_server_seed AS \"revealedServerSeed\" FROM public.game_rounds WHERE game_code='aviator' AND status='SETTLED' ORDER BY round_number DESC LIMIT 20");
+    const publicRound = { id: round.id, roundNumber: round.roundNumber, status: round.status, startedAt: round.startedAt, endedAt: round.endedAt, multiplier: currentMultiplier, crashMultiplier: ['CRASHED','SETTLED'].includes(round.status) ? round.crashMultiplier : null, serverSeedHash: round.serverSeedHash, revealedServerSeed: round.revealedServerSeed };
+    return res.json({ round: publicRound, bets, history });
+  } catch (error) {
+    console.error('Crash state failed:', error);
+    return res.status(503).json({ error: 'GAME_STORAGE_UNAVAILABLE' });
+  }
+});
+
+productionRouter.get('/games/aviator/history', async (_req, res: Response) => {
+  try {
+    const sql = getDatabaseClient();
+    const history = await sql.unsafe("SELECT round_number AS \"roundNumber\",crash_multiplier AS \"crashMultiplier\",ended_at AS \"endedAt\",server_seed_hash AS \"serverSeedHash\",revealed_server_seed AS \"revealedServerSeed\" FROM public.game_rounds WHERE game_code='aviator' AND status='SETTLED' ORDER BY round_number DESC LIMIT 20");
+    return res.json({ history });
+  } catch (error) {
+    console.error('Crash history failed:', error);
+    return res.status(503).json({ error: 'GAME_STORAGE_UNAVAILABLE' });
+  }
+});
+
+productionRouter.post('/games/aviator/bet', requireDatabaseUser, async (req: AuthReq, res: Response) => {
+  const actor = req.authUser!;
+  if (actor.role !== UserRole.PLAYER) return res.status(403).json({ error: 'PLAYER_ONLY' });
+  const parsed = aviatorBetSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
+  try {
+    const sql = getDatabaseClient();
+    const active = await sql.unsafe("SELECT id FROM public.game_rounds WHERE game_code='aviator' AND status='WAITING' ORDER BY round_number DESC LIMIT 1");
+    if (!active[0]) return res.status(409).json({ error: 'NO_BETTING_ROUND' });
+    const key = String(req.headers['idempotency-key'] || ('BET_' + randomUUID()));
+    const created = await sql.unsafe('SELECT public.place_crash_bet_atomic($1::uuid,$2::uuid,$3::bigint,$4,$5::numeric) AS id', [actor.id, active[0].id, parsed.data.amount, key, parsed.data.autoCashoutMultiplier ?? null]);
+    const bet = await sql.unsafe('SELECT id,round_id AS "roundId",bet_amount::text AS "betAmount",auto_cashout AS "autoCashout",status FROM public.game_bets WHERE id=$1', [created[0].id]);
+    return res.status(201).json({ bet: bet[0] });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'BET_FAILED';
+    if (message.includes('INSUFFICIENT_FUNDS') || message.includes('GAME_POOL_INSUFFICIENT')) return res.status(400).json({ error: message });
+    console.error('Crash bet failed:', error);
+    return res.status(400).json({ error: 'BET_FAILED' });
+  }
+});
+
+productionRouter.post('/games/aviator/cashout', requireDatabaseUser, async (req: AuthReq, res: Response) => {
+  const actor = req.authUser!;
+  if (actor.role !== UserRole.PLAYER) return res.status(403).json({ error: 'PLAYER_ONLY' });
+  const parsed = aviatorCashoutSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
+  try {
+    const sql = getDatabaseClient();
+    const key = String(req.headers['idempotency-key'] || ('CASHOUT_' + randomUUID()));
+    const rows = await sql.unsafe('SELECT public.cashout_crash_bet_atomic($1::uuid,$2::uuid,$3) AS result', [actor.id, parsed.data.betId, key]);
+    return res.json({ result: rows[0].result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'CASHOUT_FAILED';
+    if (message.includes('ROUND_ALREADY_CRASHED') || message.includes('BET_ALREADY_SETTLED')) return res.status(409).json({ error: message });
+    console.error('Crash cashout failed:', error);
+    return res.status(400).json({ error: 'CASHOUT_FAILED' });
   }
 });
