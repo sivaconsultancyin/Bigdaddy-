@@ -5,7 +5,7 @@ import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
-import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay } from '../backend/src/routes/authoritative-games.routes';
+import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
 
 let passed = 0;
 let failed = 0;
@@ -263,6 +263,35 @@ async function runTestSuite() {
     assert.strictEqual(isCompatibleIdempotencyReplay(prior, 'roulette', 'user-2', 100), false);
     assert.strictEqual(isCompatibleIdempotencyReplay(prior, 'roulette', 'user-1', 200), false);
     assert.strictEqual(isCompatibleIdempotencyReplay(undefined, 'roulette', 'user-1', 100), false);
+  });
+
+  test('Shared game-pool reservations account for existing reserved liability', () => {
+    assert.strictEqual(canReserveLiability('100', '40', '60'), true);
+    assert.strictEqual(canReserveLiability('100', '40', '61'), false);
+    assert.strictEqual(canReserveLiability('100', '101', '0'), false);
+    assert.strictEqual(canReserveLiability('100', '0', '0'), true);
+    assert.strictEqual(canReserveLiability('-1', '0', '1'), false);
+    assert.strictEqual(canReserveLiability('100', '0', '-1'), false);
+    assert.strictEqual(canReserveLiability('not-a-number', '0', '1'), false);
+  });
+
+  test('Maximum reserved liability covers every supported high-payout selection', () => {
+    assert.strictEqual(maxLiabilityMultiplier('roulette', { type: 'straight', numbers: [7] }), 36);
+    assert.strictEqual(maxLiabilityMultiplier('roulette', { type: 'split', numbers: [7, 8] }), 18);
+    assert.strictEqual(maxLiabilityMultiplier('roulette', { type: 'green' }), 36);
+    assert.strictEqual(maxLiabilityMultiplier('dice', { type: 'number', value: 10 }), 10);
+    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'tie' }), 9);
+    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'suited_tie' }), 51);
+    assert.strictEqual(maxLiabilityMultiplier('andar_bahar', { type: 'andar' }), 2);
+  });
+
+  test('Settlement guard accepts only result-ready rounds and rejects duplicate settlement states', () => {
+    assert.strictEqual(canSettleRound('RESULT', { winner: 'red' }), true);
+    assert.strictEqual(canSettleRound('RESULT', null), false);
+    assert.strictEqual(canSettleRound('BETTING', { winner: 'red' }), false);
+    assert.strictEqual(canSettleRound('RUNNING', { winner: 'red' }), false);
+    assert.strictEqual(canSettleRound('SETTLED', { winner: 'red' }), false);
+    assert.strictEqual(canSettleRound('CANCELLED', { winner: 'red' }), false);
   });
 
   console.log(`Results: ${passed} Passed, ${failed} Failed`);
