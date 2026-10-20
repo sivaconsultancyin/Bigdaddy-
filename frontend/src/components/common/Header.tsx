@@ -11,7 +11,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenTokenRequest, onGoToLobby }) => {
   const { user, wallet, refreshWallet } = useAuth();
-  const { isConnected } = useWebSocket();
+  const { apiHealth } = useWebSocket();
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const handleRefresh = async () => {
@@ -62,13 +62,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenTokenRequest, onGoToLobby 
               </span>
             </div>
             <div className="text-[9px] text-zinc-500 flex items-center gap-1 mt-0.5">
-              {isConnected ? (
+              {apiHealth === 'online' ? (
                 <span className="flex items-center gap-0.5 text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Live
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> API Online
+                </span>
+              ) : apiHealth === 'offline' ? (
+                <span className="flex items-center gap-0.5 text-rose-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span> API Offline
                 </span>
               ) : (
                 <span className="flex items-center gap-0.5 text-zinc-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-600"></span> Offline
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-pulse"></span> Checking
                 </span>
               )}
               <span className="text-zinc-600">·</span>
