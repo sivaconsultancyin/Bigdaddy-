@@ -531,7 +531,7 @@ async function tick() {
 
 export function startAuthoritativeGameEngine() {
   if (engineTimer) return;
-  engineTimer = setInterval(() => { void tick(); }, 500);
+  engineTimer = setInterval(() => { void tick(); }, 1000);
   void tick();
   console.log('Persistent authoritative game engine supervisor started.');
 }
