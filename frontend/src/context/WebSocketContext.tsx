@@ -189,8 +189,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const apiBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
     const refreshWalletForResult = (key: string, round: any) => {
       if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
-      if (productionResultIdsRef.current[key] === round.id) return;
-      productionResultIdsRef.current[key] = round.id;
+      const resultKey = `${round.id}:${round.status}`;
+      if (productionResultIdsRef.current[key] === resultKey) return;
+      productionResultIdsRef.current[key] = resultKey;
       if (userRef.current) refreshWallet();
     };
     const poll = async () => {
@@ -239,7 +240,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           } else if (key === 'roulette') {
             if (data.round) {
               setRouletteRound(data.round);
-              if (data.round.status === 'RESULT' && productionResultIdsRef.current.roulette !== data.round.id) {
+              if (data.round.status === 'RESULT' && productionResultIdsRef.current.roulette !== `${data.round.id}:${data.round.status}`) {
                 setLastEvent({ event: 'roulette:round_result', data: {
                   round: data.round,
                   winningNumber: data.round.winningNumber,
