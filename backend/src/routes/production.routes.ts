@@ -347,10 +347,11 @@ productionRouter.get('/games/list', async (_req, res: Response) => {
 productionRouter.get('/games/aviator/state', async (_req, res: Response) => {
   try {
     const sql = getDatabaseClient();
-    const rounds = await sql.unsafe("SELECT id,game_code AS \"gameCode\",round_number AS \"roundNumber\",status,started_at AS \"startedAt\",ended_at AS \"endedAt\",server_seed_hash AS \"serverSeedHash\",revealed_server_seed AS \"revealedServerSeed\",crash_multiplier AS \"crashMultiplier\" FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
+    const rounds = await sql.unsafe("SELECT id,game_code AS \"gameCode\",round_number AS \"roundNumber\",status,started_at AS \"startedAt\",ended_at AS \"endedAt\",server_seed_hash AS \"serverSeedHash\",revealed_server_seed AS \"revealedServerSeed\",crash_multiplier AS \"crashMultiplier\",EXTRACT(EPOCH FROM (now()-started_at)) AS \"elapsedSeconds\" FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
     if (!rounds[0]) return res.json({ round: null, bets: [], history: [] });
     const round = rounds[0] as any;
-    const elapsed = Math.max(0, (Date.now() - new Date(round.startedAt).getTime()) / 1000);
+    // Derive the live multiplier from PostgreSQL time so a host clock offset cannot desync game state.
+    const elapsed = Math.max(0, Number(round.elapsedSeconds) || 0);
     const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsed, 1.15)) * 100) / 100;
     const currentMultiplier = round.status === 'RUNNING' ? Math.min(liveMultiplier, Number(round.crashMultiplier)) : ['CRASHED','SETTLED'].includes(round.status) ? Number(round.crashMultiplier || 1) : 1;
     const bets = await sql.unsafe('SELECT b.id,b.round_id AS "roundId",b.bet_amount::text AS "betAmount",b.auto_cashout AS "autoCashout",b.status,b.payout_amount::text AS "payoutAmount",b.cashed_out_at AS "cashedOutAt",u.username FROM public.game_bets b JOIN public.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100', [round.id]);
