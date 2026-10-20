@@ -269,6 +269,7 @@ async function runTestSuite() {
     assert.strictEqual(canReserveLiability('100', '40', '60'), true);
     assert.strictEqual(canReserveLiability('100', '40', '61'), false);
     assert.strictEqual(canReserveLiability('100', '101', '0'), false);
+    assert.strictEqual(canReserveLiability('100', '-1', '1'), false);
     assert.strictEqual(canReserveLiability('100', '0', '0'), true);
     assert.strictEqual(canReserveLiability('-1', '0', '1'), false);
     assert.strictEqual(canReserveLiability('100', '0', '-1'), false);
