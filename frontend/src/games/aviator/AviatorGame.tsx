@@ -51,7 +51,7 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onBackToLobby }) => {
   // A pending personal bet at an authoritative crash is a loss. Show at most one
   // compact notice per round, and never label an already-cashed-out bet as lost.
   useEffect(() => {
-    if (roundState.status !== 'CRASHED' || !roundState.id) return;
+    if (!['CRASHED', 'SETTLED'].includes(roundState.status) || !roundState.id) return;
     if (seenLossRoundsRef.current.has(roundState.id)) return;
 
     const lostBets = [bet1, bet2].filter(
@@ -94,7 +94,7 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onBackToLobby }) => {
         id: `win-${bet.id}`,
         kind: 'win',
         amount: Number(bet.winAmount || '0').toLocaleString(),
-        roundId: bet.roundId || roundState.id || '',
+        roundId: roundState.id || '',
       });
     }
   };
