@@ -20,7 +20,7 @@ async function tick() {
     const games = await sql.unsafe("SELECT id,pool_wallet_id FROM public.games WHERE code='aviator' AND status='ACTIVE' LIMIT 1");
     if (!games[0]) return;
 
-    let rows = await sql.unsafe("SELECT id,round_number,status,started_at,ended_at,server_seed,crash_multiplier FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
+    let rows = await sql.unsafe("SELECT id,round_number,status,started_at,ended_at,server_seed,crash_multiplier,EXTRACT(EPOCH FROM (now()-started_at)) AS elapsed_seconds FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
     if (rows[0]?.status === 'SETTLED' && rows[0].ended_at && Date.now() - new Date(rows[0].ended_at).getTime() < 4000) return;
     if (!rows[0] || rows[0].status === 'SETTLED') {
       const maxRows = await sql.unsafe("SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM public.game_rounds WHERE game_code='aviator'");
@@ -32,22 +32,22 @@ async function tick() {
       return;
     }
 
-    const round = rows[0] as unknown as { id: string; round_number: number; status: string; started_at: string; ended_at: string | null; server_seed: string; crash_multiplier: string | number };
+    const round = rows[0] as unknown as { id: string; round_number: number; status: string; started_at: string; ended_at: string | null; server_seed: string; crash_multiplier: string | number; elapsed_seconds: string | number };
     // Recovery path: the process may have crashed after marking a round CRASHED
     // but before its atomic settlement completed. Settlement is idempotent.
     if (round.status === 'CRASHED') {
       await sql.unsafe('SELECT public.settle_crash_round_atomic($1::uuid)', [round.id]);
       return;
     }
-    const age = Date.now() - new Date(round.started_at).getTime();
+    // Use PostgreSQL's clock for round progression. Host and database clocks can drift;\n    // browser/Node wall-clock time must never control a persisted round's outcome.\n    const ageSeconds = Math.max(0, Number(round.elapsed_seconds) || 0);
     if (round.status === 'WAITING') {
-      if (age >= 5000) {
+      if (ageSeconds >= 5) {
         await sql.unsafe("UPDATE public.game_rounds SET status='RUNNING',started_at=now() WHERE id=$1 AND status='WAITING'", [round.id]);
       }
       return;
     }
     if (round.status === 'RUNNING') {
-      const multiplier = Math.floor(Math.exp(0.06 * Math.pow(Math.max(0, age / 1000), 1.15)) * 100) / 100;
+      const multiplier = Math.floor(Math.exp(0.06 * Math.pow(ageSeconds, 1.15)) * 100) / 100;
       const crash = Number(round.crash_multiplier);
       if (multiplier >= crash) {
         await sql.unsafe("UPDATE public.game_rounds SET status='CRASHED',ended_at=now(),revealed_server_seed=server_seed WHERE id=$1 AND status='RUNNING'", [round.id]);
