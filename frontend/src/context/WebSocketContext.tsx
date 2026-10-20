@@ -216,7 +216,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           lastHealthCheckAtRef.current = now;
           const healthController = new AbortController();
           const healthTimeout = window.setTimeout(() => healthController.abort(), 4000);
-          void fetch(apiBase.replace(/\\/$/, '') + '/health', {
+          void fetch(apiBase.replace(/\/$/, '') + '/health', {
             headers: { Accept: 'application/json' },
             signal: healthController.signal,
           }).then((response) => {
