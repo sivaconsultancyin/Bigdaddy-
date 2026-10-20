@@ -12,7 +12,7 @@ export function isPlayerRole(role: unknown): boolean {
 }
 
 export function isCompatibleIdempotencyReplay(
-  existing: { game_code?: unknown; user_id?: unknown; amount?: unknown } | undefined,
+  existing: any,
   code: GameCode,
   userId: string,
   amount: unknown,
@@ -317,7 +317,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
       for (let i = 0; i < rawBets.length; i++) {
         const existing = existingRows.find((row: any) => row.idempotency_key === replayKeys[i]);
         const selection = rawBets[i].selection || rawBets[i];
-        if (!isCompatibleIdempotencyReplay(existing, code, req.actor!.id, rawBets[i].amount)) {
+        if (!existing || !isCompatibleIdempotencyReplay(existing, code, req.actor!.id, rawBets[i].amount)) {
           throw new Error('IDEMPOTENCY_KEY_REUSE');
         }
         const same = await sql.unsafe(
