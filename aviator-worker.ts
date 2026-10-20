@@ -16,9 +16,9 @@ async function startWorker() {
 
   startProductionCrashEngine();
 
-  // Render's available service provisioning may use a web-service wrapper.
-  // Expose health only; this process does not mount or serve financial APIs.
-  const port = Number(process.env.PORT || 10000);
+  // This health listener is private to the shared container. The public PORT
+  // belongs exclusively to the API server; the worker exposes no financial routes.
+  const port = Number(process.env.AVIATOR_WORKER_HEALTH_PORT || 10001);
   const healthServer = http.createServer((req, res) => {
     if (req.url === '/health' || req.url === '/api/health') {
       res.writeHead(isDatabaseConnected() ? 200 : 503, { 'content-type': 'application/json' });
@@ -32,7 +32,7 @@ async function startWorker() {
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: 'NOT_FOUND' }));
   });
-  healthServer.listen(port, '0.0.0.0', () => {
+  healthServer.listen(port, '127.0.0.1', () => {
     console.log('Dedicated Aviator engine worker is running; API routes are not exposed.');
   });
 
