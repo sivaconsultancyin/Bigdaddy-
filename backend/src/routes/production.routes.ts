@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
-import { getDatabaseClient } from '../db/postgres';
+import { getAuthDatabaseClient, getDatabaseClient } from '../db/postgres';
 import { AuthService } from '../services/auth.service';
 import { loginSchema, createUserSchema, referralRegisterSchema, directTransferSchema, aviatorBetSchema, aviatorCashoutSchema } from '../../../shared/src/schemas';
 import { UserRole, TransactionType } from '../../../shared/src/types';
@@ -22,7 +22,7 @@ async function requireDatabaseUser(req: AuthReq, res: Response, next: NextFuncti
     if (!header || !header.startsWith('Bearer ')) return res.status(401).json({ error: 'AUTH_REQUIRED' });
     const payload = AuthService.verifyToken(header.slice(7));
     if (!payload || !payload.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE u.id=$1 AND u.is_active=true LIMIT 1', [payload.id]);
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
     req.authUser = rows[0] as unknown as UserRow;
@@ -37,7 +37,7 @@ productionRouter.post('/auth/login', async (req, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
   try {
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE lower(u.username)=lower($1::text) LIMIT 1', [parsed.data.username]);
     const user = rows[0] as unknown as UserRow | undefined;
     if (!user || !user.is_active || !(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'INVALID_USERNAME_OR_PASSWORD' });
@@ -55,7 +55,7 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
   const { username, email, password, referralCode } = parsed.data;
   try {
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const created = await sql.begin(async (tx) => {
       const refs = await tx.unsafe("SELECT r.owner_user_id,r.admin_id FROM public.referral_codes r JOIN public.users owner ON owner.id=r.owner_user_id AND owner.is_active=true JOIN public.role_assignments orole ON orole.user_id=owner.id AND orole.role='PLAYER' JOIN public.users admin ON admin.id=r.admin_id AND admin.is_active=true JOIN public.role_assignments arole ON arole.user_id=admin.id AND arole.role='ADMIN' WHERE r.code=$1 AND r.is_active=true AND owner.parent_id=r.admin_id FOR UPDATE OF r", [referralCode]);
       if (!refs[0]) throw new Error('INVALID_REFERRAL_CODE');
@@ -89,7 +89,7 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
 
 productionRouter.get('/auth/me', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const user = req.authUser!;
-  const sql = getDatabaseClient();
+  const sql = getAuthDatabaseClient();
   const wallets = await sql.unsafe('SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance,game_code FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
   return res.json({ user: safeUser(user), wallet: wallets[0] || null });
 });
