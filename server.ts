@@ -14,6 +14,23 @@ import { startProductionCrashEngine } from './backend/src/games/aviator/producti
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Express 4 does not forward rejected async route promises automatically.
+// Wrap every async handler so database timeouts return an HTTP response instead
+// of leaving the client waiting until its external 45-second timeout.
+function wrapAsyncRouter(router: any) {
+  for (const layer of router.stack ?? []) {
+    for (const routeLayer of layer.route?.stack ?? []) {
+      const handler = routeLayer.handle;
+      if (handler?.constructor?.name !== 'AsyncFunction' || handler.__asyncErrorWrapped) continue;
+      const wrapped = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+        Promise.resolve(handler(req, res, next)).catch(next);
+      };
+      (wrapped as any).__asyncErrorWrapped = true;
+      routeLayer.handle = wrapped;
+    }
+  }
+}
+
 let productionServicesStarted = false;
 let persistentAviatorEngineStarted = false;
 
@@ -25,6 +42,11 @@ function startPersistentAviatorEngine() {
 }
 
 async function startServer() {
+  // Apply the Express 4 async-rejection guard before mounting the routers.
+  wrapAsyncRouter(productionRouter);
+  wrapAsyncRouter(productionRequestsRouter);
+  wrapAsyncRouter(authoritativeGamesRouter);
+
   // Connect using a backend-only secret. The frontend must never receive DATABASE_URL.
   if (process.env.DATABASE_URL?.trim()) {
     try {
@@ -144,6 +166,13 @@ async function startServer() {
     app.use('/api/games', (_req, res) => res.status(503).json({ error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION' }));
     app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
   }
+
+  // Central fallback for rejected async handlers (including DB timeout errors).
+  app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) return next(error);
+    console.error('Unhandled API request failure:', error instanceof Error ? error.message : String(error));
+    return res.status(503).json({ error: 'REQUEST_FAILED', message: 'The request could not be completed because a backend dependency timed out or failed. Please retry.' });
+  });
 
   const server = http.createServer(app);
 
