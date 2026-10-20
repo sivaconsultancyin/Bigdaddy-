@@ -180,10 +180,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const connect = () => {
     if (typeof window === 'undefined') return;
-    if (import.meta.env.PROD) {
-      startProductionPolling();
-      return;
-    }
+    // All game state must come from the backend's durable, authoritative API.
+    // Do not connect to the legacy development WebSocket path, which can expose
+    // in-memory/demo engines instead of the Supabase-backed game runtime.
+    startProductionPolling();
+    return;
+
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) return;
 
     try {
@@ -386,7 +388,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const startProductionPolling = () => {
     if (simIntervalRef.current) return;
     let inFlight = false;
-    const apiBase = import.meta.env.VITE_API_BASE_URL || 'https://bigdaddy-backend.onrender.com/api';
+    const apiBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
     const poll = async () => {
       if (inFlight) return;
       inFlight = true;
