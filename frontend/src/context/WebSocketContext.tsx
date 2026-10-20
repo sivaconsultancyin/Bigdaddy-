@@ -172,8 +172,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   }, []);
 
-  const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<any>(null);
   const simIntervalRef = useRef<any>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
@@ -189,6 +187,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (simIntervalRef.current) return;
     let inFlight = false;
     const apiBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
+    const refreshWalletForResult = (key: string, round: any) => {
+      if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
+      if (productionResultIdsRef.current[key] === round.id) return;
+      productionResultIdsRef.current[key] = round.id;
+      if (userRef.current) refreshWallet();
+    };
     const poll = async () => {
       if (inFlight) return;
       inFlight = true;
@@ -228,6 +232,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 crashMultiplier: round.crashMultiplier ?? undefined,
               });
               setMultiplier(Number(round.multiplier || 1));
+              refreshWalletForResult('aviator', round);
             }
             if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
             setLastEvent({ event: 'production:crash_state', data });
@@ -235,7 +240,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (data.round) {
               setRouletteRound(data.round);
               if (data.round.status === 'RESULT' && productionResultIdsRef.current.roulette !== data.round.id) {
-                productionResultIdsRef.current.roulette = data.round.id;
                 setLastEvent({ event: 'roulette:round_result', data: {
                   round: data.round,
                   winningNumber: data.round.winningNumber,
@@ -243,6 +247,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   history: data.history,
                 } });
               }
+              refreshWalletForResult('roulette', data.round);
             }
             if (Array.isArray(data.history)) {
               setRouletteHistory(data.history.map((item: any) => ({
@@ -256,20 +261,29 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               amount: String(b.amount), numbers: b.selection?.numbers,
             })));
           } else if (key === 'dice') {
-            if (data.round) setDiceRound(data.round as any);
+            if (data.round) {
+              setDiceRound(data.round as any);
+              refreshWalletForResult('dice', data.round);
+            }
             if (Array.isArray(data.history)) setDiceHistory(data.history.map((h: any) => ({
               ...h, rolledNumber: h.result?.number ?? h.rolledNumber,
             })) as any);
             if (Array.isArray(data.allBets || data.bets)) setDiceLiveBets((data.allBets || data.bets) as any);
           } else if (key === 'dragonTiger') {
-            if (data.round) setDragonTigerRound(data.round as any);
+            if (data.round) {
+              setDragonTigerRound(data.round as any);
+              refreshWalletForResult('dragonTiger', data.round);
+            }
             if (Array.isArray(data.history)) setDragonTigerHistory(data.history.map((h: any) => ({
               ...h, dragonCard: h.result?.dragonCard, tigerCard: h.result?.tigerCard,
               winner: h.result?.winner,
             })) as any);
             if (Array.isArray(data.bets)) setDragonTigerLiveBets(data.bets as any);
           } else if (key === 'andarBahar') {
-            if (data.round) setAndarBaharRound(data.round as any);
+            if (data.round) {
+              setAndarBaharRound(data.round as any);
+              refreshWalletForResult('andarBahar', data.round);
+            }
             if (Array.isArray(data.history)) setAndarBaharHistory(data.history.map((h: any) => ({
               ...h,
               jokerCard: h.result?.jokerCard,
@@ -296,18 +310,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     connect();
-
-    const pingInterval = setInterval(() => {
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify({ action: 'ping' }));
-      }
-    }, 15000);
-
     return () => {
-      clearInterval(pingInterval);
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (socketRef.current) socketRef.current.close();
     };
   }, []);
 
