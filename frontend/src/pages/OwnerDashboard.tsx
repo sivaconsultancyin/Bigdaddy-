@@ -51,7 +51,7 @@ export const OwnerDashboard: React.FC = () => {
         ApiClient.getSupplySummary(),
         ApiClient.getUsers(),
         ApiClient.getTokenRequests(),
-        ApiClient.getAuditLogs(),
+        ApiClient.getAuditLogs().catch(() => ({ logs: [] })),
         ApiClient.getGames(),
       ]);
 
