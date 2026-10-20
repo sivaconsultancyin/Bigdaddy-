@@ -9,6 +9,7 @@ import postgres from 'postgres';
  * Never expose either URL to Vite or the browser bundle.
  */
 let client: ReturnType<typeof postgres> | null = null;
+let authClient: ReturnType<typeof postgres> | null = null;
 let engineClient: ReturnType<typeof postgres> | null = null;
 let activeConnectionString: string | null = null;
 let connected = false;
@@ -82,6 +83,21 @@ export async function connectDatabase(): Promise<boolean> {
   }
 }
 
+/**
+ * Authentication has its own small pool so wallet/bet traffic cannot occupy
+ * every connection needed for login and token validation. This is a separate
+ * pool in the same API process; the Aviator engine runs in its own process.
+ */
+export function getAuthDatabaseClient(): ReturnType<typeof postgres> {
+  if (!connected || !activeConnectionString) {
+    throw new Error('Authentication database is not connected. Configure DATABASE_URL on the backend.');
+  }
+  if (!authClient) {
+    authClient = createClient(activeConnectionString, 2);
+  }
+  return authClient;
+}
+
 export function getDatabaseClient(): ReturnType<typeof postgres> {
   if (!client || !connected) {
     throw new Error('Database is not connected. Configure DATABASE_URL on the backend.');
@@ -110,13 +126,16 @@ export function isDatabaseConnected(): boolean {
 
 export async function closeDatabase(): Promise<void> {
   const current = client;
+  const currentAuth = authClient;
   const currentEngine = engineClient;
   client = null;
+  authClient = null;
   engineClient = null;
   activeConnectionString = null;
   connected = false;
   await Promise.all([
     current?.end({ timeout: 5 }),
+    currentAuth?.end({ timeout: 5 }),
     currentEngine?.end({ timeout: 5 }),
   ]);
 }
