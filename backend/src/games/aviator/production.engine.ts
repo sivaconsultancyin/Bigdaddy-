@@ -20,8 +20,8 @@ async function tick() {
     const games = await sql.unsafe("SELECT id,pool_wallet_id FROM public.games WHERE code='aviator' AND status='ACTIVE' LIMIT 1");
     if (!games[0]) return;
 
-    let rows = await sql.unsafe("SELECT id,round_number,status,started_at,ended_at,server_seed,crash_multiplier,EXTRACT(EPOCH FROM (now()-started_at)) AS elapsed_seconds FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
-    if (rows[0]?.status === 'SETTLED' && rows[0].ended_at && Date.now() - new Date(rows[0].ended_at).getTime() < 4000) return;
+    let rows = await sql.unsafe("SELECT id,round_number,status,started_at,ended_at,server_seed,crash_multiplier,EXTRACT(EPOCH FROM (now()-started_at)) AS elapsed_seconds,EXTRACT(EPOCH FROM (now()-ended_at)) AS seconds_since_end FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
+    if (rows[0]?.status === 'SETTLED' && rows[0].ended_at && Number(rows[0].seconds_since_end) >= 0 && Number(rows[0].seconds_since_end) < 4) return;
     if (!rows[0] || rows[0].status === 'SETTLED') {
       const maxRows = await sql.unsafe("SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM public.game_rounds WHERE game_code='aviator'");
       const roundNumber = Number(maxRows[0].n) + 1;
