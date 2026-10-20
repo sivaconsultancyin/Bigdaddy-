@@ -38,6 +38,10 @@ export interface RouletteBetFeedItem {
 
 interface WebSocketContextType {
   isConnected: boolean;
+  apiHealth: 'checking' | 'online' | 'offline';
+  roundDataStatus: 'waiting' | 'fresh' | 'stale' | 'offline';
+  lastSuccessfulRoundAt: number | null;
+  lastRoundError: string | null;
   isSimulatedFallback: boolean;
   multiplier: number;
   roundState: {
@@ -75,6 +79,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const userRef = useRef(user);
   userRef.current = user;
   const [isConnected, setIsConnected] = useState(false);
+  const [apiHealth, setApiHealth] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [roundDataStatus, setRoundDataStatus] = useState<'waiting' | 'fresh' | 'stale' | 'offline'>('waiting');
+  const [lastSuccessfulRoundAt, setLastSuccessfulRoundAt] = useState<number | null>(null);
+  const [lastRoundError, setLastRoundError] = useState<string | null>(null);
   const [isSimulatedFallback, setIsSimulatedFallback] = useState(false);
   const [multiplier, setMultiplier] = useState(1.0);
   const [roundState, setRoundState] = useState<{
@@ -175,6 +183,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const simIntervalRef = useRef<any>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
+  const lastSuccessfulRoundAtRef = useRef<number | null>(null);
+  const lastHealthCheckAtRef = useRef(0);
 
   const connect = () => {
     if (typeof window === 'undefined') return;
@@ -186,6 +196,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const startProductionPolling = () => {
     if (simIntervalRef.current) return;
     let inFlight = false;
+    let disposed = false;
     const apiBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
     const refreshWalletForResult = (key: string, round: any) => {
       if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
@@ -198,7 +209,24 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (inFlight) return;
       inFlight = true;
       try {
-        const pollOtherGames = Date.now() - otherGamesPollAtRef.current >= 1500;
+        const now = Date.now();
+        // Health is checked independently from game state. A healthy process with a
+        // stalled game endpoint is reported as degraded, not mistaken for a healthy round feed.
+        if (now - lastHealthCheckAtRef.current >= 10000) {
+          lastHealthCheckAtRef.current = now;
+          const healthController = new AbortController();
+          const healthTimeout = window.setTimeout(() => healthController.abort(), 4000);
+          void fetch(apiBase.replace(/\\/$/, '') + '/health', {
+            headers: { Accept: 'application/json' },
+            signal: healthController.signal,
+          }).then((response) => {
+            if (disposed) return;
+            setApiHealth(response.ok ? 'online' : 'offline');
+          }).catch(() => {
+            if (!disposed) setApiHealth('offline');
+          }).finally(() => window.clearTimeout(healthTimeout));
+        }
+        const pollOtherGames = now - otherGamesPollAtRef.current >= 1500;
         if (pollOtherGames) otherGamesPollAtRef.current = Date.now();
         const gamePaths = [
           ['aviator', '/games/aviator/state'],
@@ -213,21 +241,39 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // all live-state updates (or leave the global connection badge Offline).
         const results = await Promise.all(gamePaths.map(async ([key, path]) => {
           const controller = new AbortController();
-          const timeoutId = window.setTimeout(() => controller.abort(), 5000);
+          const timeoutId = window.setTimeout(() => controller.abort(), key === 'aviator' ? 7000 : 5000);
           try {
             const response = await fetch(apiBase + path, {
               headers: { Accept: 'application/json' },
               signal: controller.signal,
             });
-            if (!response.ok) return { key, data: null };
-            return { key, data: await response.json() };
-          } catch {
-            return { key, data: null };
+            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}` };
+            const data = await response.json();
+            return { key, data, error: null };
+          } catch (error) {
+            return { key, data: null, error: error instanceof Error ? (error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR') : 'NETWORK_ERROR' };
           } finally {
             window.clearTimeout(timeoutId);
           }
         }));
         const aviatorResult = results.find(({ key }) => key === 'aviator');
+        const validAviatorState = Boolean(aviatorResult?.data && typeof aviatorResult.data === 'object' &&
+          (aviatorResult.data.round || Array.isArray(aviatorResult.data.history)));
+        if (validAviatorState) {
+          const successAt = Date.now();
+          lastSuccessfulRoundAtRef.current = successAt;
+          setLastSuccessfulRoundAt(successAt);
+          setRoundDataStatus('fresh');
+          setLastRoundError(null);
+          setIsConnected(true);
+        } else {
+          const error = aviatorResult?.error || 'INVALID_ROUND_RESPONSE';
+          setLastRoundError(error);
+          const lastSuccess = lastSuccessfulRoundAtRef.current;
+          const age = lastSuccess === null ? Infinity : Date.now() - lastSuccess;
+          setRoundDataStatus(age <= 15000 ? 'stale' : 'offline');
+          setIsConnected(age <= 15000);
+        }
         for (const { key, data } of results) {
           if (!data) continue;
           if (key === 'aviator') {
@@ -307,24 +353,28 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (Array.isArray(data.bets)) setAndarBaharLiveBets(data.bets as any);
           }
         }
-        // The header's Live/Offline indicator tracks the primary Aviator API,
-        // not whether an unrelated secondary game endpoint happened to respond.
-        setIsConnected(Boolean(aviatorResult?.data));
+        // The connection badge is based on valid Aviator round-feed freshness;
+        // secondary game endpoints do not change this status.
         setIsSimulatedFallback(false);
       } catch {
-        setIsConnected(false);
+        const lastSuccess = lastSuccessfulRoundAtRef.current;
+        const stillWithinGrace = lastSuccess !== null && Date.now() - lastSuccess <= 15000;
+        setIsConnected(stillWithinGrace);
+        setRoundDataStatus(stillWithinGrace ? 'stale' : 'offline');
+        setLastRoundError('POLL_ERROR');
         setIsSimulatedFallback(false);
       } finally {
         inFlight = false;
       }
     };
     void poll();
-    simIntervalRef.current = setInterval(() => { void poll(); }, 500);
+    simIntervalRef.current = setInterval(() => { void poll(); }, 1000);
   };
 
   useEffect(() => {
     connect();
     return () => {
+      disposed = true;
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     };
   }, []);
@@ -352,6 +402,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <WebSocketContext.Provider
       value={{
         isConnected,
+        apiHealth,
+        roundDataStatus,
+        lastSuccessfulRoundAt,
+        lastRoundError,
         isSimulatedFallback,
         multiplier,
         roundState,
