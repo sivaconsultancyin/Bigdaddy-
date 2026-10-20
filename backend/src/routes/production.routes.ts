@@ -382,15 +382,39 @@ productionRouter.post('/games/aviator/bet', requireDatabaseUser, async (req: Aut
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
   try {
     const sql = getDatabaseClient();
-    const active = await sql.unsafe("SELECT id FROM public.game_rounds WHERE game_code='aviator' AND status='WAITING' ORDER BY round_number DESC LIMIT 1");
-    if (!active[0]) return res.status(409).json({ error: 'NO_BETTING_ROUND' });
-    const key = String(req.headers['idempotency-key'] || ('BET_' + randomUUID()));
-    const created = await sql.unsafe('SELECT public.place_crash_bet_atomic($1::uuid,$2::uuid,$3::bigint,$4,$5::numeric) AS id', [actor.id, active[0].id, parsed.data.amount, key, parsed.data.autoCashoutMultiplier ?? null]);
-    const bet = await sql.unsafe('SELECT id,round_id AS "roundId",bet_amount::text AS "betAmount",auto_cashout AS "autoCashout",status FROM public.game_bets WHERE id=$1', [created[0].id]);
-    return res.status(201).json({ bet: bet[0] });
+    const suppliedKey = req.headers['idempotency-key'];
+    const key = String(Array.isArray(suppliedKey) ? suppliedKey[0] : suppliedKey || ('BET_' + randomUUID())).trim();
+    if (key.length < 8 || key.length > 128) return res.status(400).json({ error: 'INVALID_IDEMPOTENCY_KEY' });
+
+    // Lock the WAITING round and place the bet in the same DB transaction.
+    // The engine must wait for this row lock before moving WAITING -> RUNNING.
+    const outcome = await sql.begin(async (tx) => {
+      const active = await tx.unsafe(
+        "SELECT id FROM public.game_rounds WHERE game_code='aviator' AND status='WAITING' ORDER BY round_number DESC LIMIT 1 FOR UPDATE"
+      );
+      if (!active[0]) {
+        const latest = await tx.unsafe(
+          "SELECT status FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1"
+        );
+        return { error: 'NO_BETTING_ROUND', roundStatus: latest[0]?.status ?? null } as const;
+      }
+      const created = await tx.unsafe(
+        'SELECT public.place_crash_bet_atomic($1::uuid,$2::uuid,$3::bigint,$4,$5::numeric) AS id',
+        [actor.id, active[0].id, parsed.data.amount, key, parsed.data.autoCashoutMultiplier ?? null]
+      );
+      const bet = await tx.unsafe(
+        'SELECT id,round_id AS "roundId",bet_amount::text AS "betAmount",auto_cashout AS "autoCashout",status FROM public.game_bets WHERE id=$1',
+        [created[0].id]
+      );
+      return { bet: bet[0] } as const;
+    });
+    if ('error' in outcome) return res.status(409).json(outcome);
+    return res.status(201).json({ bet: outcome.bet });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'BET_FAILED';
-    if (message.includes('INSUFFICIENT_FUNDS') || message.includes('GAME_POOL_INSUFFICIENT')) return res.status(400).json({ error: message });
+    if (message.includes('INSUFFICIENT_FUNDS') || message.includes('GAME_POOL_INSUFFICIENT') || message.includes('BET_OUT_OF_RANGE')) return res.status(400).json({ error: message });
+    if (message.includes('BETTING_CLOSED') || message.includes('ROUND_NOT_FOUND')) return res.status(409).json({ error: 'BETTING_CLOSED' });
+    if (message.includes('IDEMPOTENCY_KEY_REUSE')) return res.status(409).json({ error: 'IDEMPOTENCY_KEY_REUSE' });
     console.error('Crash bet failed:', error);
     return res.status(400).json({ error: 'BET_FAILED' });
   }
