@@ -189,7 +189,7 @@ async function tick() {
 
 export function startProductionCrashEngine() {
   if (interval) return;
-  interval = setInterval(() => { void tick(); }, 250);
+  interval = setInterval(() => { void tick(); }, 1000);
   void tick();
   console.log('Persistent Crash engine supervisor started; it activates only after the game is explicitly enabled.');
 }
