@@ -5,6 +5,7 @@ import { AuthService } from '../services/auth.service';
 import { authenticateJWT, requireRole, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { loginSchema, createUserSchema, referralRegisterSchema } from '../../../shared/src/schemas';
 import { UserRole, TransactionType } from '../../../shared/src/types';
+import { config } from '../config';
 
 export const authRouter = Router();
 
@@ -16,35 +17,29 @@ authRouter.post('/login', async (req, res: Response) => {
   }
 
   const { username, password } = parseResult.data;
-  const user = db.getUserByUsername(username);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid username or password' });
+
+  try {
+    if (config.isProduction) {
+      const account = await AuthService.getPersistentAccountByUsername(username);
+      if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
+      const token = AuthService.generateToken(account.user);
+      return res.json({ token, user: account.user, wallet: account.wallet });
+    }
+
+    const user = db.getUserByUsername(username);
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    const token = AuthService.generateToken(user);
+    const wallet = db.getWalletByUserId(user.id);
+    const { passwordHash: _, ...safeUser } = user;
+    return res.json({ token, user: safeUser, wallet });
+  } catch (error) {
+    console.error('Login account lookup failed:', error);
+    return res.status(503).json({ error: 'Login service is temporarily unavailable. Please try again.' });
   }
-
-  const isPasswordValid = bcrypt.compareSync(password, user.passwordHash);
-  if (!isPasswordValid) {
-    return res.status(401).json({ error: 'Invalid username or password' });
-  }
-
-  const token = AuthService.generateToken(user);
-  const wallet = db.getWalletByUserId(user.id);
-  const { passwordHash: _, ...safeUser } = user;
-
-  db.logAudit({
-    actorId: user.id,
-    actorUsername: user.username,
-    actorRole: user.role,
-    action: 'USER_LOGIN',
-    targetType: 'USER',
-    targetId: user.id,
-    details: { ip: req.ip },
-  });
-
-  return res.json({
-    token,
-    user: safeUser,
-    wallet,
-  });
 });
 
 // POST /api/auth/register-referral
@@ -193,12 +188,22 @@ authRouter.post('/create-user', authenticateJWT, async (req: AuthenticatedReques
 });
 
 // GET /api/auth/me
-authRouter.get('/me', authenticateJWT, (req: AuthenticatedRequest, res: Response) => {
+authRouter.get('/me', authenticateJWT, async (req: AuthenticatedRequest, res: Response) => {
+  if (config.isProduction) {
+    try {
+      const account = await AuthService.getPersistentAccountById(req.user!.id);
+      if (!account) return res.status(404).json({ error: 'User not found' });
+      return res.json({ user: account.user, wallet: account.wallet });
+    } catch (error) {
+      console.error('Current-user lookup failed:', error);
+      return res.status(503).json({ error: 'Authentication service is temporarily unavailable. Please try again.' });
+    }
+  }
+
   const user = db.getUserById(req.user!.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const { passwordHash: _, ...safeUser } = user;
-  const wallet = db.getWalletByUserId(user.id);
-  return res.json({ user: safeUser, wallet });
+  return res.json({ user: safeUser, wallet: db.getWalletByUserId(user.id) });
 });
 
 // GET /api/auth/users
