@@ -172,221 +172,28 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   }, []);
 
-  const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<any>(null);
   const simIntervalRef = useRef<any>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
 
   const connect = () => {
     if (typeof window === 'undefined') return;
-    if (import.meta.env.PROD) {
-      startProductionPolling();
-      return;
-    }
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) return;
-
-    try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-      const ws = new WebSocket(wsUrl);
-      socketRef.current = ws;
-
-      ws.onopen = () => {
-        setIsConnected(true);
-        setIsSimulatedFallback(false);
-        if (simIntervalRef.current) {
-          clearInterval(simIntervalRef.current);
-          simIntervalRef.current = null;
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          setLastEvent(parsed);
-
-          if (parsed.event === 'connected') {
-            if (parsed.data.round) setRoundState(parsed.data.round);
-            if (parsed.data.history) setRecentHistory(parsed.data.history);
-            if (parsed.data.rouletteRound) setRouletteRound(parsed.data.rouletteRound);
-            if (parsed.data.rouletteHistory) setRouletteHistory(parsed.data.rouletteHistory);
-            if (parsed.data.rouletteBets) setRouletteLiveBets(parsed.data.rouletteBets);
-            if (parsed.data.andarBaharRound) setAndarBaharRound(parsed.data.andarBaharRound);
-            if (parsed.data.andarBaharHistory) setAndarBaharHistory(parsed.data.andarBaharHistory);
-            if (parsed.data.andarBaharBets) setAndarBaharLiveBets(parsed.data.andarBaharBets);
-            if (parsed.data.dragonTigerRound) setDragonTigerRound(parsed.data.dragonTigerRound);
-            if (parsed.data.dragonTigerHistory) setDragonTigerHistory(parsed.data.dragonTigerHistory);
-            if (parsed.data.dragonTigerBets) setDragonTigerLiveBets(parsed.data.dragonTigerBets);
-            if (parsed.data.diceRound) setDiceRound(parsed.data.diceRound);
-            if (parsed.data.diceHistory) setDiceHistory(parsed.data.diceHistory);
-            if (parsed.data.diceBets) setDiceLiveBets(parsed.data.diceBets);
-          }
-          // Aviator events
-          else if (parsed.event === 'aviator:tick') {
-            setMultiplier(parsed.data.multiplier);
-          } else if (parsed.event === 'aviator:round_waiting') {
-            setRoundState(parsed.data.round);
-            setMultiplier(1.0);
-            if (parsed.data.history) setRecentHistory(parsed.data.history);
-            if (userRef.current) refreshWallet();
-          } else if (parsed.event === 'aviator:round_started') {
-            setRoundState(parsed.data.round);
-            setMultiplier(1.0);
-          } else if (parsed.event === 'aviator:crashed') {
-            setRoundState((prev) => ({
-              ...prev,
-              status: 'CRASHED',
-              crashMultiplier: parsed.data.crashMultiplier,
-            }));
-            setMultiplier(parsed.data.crashMultiplier);
-            if (userRef.current) refreshWallet();
-          } else if (parsed.event === 'aviator:bet_cashed_out') {
-            if (userRef.current) refreshWallet();
-          }
-          // European Roulette Multiplayer Synchronized Events
-          else if (parsed.event === 'roulette:round_betting') {
-            if (parsed.data.round) setRouletteRound(parsed.data.round);
-            if (parsed.data.history) setRouletteHistory(parsed.data.history);
-            setRouletteLiveBets([]);
-            if (userRef.current) refreshWallet();
-          } else if (parsed.event === 'roulette:bet_placed') {
-            if (parsed.data.bet) {
-              setRouletteLiveBets((prev) => [parsed.data.bet, ...prev.slice(0, 19)]);
-            }
-            setRouletteRound((prev) => ({
-              ...prev,
-              totalBetsCount: parsed.data.totalBetsCount ?? prev.totalBetsCount + 1,
-              totalBetAmount: parsed.data.totalBetAmount ?? prev.totalBetAmount,
-            }));
-          } else if (parsed.event === 'roulette:round_spinning') {
-            if (parsed.data.round) {
-              setRouletteRound(parsed.data.round);
-            } else {
-              setRouletteRound((prev) => ({
-                ...prev,
-                status: 'SPINNING',
-                winningNumber: parsed.data.winningNumber,
-                color: parsed.data.color,
-                spinEndsAt: parsed.data.spinEndsAt,
-              }));
-            }
-          } else if (parsed.event === 'roulette:round_result') {
-            if (parsed.data.round) setRouletteRound(parsed.data.round);
-            if (parsed.data.history) setRouletteHistory(parsed.data.history);
-            if (userRef.current) refreshWallet();
-          }
-          // Andar Bahar Synchronized Multiplayer Events
-          else if (parsed.event === 'andar_bahar:round_betting') {
-            if (parsed.data.round) setAndarBaharRound(parsed.data.round);
-            if (parsed.data.history) setAndarBaharHistory(parsed.data.history);
-            setAndarBaharLiveBets([]);
-            if (userRef.current) refreshWallet();
-          } else if (parsed.event === 'andar_bahar:round_dealing') {
-            if (parsed.data.round) setAndarBaharRound(parsed.data.round);
-          } else if (parsed.event === 'andar_bahar:card_dealt') {
-            setAndarBaharRound((prev) => {
-              return {
-                ...prev,
-                status: AndarBaharRoundStatus.DEALING,
-                dealCards: [...prev.dealCards, parsed.data.item],
-                totalCardsDealt: parsed.data.totalDealt,
-              };
-            });
-          } else if (parsed.event === 'andar_bahar:bet_placed') {
-            if (parsed.data.bets && Array.isArray(parsed.data.bets)) {
-              setAndarBaharLiveBets((prev) => [...parsed.data.bets, ...prev.slice(0, 19)]);
-            }
-            if (parsed.data.round) {
-              setAndarBaharRound((prev) => ({
-                ...prev,
-                totalBetsCount: parsed.data.round.totalBetsCount,
-                totalBetAmount: parsed.data.round.totalBetAmount,
-                andarBetAmount: parsed.data.round.andarBetAmount,
-                baharBetAmount: parsed.data.round.baharBetAmount,
-              }));
-            }
-          } else if (parsed.event === 'andar_bahar:round_result') {
-            if (parsed.data.round) setAndarBaharRound(parsed.data.round);
-            if (parsed.data.history) setAndarBaharHistory(parsed.data.history);
-            if (userRef.current) refreshWallet();
-          }
-          // Dragon Tiger Synchronized Multiplayer Events
-          else if (parsed.event === 'dragon_tiger:round_betting') {
-            if (parsed.data.round) setDragonTigerRound(parsed.data.round);
-            if (parsed.data.history) setDragonTigerHistory(parsed.data.history);
-            setDragonTigerLiveBets([]);
-            if (userRef.current) refreshWallet();
-          } else if (parsed.event === 'dragon_tiger:round_revealing') {
-            if (parsed.data.round) setDragonTigerRound(parsed.data.round);
-          } else if (parsed.event === 'dragon_tiger:bet_placed') {
-            if (parsed.data.bets && Array.isArray(parsed.data.bets)) {
-              setDragonTigerLiveBets((prev) => [...parsed.data.bets, ...prev.slice(0, 19)]);
-            }
-            if (parsed.data.round) {
-              setDragonTigerRound((prev) => ({
-                ...prev,
-                totalBetsCount: parsed.data.round.totalBetsCount,
-                totalBetAmount: parsed.data.round.totalBetAmount,
-                dragonBetAmount: parsed.data.round.dragonBetAmount,
-                tigerBetAmount: parsed.data.round.tigerBetAmount,
-                tieBetAmount: parsed.data.round.tieBetAmount,
-              }));
-            }
-          } else if (parsed.event === 'dragon_tiger:round_result') {
-            if (parsed.data.round) setDragonTigerRound(parsed.data.round);
-            if (parsed.data.history) setDragonTigerHistory(parsed.data.history);
-            if (userRef.current) refreshWallet();
-          }
-          // Lucky 10 Dice Synchronized Multiplayer Events
-          else if (parsed.event === 'dice:round_betting') {
-            if (parsed.data.round) setDiceRound(parsed.data.round);
-            if (parsed.data.history) setDiceHistory(parsed.data.history);
-            setDiceLiveBets([]);
-            if (userRef.current) refreshWallet();
-          } else if (parsed.event === 'dice:round_rolling') {
-            if (parsed.data.round) setDiceRound(parsed.data.round);
-          } else if (parsed.event === 'dice:bet_placed') {
-            if (parsed.data.bets && Array.isArray(parsed.data.bets)) {
-              setDiceLiveBets((prev) => [...parsed.data.bets, ...prev.slice(0, 19)]);
-            }
-            if (parsed.data.round) {
-              setDiceRound((prev) => ({
-                ...prev,
-                totalBetsCount: parsed.data.round.totalBetsCount,
-                totalBetAmount: parsed.data.round.totalBetAmount,
-                numberBetsAmount: parsed.data.round.numberBetsAmount,
-              }));
-            }
-          } else if (parsed.event === 'dice:round_result') {
-            if (parsed.data.round) setDiceRound(parsed.data.round);
-            if (parsed.data.history) setDiceHistory(parsed.data.history);
-            if (userRef.current) refreshWallet();
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-      };
-
-      ws.onclose = () => {
-        setIsConnected(false);
-        socketRef.current = null;
-        reconnectTimeoutRef.current = setTimeout(connect, 4000);
-      };
-
-      ws.onerror = () => {
-        setIsConnected(false);
-      };
-    } catch (e) {
-      setIsConnected(false);
-      reconnectTimeoutRef.current = setTimeout(connect, 4000);
-    }
+    // Every game state update comes from the backend's durable, authoritative API.
+    // Do not connect to legacy WebSocket handlers backed by in-memory game engines.
+    startProductionPolling();
   };
 
   const startProductionPolling = () => {
     if (simIntervalRef.current) return;
     let inFlight = false;
-    const apiBase = import.meta.env.VITE_API_BASE_URL || 'https://bigdaddy-backend.onrender.com/api';
+    const apiBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
+    const refreshWalletForResult = (key: string, round: any) => {
+      if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
+      const resultKey = `${round.id}:${round.status}`;
+      if (productionResultIdsRef.current[key] === resultKey) return;
+      productionResultIdsRef.current[key] = resultKey;
+      if (userRef.current) refreshWallet();
+    };
     const poll = async () => {
       if (inFlight) return;
       inFlight = true;
@@ -426,14 +233,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 crashMultiplier: round.crashMultiplier ?? undefined,
               });
               setMultiplier(Number(round.multiplier || 1));
+              refreshWalletForResult('aviator', round);
             }
             if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
             setLastEvent({ event: 'production:crash_state', data });
           } else if (key === 'roulette') {
             if (data.round) {
               setRouletteRound(data.round);
-              if (data.round.status === 'RESULT' && productionResultIdsRef.current.roulette !== data.round.id) {
-                productionResultIdsRef.current.roulette = data.round.id;
+              if (data.round.status === 'RESULT' && productionResultIdsRef.current.roulette !== `${data.round.id}:${data.round.status}`) {
                 setLastEvent({ event: 'roulette:round_result', data: {
                   round: data.round,
                   winningNumber: data.round.winningNumber,
@@ -441,6 +248,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   history: data.history,
                 } });
               }
+              refreshWalletForResult('roulette', data.round);
             }
             if (Array.isArray(data.history)) {
               setRouletteHistory(data.history.map((item: any) => ({
@@ -454,20 +262,29 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               amount: String(b.amount), numbers: b.selection?.numbers,
             })));
           } else if (key === 'dice') {
-            if (data.round) setDiceRound(data.round as any);
+            if (data.round) {
+              setDiceRound(data.round as any);
+              refreshWalletForResult('dice', data.round);
+            }
             if (Array.isArray(data.history)) setDiceHistory(data.history.map((h: any) => ({
               ...h, rolledNumber: h.result?.number ?? h.rolledNumber,
             })) as any);
             if (Array.isArray(data.allBets || data.bets)) setDiceLiveBets((data.allBets || data.bets) as any);
           } else if (key === 'dragonTiger') {
-            if (data.round) setDragonTigerRound(data.round as any);
+            if (data.round) {
+              setDragonTigerRound(data.round as any);
+              refreshWalletForResult('dragonTiger', data.round);
+            }
             if (Array.isArray(data.history)) setDragonTigerHistory(data.history.map((h: any) => ({
               ...h, dragonCard: h.result?.dragonCard, tigerCard: h.result?.tigerCard,
               winner: h.result?.winner,
             })) as any);
             if (Array.isArray(data.bets)) setDragonTigerLiveBets(data.bets as any);
           } else if (key === 'andarBahar') {
-            if (data.round) setAndarBaharRound(data.round as any);
+            if (data.round) {
+              setAndarBaharRound(data.round as any);
+              refreshWalletForResult('andarBahar', data.round);
+            }
             if (Array.isArray(data.history)) setAndarBaharHistory(data.history.map((h: any) => ({
               ...h,
               jokerCard: h.result?.jokerCard,
@@ -494,18 +311,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     connect();
-
-    const pingInterval = setInterval(() => {
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify({ action: 'ping' }));
-      }
-    }, 15000);
-
     return () => {
-      clearInterval(pingInterval);
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (socketRef.current) socketRef.current.close();
     };
   }, []);
 
