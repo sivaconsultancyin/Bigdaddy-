@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { login, loading, configInfo } = useAuth();
+  const { login, configInfo } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +32,13 @@ export const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsSubmitting(true);
     try {
-      await login({ username, password });
+      await login({ username: username.trim(), password });
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(err?.message || err?.error || 'Authentication failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -129,10 +133,10 @@ export const Login: React.FC = () => {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={isSubmitting}
               className="w-full py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 transition active:scale-[0.98] disabled:opacity-50 uppercase tracking-wider min-h-[44px]"
             >
-              {loading ? 'Authenticating...' : 'Sign In'}
+              {isSubmitting ? 'Authenticating...' : 'Sign In'}
             </button>
           </form>
 
