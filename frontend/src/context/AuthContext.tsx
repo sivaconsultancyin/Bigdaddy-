@@ -113,7 +113,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (credentials: { username: string; password: string }) => {
-    setLoading(true);
+    // `loading` controls the app's initial session bootstrap. Do not toggle it
+    // during a login attempt: App may unmount Login while loading is true,
+    // discarding the component's error state when authentication fails.
     setAuthError(null);
     try {
       const data = await ApiClient.login(credentials);
@@ -128,8 +130,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setConfigError(err.message);
       }
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 
