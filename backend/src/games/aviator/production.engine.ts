@@ -30,6 +30,13 @@ async function tick() {
       );
       if (!lockRows[0]?.locked) return null;
 
+      // Recover any previously crashed round first, even if the game has
+      // since been disabled or a newer round was created by an operator.
+      const crashedRows = await sql.unsafe(
+        "SELECT id FROM public.game_rounds WHERE game_code='aviator' AND status='CRASHED' ORDER BY round_number DESC LIMIT 1"
+      );
+      if (crashedRows[0]?.id) return crashedRows[0].id;
+
       const games = await sql.unsafe("SELECT id,pool_wallet_id FROM public.games WHERE code='aviator' AND status='ACTIVE' LIMIT 1");
       if (!games[0]) return null;
 
@@ -46,10 +53,6 @@ async function tick() {
       }
 
       const round = rows[0] as unknown as { id: string; round_number: number; status: string; started_at: string; ended_at: string | null; server_seed: string; crash_multiplier: string | number; elapsed_seconds: string | number };
-
-      // Recovery path: CRASHED is durable now, so a failed settlement can be
-      // retried by a later tick without replaying the crash transition.
-      if (round.status === 'CRASHED') return round.id;
 
       // Use PostgreSQL's clock for round progression, never the host clock.
       const ageSeconds = Math.max(0, Number(round.elapsed_seconds) || 0);
