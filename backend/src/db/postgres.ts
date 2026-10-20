@@ -16,9 +16,8 @@ function createClient(connectionString: string): ReturnType<typeof postgres> {
     max: 5,
     idle_timeout: 20,
     connect_timeout: 10,
-    // Bound query wait time, including time spent queued for a pooled connection.
-    // This prevents one stuck database operation from holding a game-engine tick busy indefinitely.
-    query_timeout: 20000,
+    // Apply server-side limits at connection startup so stalled statements/locks fail closed.
+    connection: { statement_timeout: '20000', lock_timeout: '2000' },
     prepare: false,
   });
 }
