@@ -7,7 +7,6 @@ import { config, getPublicConfigInfo } from './backend/src/config';
 import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres';
 import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
-import { startProductionCrashEngine } from './backend/src/games/aviator/production.engine';
 import { authoritativeGamesRouter, startAuthoritativeGameEngine } from './backend/src/routes/authoritative-games.routes';
 import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
 
@@ -24,7 +23,6 @@ async function startServer() {
       console.log('✅ Supabase PostgreSQL connectivity check passed.');
       if (config.isProduction) {
         await bootstrapOwnerFromEnvironment();
-        startProductionCrashEngine();
         startAuthoritativeGameEngine();
         productionServicesStarted = true;
       }
@@ -164,7 +162,6 @@ async function startServer() {
         }
         if (isDatabaseConnected() && !productionServicesStarted) {
           await bootstrapOwnerFromEnvironment();
-          startProductionCrashEngine();
           startAuthoritativeGameEngine();
           productionServicesStarted = true;
         }
