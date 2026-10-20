@@ -5,7 +5,7 @@ import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
-import { makeResult, payoutMultiplier, validateSelection } from '../backend/src/routes/authoritative-games.routes';
+import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay } from '../backend/src/routes/authoritative-games.routes';
 
 let passed = 0;
 let failed = 0;
@@ -248,6 +248,23 @@ async function runTestSuite() {
   });
 
   console.log('\n======================================================');
+  test('Authoritative games reject every non-PLAYER role', () => {
+    assert.strictEqual(isPlayerRole(UserRole.PLAYER), true);
+    assert.strictEqual(isPlayerRole('player'), true);
+    assert.strictEqual(isPlayerRole(UserRole.ADMIN), false);
+    assert.strictEqual(isPlayerRole('SUPER_ADMIN'), false);
+    assert.strictEqual(isPlayerRole(undefined), false);
+  });
+
+  test('Idempotency replay is restricted to the same game, user, and amount', () => {
+    const prior = { game_code: 'roulette', user_id: 'user-1', amount: '100' };
+    assert.strictEqual(isCompatibleIdempotencyReplay(prior, 'roulette', 'user-1', 100), true);
+    assert.strictEqual(isCompatibleIdempotencyReplay(prior, 'dice', 'user-1', 100), false);
+    assert.strictEqual(isCompatibleIdempotencyReplay(prior, 'roulette', 'user-2', 100), false);
+    assert.strictEqual(isCompatibleIdempotencyReplay(prior, 'roulette', 'user-1', 200), false);
+    assert.strictEqual(isCompatibleIdempotencyReplay(undefined, 'roulette', 'user-1', 100), false);
+  });
+
   console.log(`Results: ${passed} Passed, ${failed} Failed`);
   console.log('======================================================\n');
 

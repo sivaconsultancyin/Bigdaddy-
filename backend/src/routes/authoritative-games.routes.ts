@@ -4,9 +4,26 @@ import { getDatabaseClient } from '../db/postgres';
 import { AuthService } from '../services/auth.service';
 
 export const authoritativeGamesRouter = Router();
-type Actor = { id: string; username: string };
+type Actor = { id: string; username: string; role: string };
 type AuthRequest = Request & { actor?: Actor };
 export type GameCode = 'roulette' | 'dice' | 'dragon_tiger' | 'andar_bahar';
+export function isPlayerRole(role: unknown): boolean {
+  return String(role ?? '').toUpperCase() === 'PLAYER';
+}
+
+export function isCompatibleIdempotencyReplay(
+  existing: any,
+  code: GameCode,
+  userId: string,
+  amount: unknown,
+): boolean {
+  return Boolean(
+    existing &&
+    existing.game_code === code &&
+    existing.user_id === userId &&
+    String(existing.amount) === String(amount)
+  );
+}
 
 const GAME_CODES: GameCode[] = ['roulette', 'dice', 'dragon_tiger', 'andar_bahar'];
 const CODE_ALIASES: Record<string, GameCode> = {
@@ -36,9 +53,12 @@ async function auth(req: AuthRequest, res: Response, next: NextFunction) {
     const token = AuthService.verifyToken(header.slice(7));
     if (!token?.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
     const rows = await getDatabaseClient().unsafe(
-      'SELECT id,username FROM public.users WHERE id=$1 AND is_active=true LIMIT 1', [token.id],
+      'SELECT id,username,role FROM public.users WHERE id=$1 AND is_active=true LIMIT 1', [token.id],
     );
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
+    if (!isPlayerRole(rows[0].role)) {
+      return res.status(403).json({ error: 'PLAYER_ROLE_REQUIRED' });
+    }
     req.actor = rows[0] as unknown as Actor;
     return next();
   } catch (error) {
@@ -288,7 +308,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
     if (!(await hasRuntimeSchema())) return res.status(503).json({ error: 'GAME_RUNTIME_MIGRATION_REQUIRED' });
     const replayKeys = rawBets.map((_: any, index: number) => rawBets.length === 1 ? idempotencyBase : idempotencyBase + '_' + index);
     const existingRows = await sql.unsafe(
-      'SELECT id,user_id,round_id,bet_amount::text AS amount,selection,status,payout_amount::text AS "payoutAmount",idempotency_key FROM public.authoritative_game_bets WHERE idempotency_key = ANY($1::text[])',
+      'SELECT b.id,b.user_id,b.round_id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",b.idempotency_key,r.game_code FROM public.authoritative_game_bets b JOIN public.authoritative_game_rounds r ON r.id=b.round_id WHERE b.idempotency_key = ANY($1::text[])',
       [replayKeys],
     );
     if (existingRows.length > 0) {
@@ -297,7 +317,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
       for (let i = 0; i < rawBets.length; i++) {
         const existing = existingRows.find((row: any) => row.idempotency_key === replayKeys[i]);
         const selection = rawBets[i].selection || rawBets[i];
-        if (!existing || existing.user_id !== req.actor!.id || String(existing.amount) !== String(rawBets[i].amount)) {
+        if (!existing || !isCompatibleIdempotencyReplay(existing, code, req.actor!.id, rawBets[i].amount)) {
           throw new Error('IDEMPOTENCY_KEY_REUSE');
         }
         const same = await sql.unsafe(
