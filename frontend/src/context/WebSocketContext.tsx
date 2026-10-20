@@ -209,19 +209,27 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             ['andarBahar', '/games/andar-bahar/state'],
           ] as const : []),
         ] as const;
+        // Bound every poll so one stalled game endpoint cannot permanently block
+        // all live-state updates (or leave the global connection badge Offline).
         const results = await Promise.all(gamePaths.map(async ([key, path]) => {
+          const controller = new AbortController();
+          const timeoutId = window.setTimeout(() => controller.abort(), 5000);
           try {
-            const response = await fetch(apiBase + path, { headers: { Accept: 'application/json' } });
+            const response = await fetch(apiBase + path, {
+              headers: { Accept: 'application/json' },
+              signal: controller.signal,
+            });
             if (!response.ok) return { key, data: null };
             return { key, data: await response.json() };
           } catch {
             return { key, data: null };
+          } finally {
+            window.clearTimeout(timeoutId);
           }
         }));
-        let anySuccess = false;
+        const aviatorResult = results.find(({ key }) => key === 'aviator');
         for (const { key, data } of results) {
           if (!data) continue;
-          anySuccess = true;
           if (key === 'aviator') {
             if (data.round) {
               const round = data.round;
@@ -296,7 +304,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (Array.isArray(data.bets)) setAndarBaharLiveBets(data.bets as any);
           }
         }
-        setIsConnected(anySuccess);
+        // The header's Live/Offline indicator tracks the primary Aviator API,
+        // not whether an unrelated secondary game endpoint happened to respond.
+        setIsConnected(Boolean(aviatorResult?.data));
         setIsSimulatedFallback(false);
       } catch {
         setIsConnected(false);
