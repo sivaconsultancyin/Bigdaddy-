@@ -27,9 +27,12 @@ export function isCompatibleIdempotencyReplay(
 
 export function canReserveLiability(balance: unknown, reserved: unknown, liability: unknown): boolean {
   try {
-    const available = BigInt(String(balance)) - BigInt(String(reserved));
+    const total = BigInt(String(balance));
+    const alreadyReserved = BigInt(String(reserved));
     const required = BigInt(String(liability));
-    return available >= 0n && required >= 0n && available >= required;
+    if (total < 0n || alreadyReserved < 0n || required < 0n) return false;
+    const available = total - alreadyReserved;
+    return available >= required;
   } catch {
     return false;
   }
