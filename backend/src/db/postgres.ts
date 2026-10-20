@@ -9,14 +9,19 @@ import postgres from 'postgres';
  * Never expose either URL to Vite or the browser bundle.
  */
 let client: ReturnType<typeof postgres> | null = null;
+let engineClient: ReturnType<typeof postgres> | null = null;
+let activeConnectionString: string | null = null;
 let connected = false;
 
-function createClient(connectionString: string): ReturnType<typeof postgres> {
+function createClient(
+  connectionString: string,
+  max = 5,
+): ReturnType<typeof postgres> {
   return postgres(connectionString, {
-    max: 5,
+    max,
     idle_timeout: 20,
     connect_timeout: 8,
-    // Apply server-side limits at connection startup so stalled statements/locks fail closed.
+    // Bound database work even when a request is waiting on a lock or query.
     connection: { statement_timeout: 20000, lock_timeout: 2000 },
     prepare: false,
   });
@@ -26,6 +31,7 @@ export async function connectDatabase(): Promise<boolean> {
   const connectionString = process.env.DATABASE_URL?.trim();
   if (!connectionString) {
     connected = false;
+    activeConnectionString = null;
     return false;
   }
 
@@ -33,6 +39,7 @@ export async function connectDatabase(): Promise<boolean> {
   try {
     await directClient`select 1 as connection_check`;
     client = directClient;
+    activeConnectionString = connectionString;
     connected = true;
     return true;
   } catch (error) {
@@ -47,12 +54,14 @@ export async function connectDatabase(): Promise<boolean> {
       try {
         await poolerClient`select 1 as connection_check`;
         client = poolerClient;
+        activeConnectionString = poolerUrl;
         connected = true;
         console.info('Supabase PostgreSQL connected through the configured session pooler.');
         return true;
       } catch (fallbackError) {
         await poolerClient.end({ timeout: 2 }).catch(() => undefined);
         connected = false;
+        activeConnectionString = null;
         const fallbackMessage = fallbackError instanceof Error
           ? fallbackError.message
           : 'unknown error';
@@ -63,6 +72,7 @@ export async function connectDatabase(): Promise<boolean> {
     }
 
     connected = false;
+    activeConnectionString = null;
     if (shouldTryPooler && !poolerUrl) {
       throw new Error(
         `Supabase PostgreSQL direct connection failed: ${message}. Configure DATABASE_POOLER_URL using the exact Session Pooler URI from Supabase Dashboard → Connect.`,
@@ -79,13 +89,34 @@ export function getDatabaseClient(): ReturnType<typeof postgres> {
   return client;
 }
 
+/**
+ * Keep the persistent game loop off the user/API connection pool. A stalled
+ * engine query must not consume every connection used by login, wallet, and
+ * bet endpoints. One connection is enough because the engine serializes ticks.
+ */
+export function getEngineDatabaseClient(): ReturnType<typeof postgres> {
+  if (!connected || !activeConnectionString) {
+    throw new Error('Database is not connected. Configure DATABASE_URL on the backend.');
+  }
+  if (!engineClient) {
+    engineClient = createClient(activeConnectionString, 1);
+  }
+  return engineClient;
+}
+
 export function isDatabaseConnected(): boolean {
   return connected;
 }
 
 export async function closeDatabase(): Promise<void> {
   const current = client;
+  const currentEngine = engineClient;
   client = null;
+  engineClient = null;
+  activeConnectionString = null;
   connected = false;
-  if (current) await current.end({ timeout: 5 });
+  await Promise.all([
+    current?.end({ timeout: 5 }),
+    currentEngine?.end({ timeout: 5 }),
+  ]);
 }
