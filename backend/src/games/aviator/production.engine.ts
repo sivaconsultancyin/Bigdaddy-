@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { getDatabaseClient } from '../../db/postgres';
+import { getEngineDatabaseClient } from '../../db/postgres';
 
 let interval: NodeJS.Timeout | null = null;
 let busy = false;
@@ -29,7 +29,7 @@ async function tick() {
   busySince = Date.now();
   let phase = 'acquire database client';
   try {
-    const client = getDatabaseClient();
+    const client = getEngineDatabaseClient();
 
     // Commit the CRASHED state before attempting settlement. If settlement fails,
     // the next tick can see CRASHED and retry instead of rolling the round back
