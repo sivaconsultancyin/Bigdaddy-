@@ -31,7 +31,9 @@ export class ApiClient {
 
     // Never leave the login button spinning forever if the API or database stalls.
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+    // Render Free services may need more than 15 seconds to wake from sleep.
+    // Allow time for cold start while backend/database limits remain enforced.
+    const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
@@ -49,7 +51,7 @@ export class ApiClient {
       return data as T;
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new Error('The server did not respond within 15 seconds. Please try again; if this continues, the server/database connection needs attention.');
+        throw new Error('The server did not respond within 45 seconds. Please try again; if this continues, the server/database connection needs attention.');
       }
       if (error instanceof TypeError) {
         throw new Error('Could not reach the server. Check the connection and try again.');
