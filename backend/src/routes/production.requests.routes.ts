@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { getDatabaseClient } from '../db/postgres';
+import { getAuthDatabaseClient, getDatabaseClient } from '../db/postgres';
 import { AuthService } from '../services/auth.service';
 import { tokenRequestSchema, approveTokenRequestSchema, rejectTokenRequestSchema } from '../../../shared/src/schemas';
 import { UserRole, TransactionType } from '../../../shared/src/types';
@@ -14,7 +14,7 @@ async function auth(req: AuthReq, res: Response, next: NextFunction) {
     if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'AUTH_REQUIRED' });
     const payload = AuthService.verifyToken(header.slice(7));
     if (!payload?.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const rows = await sql.unsafe('SELECT u.id,u.username,u.parent_id,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.id=$1 AND u.is_active=true LIMIT 1', [payload.id]);
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND' });
     req.actor = rows[0] as unknown as RequestUser;

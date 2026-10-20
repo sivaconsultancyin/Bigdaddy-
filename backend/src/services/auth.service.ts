@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import { getDatabaseClient } from '../db/postgres';
+import { getAuthDatabaseClient } from '../db/postgres';
 import { db } from '../db/storage';
 import { UserRole, User, Wallet, WalletType } from '../../../shared/src/types';
 
@@ -33,7 +33,7 @@ export class AuthService {
   }
 
   private static async findPersistentAccount(column: 'username' | 'id', value: string): Promise<PersistentAccount | null> {
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const rows = column === 'username'
       ? await sql`
           select u.id::text as id, u.username, u.email, u.password_hash as "passwordHash",
