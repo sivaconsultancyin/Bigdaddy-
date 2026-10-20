@@ -1,6 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server as HttpServer } from 'http';
-import { aviatorEngine } from '../games/aviator/aviator.engine';
 import { rouletteEngine } from '../games/roulette/roulette.engine';
 import { andarBaharEngine } from '../games/andar-bahar/andar-bahar.engine';
 import { dragonTigerEngine } from '../games/dragon-tiger/dragon-tiger.engine';
@@ -16,8 +15,6 @@ export function setupWebSocketServer(server: HttpServer) {
         event: 'connected',
         data: {
           timestamp: Date.now(),
-          round: aviatorEngine.getPublicRoundState(),
-          history: aviatorEngine.getHistory(),
           rouletteRound: rouletteEngine.getPublicRoundState(),
           rouletteHistory: rouletteEngine.getHistory(),
           rouletteBets: rouletteEngine.getCurrentRoundBets(),
@@ -44,16 +41,6 @@ export function setupWebSocketServer(server: HttpServer) {
         // Ignore malformed client message
       }
     });
-  });
-
-  // Connect authoritative Aviator game engine events to connected clients
-  aviatorEngine.subscribe((event: string, data: any) => {
-    const payload = JSON.stringify({ event, data });
-    for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(payload);
-      }
-    }
   });
 
   // Connect authoritative European Roulette game engine events to connected clients
