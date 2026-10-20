@@ -258,23 +258,24 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   };
 
   // If a game screen is active, render it exclusively for Player accounts
-  if (isPlayer && activeGameCode) {
-    if (activeGameCode === 'aviator') {
+  const normalizedActiveGameCode = activeGameCode?.replace(/_/g, '-') || null;
+  if (isPlayer && normalizedActiveGameCode) {
+    if (normalizedActiveGameCode === 'aviator') {
       return <AviatorGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
-    if (activeGameCode === 'roulette') {
+    if (normalizedActiveGameCode === 'roulette') {
       return <RouletteGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
-    if (activeGameCode === 'teen-patti') {
+    if (normalizedActiveGameCode === 'teen-patti') {
       return <TeenPattiGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
-    if (activeGameCode === 'andar-bahar') {
+    if (normalizedActiveGameCode === 'andar-bahar') {
       return <AndarBaharGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
-    if (activeGameCode === 'dragon-tiger') {
+    if (normalizedActiveGameCode === 'dragon-tiger') {
       return <DragonTigerGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
-    if (activeGameCode === 'dice') {
+    if (normalizedActiveGameCode === 'dice') {
       return <DiceGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
   }
@@ -297,7 +298,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     { id: 'catalog-andar-bahar', code: 'andar-bahar', name: 'Andar Bahar', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-andar-bahar-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'Andar Bahar card game', iconName: 'Layers', route: '/games/andar-bahar' },
   ];
   const gamesForDisplay = playerGameCatalog.map((catalogGame) => {
-    const apiGame = games.find((game) => game.code === catalogGame.code);
+    const apiGame = games.find((game) => game.code.replace(/-/g, '_') === catalogGame.code.replace(/-/g, '_'));
     return apiGame ? { ...catalogGame, ...apiGame } : catalogGame;
   });
 

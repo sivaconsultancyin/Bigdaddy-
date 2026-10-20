@@ -155,7 +155,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     if (roundState.status === 'ROLLING') {
       diceAudio.playShakeSound();
       const cycleInterval = setInterval(() => {
-        setCycleDisplayNumber(Math.floor(Math.random() * 10) + 1);
+        setCycleDisplayNumber((previous) => ((previous ?? 0) % 10) + 1);
       }, 60);
 
       const timeout = setTimeout(() => {

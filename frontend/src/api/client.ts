@@ -159,16 +159,16 @@ export class ApiClient {
     return this.request('/games/list');
   }
 
-  public static async allocatePool(payload: { gameId: string; amount: string }) {
-    const allocation = await this.request<{ transactionId: string; poolBalance: string }>('/wallet/game-pool', {
+  public static async allocatePool(payload: { gameId?: string; gameCode?: string; amount: string }) {
+    const gameCode = payload.gameCode || 'aviator';
+    const allocation = await this.request<{ transactionId: string; poolBalance: string; gameCode: string }>('/wallet/game-pool', {
       method: 'POST',
-      headers: { 'Idempotency-Key': `POOL_ALLOCATION_${crypto.randomUUID()}` },
-      body: JSON.stringify({ amount: payload.amount }),
+      headers: { 'Idempotency-Key': `POOL_ALLOCATION_${gameCode}_${crypto.randomUUID()}` },
+      body: JSON.stringify({ amount: payload.amount, gameCode }),
     });
 
-    // Production game activation is a separate Owner-only endpoint. Activate only
-    // after the Treasury-to-pool transfer has succeeded.
-    const activation = await this.request<{ status: string; poolBalance: string }>('/games/aviator/activate', {
+    // Activate only after the Treasury-to-pool transfer succeeds.
+    const activation = await this.request<{ status: string; poolBalance: string; gameCode?: string }>(`/games/${encodeURIComponent(gameCode)}/activate`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
@@ -208,6 +208,7 @@ export class ApiClient {
   public static spinRoulette(payload: { bets: Array<{ type: string; numbers: number[]; amount: string }> }) {
     return this.request('/games/roulette/spin', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'roulette-spin-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -215,6 +216,7 @@ export class ApiClient {
   public static placeRouletteBet(payload: { bets: Array<{ type: string; numbers: number[]; amount: string }> }) {
     return this.request('/games/roulette/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'roulette-bet-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -246,6 +248,7 @@ export class ApiClient {
   public static placeAndarBaharBet(payload: { bets: Array<{ type: string; amount: string }> }) {
     return this.request('/games/andar-bahar/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'andar-bahar-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -258,6 +261,7 @@ export class ApiClient {
   public static placeDragonTigerBet(payload: { bets: Array<{ type: string; amount: string }> }) {
     return this.request('/games/dragon-tiger/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'dragon-tiger-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -278,6 +282,7 @@ export class ApiClient {
   }) {
     return this.request('/games/dice/roll', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'dice-roll-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }
@@ -285,6 +290,7 @@ export class ApiClient {
   public static placeDiceBet(payload: { bets: Array<{ type: string; amount: string }> }) {
     return this.request('/games/dice/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': 'dice-bet-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   }

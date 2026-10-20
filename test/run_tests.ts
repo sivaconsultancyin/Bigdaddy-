@@ -5,6 +5,7 @@ import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
+import { makeResult, payoutMultiplier, validateSelection } from '../backend/src/routes/authoritative-games.routes';
 
 let passed = 0;
 let failed = 0;
@@ -203,6 +204,47 @@ async function runTestSuite() {
     const err = new ProductionConfigError(missing);
     assert.ok(err.message.includes('PRODUCTION CONFIGURATION ERROR'));
     assert.strictEqual(err.missingVariables.length, 3);
+  });
+
+  // Authoritative game rules: outcomes are deterministic from the private round seed.
+  test('Authoritative Roulette result stays within the European wheel range', () => {
+    const a = makeResult('roulette', 'test-server-seed');
+    const b = makeResult('roulette', 'test-server-seed');
+    assert.strictEqual(a.number, b.number);
+    assert.ok(Number(a.number) >= 0 && Number(a.number) <= 36);
+    assert.ok(['red','black','green'].includes(a.color));
+  });
+
+  test('Authoritative Dice outcome is in the 1-10 game range', () => {
+    const result = makeResult('dice', 'dice-test-seed');
+    assert.ok(Number(result.number) >= 1 && Number(result.number) <= 10);
+    assert.strictEqual(result.number, result.rolledNumber);
+  });
+
+  test('Authoritative Dragon Tiger reveals two server-dealt cards and winner', () => {
+    const result = makeResult('dragon_tiger', 'dragon-tiger-test-seed');
+    assert.ok(result.dragonCard && result.tigerCard);
+    assert.ok(['dragon','tiger','tie','suited_tie'].includes(result.winner));
+    if (result.dragonCard.rank === result.tigerCard.rank) {
+      assert.ok(result.winner === 'tie' || result.winner === 'suited_tie');
+    }
+  });
+
+  test('Authoritative Andar Bahar deals until the joker rank is matched', () => {
+    const result = makeResult('andar_bahar', 'andar-bahar-test-seed');
+    assert.ok(result.jokerCard);
+    assert.ok(result.dealCards.length > 0);
+    assert.strictEqual(result.dealCards[result.dealCards.length - 1].card.rank, result.jokerCard.rank);
+    assert.ok(['andar','bahar'].includes(result.winner));
+  });
+
+  test('Game selections reject unsupported bet types and payout odds are server-owned', () => {
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon' }), true);
+    assert.strictEqual(validateSelection('roulette', { type: 'red' }), true);
+    assert.strictEqual(validateSelection('dice', { type: '11' }), false);
+    assert.strictEqual(validateSelection('andar_bahar', { type: 'untrusted-side' }), false);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'tie' }), 9);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 51);
   });
 
   console.log('\n======================================================');

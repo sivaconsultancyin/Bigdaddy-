@@ -78,25 +78,14 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
   }, [rouletteHistory, lastSettledNumber]);
 
   const handleTestSpin = () => {
-    if (rouletteRound.status === 'SPINNING' || isTestSpinning) return;
-    const randNum = WHEEL_NUMBERS[Math.floor(Math.random() * WHEEL_NUMBERS.length)];
-    setTestSpinNumber(randNum);
-    setIsTestSpinning(true);
-    setMyWinResult(null);
-    setSuccessMessage(`Wheel spin preview activated! Ball rolling to pocket #${randNum}...`);
-    setTimeout(() => setSuccessMessage(null), 3000);
+    setErrorMessage('Preview spins are disabled. The winning number comes only from the authoritative server round.');
+    setTimeout(() => setErrorMessage(null), 3000);
   };
 
   const handleSpinComplete = (landedNum: number) => {
     setLastSettledNumber(landedNum);
 
-    // Record landed number in history so history immediately matches the ball!
-    const color = landedNum === 0 ? 'green' : RED_SET.has(landedNum) ? 'red' : 'black';
-    addRouletteHistoryItem({
-      number: landedNum,
-      color,
-      timestamp: new Date().toISOString(),
-    });
+    // History is populated only from backend-persisted round results.
 
     if (isTestSpinning) {
       setIsTestSpinning(false);
@@ -1023,12 +1012,12 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
               </p>
               <div className="p-2.5 rounded-lg bg-zinc-950 font-mono text-[11px] text-zinc-400 space-y-1 border border-zinc-800">
                 <div>Current Round: #{rouletteRound.roundNumber}</div>
-                <div>Algorithm: crypto.randomInt(0, 37)</div>
+                <div>Outcome: server-seeded result persisted in Supabase</div>
                 <div>Pocket Range: 0 to 36 (European 37-pocket)</div>
                 <div>House Edge: 2.70% (Single Zero)</div>
               </div>
               <p className="text-[11px] text-zinc-400">
-                All connected players receive the exact identical round phase, spin timing, and outcome simultaneously via WebSockets.
+                All players receive the same persisted round phase and winning pocket from the backend; wallet settlement is server-owned.
               </p>
             </div>
             <button

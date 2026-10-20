@@ -8,6 +8,7 @@ import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres'
 import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
 import { startProductionCrashEngine } from './backend/src/games/aviator/production.engine';
+import { authoritativeGamesRouter, startAuthoritativeGameEngine } from './backend/src/routes/authoritative-games.routes';
 import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +25,7 @@ async function startServer() {
       if (config.isProduction) {
         await bootstrapOwnerFromEnvironment();
         startProductionCrashEngine();
+        startAuthoritativeGameEngine();
         productionServicesStarted = true;
       }
     } catch (error) {
@@ -130,6 +132,7 @@ async function startServer() {
     });
     app.use('/api', productionRouter);
     app.use('/api', productionRequestsRouter);
+    app.use('/api', authoritativeGamesRouter);
     // Unsupported games remain unavailable until persistent settlement is implemented.
     app.use('/api/games', (_req, res) => res.status(503).json({ error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION' }));
     app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
@@ -162,6 +165,7 @@ async function startServer() {
         if (isDatabaseConnected() && !productionServicesStarted) {
           await bootstrapOwnerFromEnvironment();
           startProductionCrashEngine();
+          startAuthoritativeGameEngine();
           productionServicesStarted = true;
         }
       } catch (error) {
