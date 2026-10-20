@@ -240,7 +240,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 startTime: round.startedAt ? new Date(round.startedAt).getTime() : undefined,
                 crashMultiplier: round.crashMultiplier ?? undefined,
               });
-              setMultiplier(Number(round.multiplier || 1));
+              // While running, the display is animated locally at frame rate. Keep
+              // server-provided values for non-running states so crash/result freezes
+              // immediately when the authoritative API reports it.
+              if (round.status !== 'RUNNING') setMultiplier(Number(round.multiplier ?? round.crashMultiplier ?? 1));
               refreshWalletForResult('aviator', round);
             }
             if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
@@ -325,6 +328,25 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     };
   }, []);
+
+  // Smooth the visible multiplier between 500ms API polls. This is display-only:
+  // backend state remains authoritative for bets, cashouts, crashes and settlement.
+  // The curve matches production.engine.ts and is evaluated every animation frame.
+  useEffect(() => {
+    if (roundState.status !== 'RUNNING' || !roundState.startTime) return;
+    let frameId = 0;
+    let lastRendered = 1;
+    const animate = () => {
+      const elapsedSeconds = Math.max(0, (Date.now() - roundState.startTime!) / 1000);
+      const nextMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
+      // Never move the displayed number backwards during a running round.
+      lastRendered = Math.max(lastRendered, nextMultiplier);
+      setMultiplier(lastRendered);
+      frameId = window.requestAnimationFrame(animate);
+    };
+    frameId = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [roundState.status, roundState.startTime, roundState.id]);
 
   return (
     <WebSocketContext.Provider
