@@ -9,7 +9,7 @@ import { Login } from '../frontend/src/pages/Login';
 import { AlertTriangle } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
-  const { user, loading, refreshWallet, configError } = useAuth();
+  const { user, loading, refreshWallet, configError, authError } = useAuth();
   const [activeTab, setActiveTab] = useState<MobileTab>('dashboard');
   const [activeGameCode, setActiveGameCode] = useState<string | null>(null);
   const [isTokenRequestOpen, setIsTokenRequestOpen] = useState(false);
@@ -58,6 +58,11 @@ const MainLayout: React.FC = () => {
     return (
       <div className="min-h-screen w-full bg-zinc-950 flex justify-center items-start">
         <div className="w-full max-w-[430px] min-h-screen bg-zinc-950 border-x border-zinc-800/60 shadow-[0_0_50px_rgba(0,0,0,0.85)] flex flex-col relative overflow-x-hidden">
+          {authError && (
+            <div role="alert" className="mx-4 mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 break-words">
+              {authError}
+            </div>
+          )}
           <Login />
         </div>
       </div>
