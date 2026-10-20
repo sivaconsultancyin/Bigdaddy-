@@ -216,8 +216,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (now - lastHealthCheckAtRef.current >= 10000) {
           lastHealthCheckAtRef.current = now;
           const healthController = new AbortController();
-          const healthTimeout = window.setTimeout(() => healthController.abort(), 4000);
-          void fetch(apiBase.replace(/\/$/, '') + '/health', {
+          const healthTimeout = window.setTimeout(() => healthController.abort(), 8000);
+          void fetch(apiBase.replace(/\/$/, '') + '/ready', {
             headers: { Accept: 'application/json' },
             signal: healthController.signal,
           }).then((response) => {
