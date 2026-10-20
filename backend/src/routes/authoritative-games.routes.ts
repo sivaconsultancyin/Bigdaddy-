@@ -7,6 +7,23 @@ export const authoritativeGamesRouter = Router();
 type Actor = { id: string; username: string; role: string };
 type AuthRequest = Request & { actor?: Actor };
 export type GameCode = 'roulette' | 'dice' | 'dragon_tiger' | 'andar_bahar';
+export function isPlayerRole(role: unknown): boolean {
+  return String(role ?? '').toUpperCase() === 'PLAYER';
+}
+
+export function isCompatibleIdempotencyReplay(
+  existing: { game_code?: unknown; user_id?: unknown; amount?: unknown } | undefined,
+  code: GameCode,
+  userId: string,
+  amount: unknown,
+): boolean {
+  return Boolean(
+    existing &&
+    existing.game_code === code &&
+    existing.user_id === userId &&
+    String(existing.amount) === String(amount)
+  );
+}
 
 const GAME_CODES: GameCode[] = ['roulette', 'dice', 'dragon_tiger', 'andar_bahar'];
 const CODE_ALIASES: Record<string, GameCode> = {
@@ -39,7 +56,7 @@ async function auth(req: AuthRequest, res: Response, next: NextFunction) {
       'SELECT id,username,role FROM public.users WHERE id=$1 AND is_active=true LIMIT 1', [token.id],
     );
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
-    if (String(rows[0].role).toUpperCase() !== 'PLAYER') {
+    if (!isPlayerRole(rows[0].role)) {
       return res.status(403).json({ error: 'PLAYER_ROLE_REQUIRED' });
     }
     req.actor = rows[0] as unknown as Actor;
@@ -300,7 +317,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
       for (let i = 0; i < rawBets.length; i++) {
         const existing = existingRows.find((row: any) => row.idempotency_key === replayKeys[i]);
         const selection = rawBets[i].selection || rawBets[i];
-        if (!existing || existing.game_code !== code || existing.user_id !== req.actor!.id || String(existing.amount) !== String(rawBets[i].amount)) {
+        if (!isCompatibleIdempotencyReplay(existing, code, req.actor!.id, rawBets[i].amount)) {
           throw new Error('IDEMPOTENCY_KEY_REUSE');
         }
         const same = await sql.unsafe(
