@@ -184,6 +184,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   const lastSuccessfulRoundAtRef = useRef<number | null>(null);
+  const disposedRef = useRef(false);
   const lastHealthCheckAtRef = useRef(0);
 
   const connect = () => {
@@ -196,7 +197,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const startProductionPolling = () => {
     if (simIntervalRef.current) return;
     let inFlight = false;
-    let disposed = false;
+    disposedRef.current = false;
     const apiBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
     const refreshWalletForResult = (key: string, round: any) => {
       if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
@@ -220,10 +221,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             headers: { Accept: 'application/json' },
             signal: healthController.signal,
           }).then((response) => {
-            if (disposed) return;
+            if (disposedRef.current) return;
             setApiHealth(response.ok ? 'online' : 'offline');
           }).catch(() => {
-            if (!disposed) setApiHealth('offline');
+            if (!disposedRef.current) setApiHealth('offline');
           }).finally(() => window.clearTimeout(healthTimeout));
         }
         const pollOtherGames = now - otherGamesPollAtRef.current >= 1500;
@@ -374,7 +375,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     connect();
     return () => {
-      disposed = true;
+      disposedRef.current = true;
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     };
   }, []);
