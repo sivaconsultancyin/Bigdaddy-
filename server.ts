@@ -35,6 +35,9 @@ let productionServicesStarted = false;
 let persistentAviatorEngineStarted = false;
 
 function startPersistentAviatorEngine() {
+  // In split deployment mode, the persistent game loop runs in its own worker
+  // process/service and must never start inside the API server process.
+  if (process.env.AVIATOR_ENGINE_MODE === 'external') return;
   if (persistentAviatorEngineStarted || !config.isProduction || !config.productionValid || !isDatabaseConnected()) return;
   startProductionCrashEngine();
   persistentAviatorEngineStarted = true;
