@@ -36,7 +36,7 @@ export function canReserveLiability(balance: unknown, reserved: unknown, liabili
 }
 
 export function canSettleRound(status: unknown, result: unknown): boolean {
-  return status === 'RESULT' && result !== null && result !== undefined;
+  return status === 'RESULT' && Boolean(result);
 }
 
 const GAME_CODES: GameCode[] = ['roulette', 'dice', 'dragon_tiger', 'andar_bahar'];
