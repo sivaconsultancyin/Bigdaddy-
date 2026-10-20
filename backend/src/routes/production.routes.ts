@@ -38,7 +38,7 @@ productionRouter.post('/auth/login', async (req, res: Response) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
   try {
     const sql = getDatabaseClient();
-    const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE lower(u.username)=lower($1) LIMIT 1', [parsed.data.username]);
+    const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE lower(u.username)=lower($1::text) LIMIT 1', [parsed.data.username]);
     const user = rows[0] as unknown as UserRow | undefined;
     if (!user || !user.is_active || !(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'INVALID_USERNAME_OR_PASSWORD' });
     const wallets = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
