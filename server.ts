@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
@@ -9,7 +10,6 @@ import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
 import { authoritativeGamesRouter } from './backend/src/routes/authoritative-games.routes';
 import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
-import { startProductionCrashEngine } from './backend/src/games/aviator/production.engine';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,16 +32,43 @@ function wrapAsyncRouter(router: any) {
 }
 
 let productionServicesStarted = false;
-let persistentAviatorEngineStarted = false;
+let aviatorWorkerProcess: ChildProcess | null = null;
+let aviatorWorkerRestartTimer: ReturnType<typeof setTimeout> | null = null;
+let aviatorWorkerStopping = false;
 
 function startPersistentAviatorEngine() {
-  // In split deployment mode, the persistent game loop runs in its own worker
-  // process/service and must never start inside the API server process.
-  if (process.env.AVIATOR_ENGINE_MODE === 'external') return;
-  if (persistentAviatorEngineStarted || !config.isProduction || !config.productionValid || !isDatabaseConnected()) return;
-  startProductionCrashEngine();
-  persistentAviatorEngineStarted = true;
-  console.log('Persistent Aviator engine started with PostgreSQL-backed round state.');
+  // Keep Render to one service while isolating the long-running game loop in a
+  // child Node process. Its event loop and PostgreSQL pool are independent of API requests.
+  if (aviatorWorkerProcess || aviatorWorkerStopping || !config.isProduction || !config.productionValid || !isDatabaseConnected()) return;
+
+  const child = spawn('npm', ['run', 'start:aviator-worker'], {
+    env: { ...process.env, AVIATOR_ENGINE_MODE: 'worker' },
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+  aviatorWorkerProcess = child;
+  console.log('Aviator engine worker launched as a separate process inside the existing Render backend service.');
+
+  child.on('error', (error) => {
+    console.error('Aviator engine worker process failed to launch:', error.message);
+  });
+  child.on('exit', (code, signal) => {
+    if (aviatorWorkerProcess === child) aviatorWorkerProcess = null;
+    if (aviatorWorkerStopping) return;
+    console.error(`Aviator engine worker exited (code=${code}, signal=${signal ?? 'none'}).`);
+    // Recover the game worker without restarting or blocking the API process.
+    aviatorWorkerRestartTimer = setTimeout(() => {
+      aviatorWorkerRestartTimer = null;
+      startPersistentAviatorEngine();
+    }, 5000);
+  });
+}
+
+function stopAviatorWorker() {
+  aviatorWorkerStopping = true;
+  if (aviatorWorkerRestartTimer) clearTimeout(aviatorWorkerRestartTimer);
+  aviatorWorkerRestartTimer = null;
+  aviatorWorkerProcess?.kill('SIGTERM');
 }
 
 async function startServer() {
@@ -178,6 +205,8 @@ async function startServer() {
   });
 
   const server = http.createServer(app);
+  process.once('SIGTERM', stopAviatorWorker);
+  process.once('SIGINT', stopAviatorWorker);
 
   // Mount Vite middleware for dev or serve static dist in production
   if (process.env.NODE_ENV === 'production' && !process.env.DEV_MODE && !config.isDevelopmentOrPreview) {
