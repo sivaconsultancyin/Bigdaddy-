@@ -40,7 +40,8 @@ async function tick() {
       return;
     }
     // Use PostgreSQL's clock for round progression. Host and database clocks can drift;
-    // browser/Node wall-clock time must never control a persisted round's outcome.\n    const ageSeconds = Math.max(0, Number(round.elapsed_seconds) || 0);
+    // browser/Node wall-clock time must never control a persisted round's outcome.
+    const ageSeconds = Math.max(0, Number(round.elapsed_seconds) || 0);
     if (round.status === 'WAITING') {
       if (ageSeconds >= 5) {
         await sql.unsafe("UPDATE public.game_rounds SET status='RUNNING',started_at=now() WHERE id=$1 AND status='WAITING'", [round.id]);
