@@ -16,8 +16,19 @@ async function tick() {
   if (busy) return;
   busy = true;
   try {
-    const sql = getDatabaseClient();
-    const games = await sql.unsafe("SELECT id,pool_wallet_id FROM public.games WHERE code='aviator' AND status='ACTIVE' LIMIT 1");
+    const client = getDatabaseClient();
+    await client.begin(async (tx) => {
+      const sql = tx;
+      // Serialize the durable round lifecycle across multiple backend instances.
+      // A transaction-scoped lock is automatically released on commit/rollback.
+      await sql.unsafe("SET LOCAL lock_timeout = '2s'");
+      await sql.unsafe("SET LOCAL statement_timeout = '15s'");
+      const lockRows = await sql.unsafe(
+        "SELECT pg_try_advisory_xact_lock(hashtext('bigdaddy:aviator:round-engine')) AS locked"
+      );
+      if (!lockRows[0]?.locked) return;
+
+      const games = await sql.unsafe("SELECT id,pool_wallet_id FROM public.games WHERE code='aviator' AND status='ACTIVE' LIMIT 1");
     if (!games[0]) return;
 
     let rows = await sql.unsafe("SELECT id,round_number,status,started_at,ended_at,server_seed,crash_multiplier,EXTRACT(EPOCH FROM (now()-started_at)) AS elapsed_seconds,EXTRACT(EPOCH FROM (now()-ended_at)) AS seconds_since_end FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1");
@@ -66,6 +77,7 @@ async function tick() {
         }
       }
     }
+    });
   } catch (error) {
     if (Date.now() - lastErrorAt > 15000) {
       console.error('Persistent Crash engine tick failed:', error);
