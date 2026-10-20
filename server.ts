@@ -9,11 +9,20 @@ import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
 import { authoritativeGamesRouter } from './backend/src/routes/authoritative-games.routes';
 import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
+import { startProductionCrashEngine } from './backend/src/games/aviator/production.engine';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let productionServicesStarted = false;
+let persistentAviatorEngineStarted = false;
+
+function startPersistentAviatorEngine() {
+  if (persistentAviatorEngineStarted || !config.isProduction || !config.productionValid || !isDatabaseConnected()) return;
+  startProductionCrashEngine();
+  persistentAviatorEngineStarted = true;
+  console.log('Persistent Aviator engine started with PostgreSQL-backed round state.');
+}
 
 async function startServer() {
   // Connect using a backend-only secret. The frontend must never receive DATABASE_URL.
@@ -24,6 +33,7 @@ async function startServer() {
       if (config.isProduction) {
         await bootstrapOwnerFromEnvironment();
         productionServicesStarted = true;
+        startPersistentAviatorEngine();
       }
     } catch (error) {
       // In production, keep health/readiness endpoints online when the database
@@ -162,6 +172,7 @@ async function startServer() {
         if (isDatabaseConnected() && !productionServicesStarted) {
           await bootstrapOwnerFromEnvironment();
           productionServicesStarted = true;
+          startPersistentAviatorEngine();
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
