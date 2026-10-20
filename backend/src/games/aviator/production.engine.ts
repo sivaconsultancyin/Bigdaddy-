@@ -68,11 +68,15 @@ async function tick() {
         "FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1"
       );
 
+      // Keep a full 20-second inter-round cooldown measured from the crash
+      // timestamp (ended_at). Settlement still runs immediately in its own
+      // transaction; the next round is not created until settlement is complete
+      // and this cooldown has elapsed.
       if (
         rows[0]?.status === 'SETTLED' &&
         rows[0].ended_at &&
         Number(rows[0].seconds_since_end) >= 0 &&
-        Number(rows[0].seconds_since_end) < 4
+        Number(rows[0].seconds_since_end) < 20
       ) {
         return null;
       }
