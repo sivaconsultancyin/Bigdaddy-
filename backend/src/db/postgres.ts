@@ -17,7 +17,7 @@ function createClient(connectionString: string): ReturnType<typeof postgres> {
     idle_timeout: 20,
     connect_timeout: 10,
     // Apply server-side limits at connection startup so stalled statements/locks fail closed.
-    connection: { statement_timeout: '20000', lock_timeout: '2000' },
+    connection: { statement_timeout: 20000, lock_timeout: 2000 },
     prepare: false,
   });
 }
