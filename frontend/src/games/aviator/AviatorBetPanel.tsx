@@ -42,8 +42,10 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
       const res = await ApiClient.placeAviatorBet({ amount: betAmount }, requestKey);
 
       pendingBetRequest.current = null;
+      // The bet is confirmed by the server; update the game UI immediately.
+      // Wallet refresh is secondary and must not keep the bet button in loading state.
       onBetPlaced(res.bet);
-      await refreshWallet();
+      void refreshWallet().catch(() => undefined);
     } catch (err: any) {
       setError(err.message || 'Failed to place bet');
     } finally {
