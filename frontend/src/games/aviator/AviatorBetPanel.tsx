@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ApiClient } from '../../api/client';
 import { AviatorBet, BetStatus } from '../../../../shared/src/types';
@@ -26,16 +26,22 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
   const [betAmount, setBetAmount] = useState('100');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pendingBetRequest = useRef<{ amount: string; key: string } | null>(null);
 
   const handlePlaceBet = async () => {
     setError(null);
     setLoading(true);
 
     try {
-      const res = await ApiClient.placeAviatorBet({
-        amount: betAmount,
-      });
+      // Reuse the same key for a retry of the same amount, so network retries
+      // cannot create a second bet. A changed amount gets a fresh key.
+      if (!pendingBetRequest.current || pendingBetRequest.current.amount !== betAmount) {
+        pendingBetRequest.current = { amount: betAmount, key: 'aviator-bet-' + crypto.randomUUID() };
+      }
+      const requestKey = pendingBetRequest.current.key;
+      const res = await ApiClient.placeAviatorBet({ amount: betAmount }, requestKey);
 
+      pendingBetRequest.current = null;
       onBetPlaced(res.bet);
       await refreshWallet();
     } catch (err: any) {

@@ -202,9 +202,10 @@ export class ApiClient {
     return this.request('/games/aviator/state');
   }
 
-  public static placeAviatorBet(payload: { amount: string; autoCashoutMultiplier?: number | null }) {
+  public static placeAviatorBet(payload: { amount: string; autoCashoutMultiplier?: number | null }, idempotencyKey: string = 'aviator-bet-' + crypto.randomUUID()) {
     return this.request('/games/aviator/bet', {
       method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
     });
   }
