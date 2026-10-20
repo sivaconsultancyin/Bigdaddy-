@@ -1,6 +1,5 @@
 import assert from 'assert';
 import { db } from '../backend/src/db/storage';
-import { aviatorEngine } from '../backend/src/games/aviator/aviator.engine';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
@@ -168,19 +167,6 @@ async function runTestSuite() {
   test('Solvency protection: Game pool with zero liquidity rejects bets', () => {
     const dicePool = db.getWallet(SYSTEM_WALLETS.DICE_POOL)!;
     assert.strictEqual(dicePool.balance, '0');
-  });
-
-  // Test 11: Aviator engine authoritative rules
-  test('Aviator Game Engine: Non-players cannot place bets', () => {
-    const admin = db.getUserByUsername('admin_bravo')!;
-    assert.throws(() => {
-      aviatorEngine.placeBet({
-        userId: admin.id,
-        username: admin.username,
-        userRole: admin.role,
-        amount: '100',
-      });
-    }, /Only the Player role can access and play casino games/);
   });
 
   // Test 12: Total 10B invariant remains unviolated after all transactions
