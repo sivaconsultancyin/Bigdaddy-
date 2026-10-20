@@ -63,8 +63,25 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
         betId: activeBet.id,
       });
 
-      onBetCashedOut(res.bet);
-      await refreshWallet();
+      // The backend returns { result: { betId, status, payoutAmount, cashoutMultiplier } },
+      // not { bet }. Merge the authoritative settlement into the existing bet so
+      // the parent game never receives undefined (which can crash the whole screen).
+      const result = res?.result;
+      if (!result || result.betId !== activeBet.id || result.status !== BetStatus.WON) {
+        throw new Error('Cashout response was incomplete. Refresh the game state before retrying.');
+      }
+
+      const settledBet: AviatorBet = {
+        ...activeBet,
+        status: BetStatus.WON,
+        winAmount: String(result.payoutAmount ?? activeBet.winAmount ?? '0'),
+        cashedOutMultiplier: result.cashoutMultiplier != null
+          ? Number(result.cashoutMultiplier)
+          : currentMultiplier,
+      };
+      onBetCashedOut(settledBet);
+      // Wallet refresh is secondary; do not block the game UI on it.
+      void refreshWallet().catch(() => undefined);
 
       confetti({
         particleCount: 40,
