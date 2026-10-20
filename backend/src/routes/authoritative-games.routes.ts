@@ -25,6 +25,23 @@ export function isCompatibleIdempotencyReplay(
   );
 }
 
+export function canReserveLiability(balance: unknown, reserved: unknown, liability: unknown): boolean {
+  try {
+    const total = BigInt(String(balance));
+    const alreadyReserved = BigInt(String(reserved));
+    const required = BigInt(String(liability));
+    if (total < 0n || alreadyReserved < 0n || required < 0n) return false;
+    const available = total - alreadyReserved;
+    return available >= required;
+  } catch {
+    return false;
+  }
+}
+
+export function canSettleRound(status: unknown, result: unknown): boolean {
+  return status === 'RESULT' && Boolean(result);
+}
+
 const GAME_CODES: GameCode[] = ['roulette', 'dice', 'dragon_tiger', 'andar_bahar'];
 const CODE_ALIASES: Record<string, GameCode> = {
   roulette: 'roulette',
@@ -166,7 +183,7 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
   return type === result.winner ? 2 : 0;
 }
 
-function maxLiabilityMultiplier(code: GameCode, selection: any): number {
+export function maxLiabilityMultiplier(code: GameCode, selection: any): number {
   const type = String(selection?.type || '').toLowerCase();
   if (code === 'roulette') {
     if (type === 'straight' || type === 'number') return 36;
@@ -370,7 +387,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
         // Acquire every wallet row in one stable order before changing reservations or balances.
         await tx.unsafe("SELECT id FROM public.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[game.pool_wallet_id, escrowRows[0].id, playerRows[0].id]]);
         const fundsRows = await tx.unsafe("SELECT balance,reserved_balance FROM public.wallets WHERE id=$1", [game.pool_wallet_id]);
-        if (!fundsRows[0] || BigInt(String(fundsRows[0].balance)) - BigInt(String(fundsRows[0].reserved_balance || 0)) < liability) {
+        if (!fundsRows[0] || !canReserveLiability(fundsRows[0].balance, fundsRows[0].reserved_balance || 0, liability)) {
           throw new Error('GAME_POOL_INSUFFICIENT');
         }
         await tx.unsafe("UPDATE public.wallets SET reserved_balance=reserved_balance+$2::bigint,updated_at=now() WHERE id=$1", [game.pool_wallet_id, liability.toString()]);
@@ -423,8 +440,7 @@ async function settleRound(roundId: string, code: GameCode) {
   await sql.begin(async (tx) => {
     const rows = await tx.unsafe('SELECT * FROM public.authoritative_game_rounds WHERE id=$1 FOR UPDATE', [roundId]);
     const round = rows[0];
-    if (!round || round.status === 'SETTLED' || round.status === 'CANCELLED') return;
-    if (round.status !== 'RESULT' || !round.result) return;
+    if (!round || !canSettleRound(round.status, round.result)) return;
     const gameRows = await tx.unsafe("SELECT pool_wallet_id FROM public.games WHERE code=$1 LIMIT 1", [code]);
     const poolWalletId = gameRows[0]?.pool_wallet_id;
     const escrowRows = await tx.unsafe("SELECT id FROM public.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1");
