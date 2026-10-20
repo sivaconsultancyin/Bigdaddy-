@@ -74,6 +74,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const refreshWallet = async () => {
+    const token = ApiClient.getToken();
+    if (!token) return;
+    try {
+      const data = await ApiClient.getMyWallet();
+      if (data?.wallet) setWallet(data.wallet);
+    } catch (err: any) {
+      const message = err?.message || '';
+      if (isInvalidSessionError(message)) {
+        ApiClient.clearToken();
+        setUser(null);
+        setWallet(null);
+        setAuthError('Your session has expired. Please sign in again.');
+        return;
+      }
+      setAuthError(`Could not refresh wallet: ${message}`);
+      console.warn('Could not refresh wallet:', message);
+    }
+  };
+
   useEffect(() => {
     const initialize = async () => {
       try {
