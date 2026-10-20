@@ -29,19 +29,35 @@ export class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    // Never leave the login button spinning forever if the API or database stalls.
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers,
+        signal: options.signal ?? controller.signal,
+      });
 
-    const contentType = response.headers.get('content-type') || '';
-    const data = contentType.includes('application/json') ? await response.json() : null;
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await response.json() : null;
 
-    if (!response.ok) {
-      throw new Error(data?.message || data?.error || `API request failed (${response.status})`);
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || `API request failed (${response.status})`);
+      }
+
+      return data as T;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('The server did not respond within 15 seconds. Please try again; if this continues, the server/database connection needs attention.');
+      }
+      if (error instanceof TypeError) {
+        throw new Error('Could not reach the server. Check the connection and try again.');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
     }
-
-    return data as T;
   }
 
   // Config Info
