@@ -31,9 +31,9 @@ async function startServer() {
       await connectDatabase();
       console.log('✅ Supabase PostgreSQL connectivity check passed.');
       if (config.isProduction) {
+        startPersistentAviatorEngine();
         await bootstrapOwnerFromEnvironment();
         productionServicesStarted = true;
-        startPersistentAviatorEngine();
       }
     } catch (error) {
       // In production, keep health/readiness endpoints online when the database
@@ -170,9 +170,9 @@ async function startServer() {
           console.log('Supabase PostgreSQL connection recovered.');
         }
         if (isDatabaseConnected() && !productionServicesStarted) {
+          startPersistentAviatorEngine();
           await bootstrapOwnerFromEnvironment();
           productionServicesStarted = true;
-          startPersistentAviatorEngine();
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
