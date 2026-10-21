@@ -1,6 +1,8 @@
 -- BigDaddy schema cutover preflight: READ-ONLY diagnostics.
 -- Run against a staging clone first with psql -v ON_ERROR_STOP=1 -f this_file.sql.
 -- This script deliberately performs no UPDATE/ALTER/DELETE and never moves funds.
+-- Optional game-runtime tables are guarded so this also works before all migrations exist.
+
 \echo '1) Game catalog -> pool wallet mapping'
 SELECT g.code AS game_code, g.status AS game_status, g.pool_wallet_id,
        w.game_code AS wallet_game_code, w.wallet_type, w.balance, w.reserved_balance
@@ -30,29 +32,45 @@ FROM public.wallets
 WHERE wallet_type = 'GAME_POOL'::public.wallet_type_enum
 ORDER BY game_code NULLS FIRST, created_at;
 
-\echo '4) Open Aviator bets and rounds (must be settled/reconciled before cutover)'
-SELECT status, count(*) AS bet_count,
-       COALESCE(sum(bet_amount),0) AS total_stake,
-       COALESCE(sum(payout_amount),0) AS recorded_payout
-FROM public.game_bets
-GROUP BY status
-ORDER BY status;
+\echo '4) Open Aviator bets and rounds (guarded when runtime tables are absent)'
+SELECT to_regclass('public.game_bets') IS NOT NULL AS has_game_bets \gset
+\if :has_game_bets
+  SELECT status, count(*) AS bet_count,
+         COALESCE(sum(bet_amount),0) AS total_stake,
+         COALESCE(sum(payout_amount),0) AS recorded_payout
+  FROM public.game_bets
+  GROUP BY status
+  ORDER BY status;
+\else
+  \echo 'SKIP: public.game_bets does not exist'
+\endif
 
-SELECT status, count(*) AS round_count
-FROM public.game_rounds
-WHERE game_code = 'aviator'
-GROUP BY status
-ORDER BY status;
+SELECT to_regclass('public.game_rounds') IS NOT NULL AS has_game_rounds \gset
+\if :has_game_rounds
+  SELECT status, count(*) AS round_count
+  FROM public.game_rounds
+  WHERE game_code = 'aviator'
+  GROUP BY status
+  ORDER BY status;
+\else
+  \echo 'SKIP: public.game_rounds does not exist'
+\endif
 
-\echo '5) Open authoritative-game bets by game (if migration is installed)'
-SELECT r.game_code, b.status, count(*) AS bet_count,
-       COALESCE(sum(b.bet_amount),0) AS total_stake,
-       COALESCE(sum(b.reserved_liability),0) AS reserved_liability
-FROM public.authoritative_game_bets b
-JOIN public.authoritative_game_rounds r ON r.id = b.round_id
-WHERE b.status = 'PENDING'
-GROUP BY r.game_code, b.status
-ORDER BY r.game_code;
+\echo '5) Open authoritative-game bets by game (guarded when migration is absent)'
+SELECT (to_regclass('public.authoritative_game_bets') IS NOT NULL
+        AND to_regclass('public.authoritative_game_rounds') IS NOT NULL) AS has_authoritative_runtime \gset
+\if :has_authoritative_runtime
+  SELECT r.game_code, b.status, count(*) AS bet_count,
+         COALESCE(sum(b.bet_amount),0) AS total_stake,
+         COALESCE(sum(b.reserved_liability),0) AS reserved_liability
+  FROM public.authoritative_game_bets b
+  JOIN public.authoritative_game_rounds r ON r.id = b.round_id
+  WHERE b.status = 'PENDING'
+  GROUP BY r.game_code, b.status
+  ORDER BY r.game_code;
+\else
+  \echo 'SKIP: authoritative-game runtime tables are not both installed'
+\endif
 
 \echo '6) Ledger entries grouped by transaction (non-zero net is a reconciliation exception)'
 SELECT le.transaction_id,
