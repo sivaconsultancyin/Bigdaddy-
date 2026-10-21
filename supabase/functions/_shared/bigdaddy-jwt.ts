@@ -23,6 +23,7 @@ export async function signBigDaddyToken(claims: BigDaddyClaims): Promise<string>
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(claims.id)
+    .setClaim("id", claims.id)
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(getJwtSecret());
@@ -33,13 +34,13 @@ export async function verifyBigDaddyToken(token: string): Promise<BigDaddyClaims
     const { payload, protectedHeader } = await jwtVerify(token, getJwtSecret(), {
       algorithms: ["HS256"],
     });
-    if (protectedHeader.alg !== "HS256" || typeof payload.sub !== "string" ||
+    if (protectedHeader.alg !== "HS256" || typeof payload.id !== "string" ||
         typeof payload.username !== "string" ||
         !["OWNER", "SUPER_ADMIN", "ADMIN", "PLAYER"].includes(String(payload.role))) {
       return null;
     }
     return {
-      id: payload.sub,
+      id: payload.id,
       username: payload.username,
       role: payload.role as BigDaddyClaims["role"],
       parentId: typeof payload.parentId === "string" ? payload.parentId : null,
