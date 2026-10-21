@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import bcrypt from "npm:bcryptjs@2.4.3";
-import { corsHeaders, jsonResponse, signBigDaddyToken } from "../_shared/bigdaddy-jwt.ts";
+import { corsHeaders, jsonResponse, signBigDaddyToken } from "./bigdaddy-jwt.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -10,7 +10,7 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json(); } catch { return jsonResponse({ error: "INVALID_JSON" }, 400); }
   if (!body || typeof body !== "object") return jsonResponse({ error: "INVALID_INPUT" }, 400);
   const { username, password } = body as Record<string, unknown>;
-  if (typeof username !== "string" || username.trim().length < 3 ||
+  if (typeof username !== "string" || !/^[a-zA-Z0-9_.-]{3,64}$/.test(username.trim()) ||
       typeof password !== "string" || password.length < 1 || password.length > 1024) {
     return jsonResponse({ error: "INVALID_USERNAME_OR_PASSWORD" }, 400);
   }
