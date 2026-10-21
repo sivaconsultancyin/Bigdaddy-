@@ -6,55 +6,51 @@ Production policy: do not change Render traffic, merge to main, or deploy a fron
 
 ## Current verified state
 
-- Active Supabase Edge Functions: `health`, `auth-login`, `auth-me`.
-- Frontend API client: `frontend/src/api/client.ts` currently defaults to `https://bigdaddy-backend.onrender.com/api` in production.
+- Active Supabase Edge Functions: `health`, `auth-login`, `auth-me`, and `api` (API router version 3 deployed).
+- Feature-branch frontend API client and live-state polling now point to `https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api` for production builds; this branch has not been merged or deployed as the live frontend.
+- The API router includes login/me, user listing/creation/referral registration, wallet reads/transfers/pool allocation, token requests, audit logs, Aviator state/history/bet/cashout, payment preferences, and state/bet routes for Roulette, Dice, Dragon Tiger, and Andar Bahar. These routes still need contract/regression tests.
 - Existing BigDaddy JWT is a custom HS256 token; Edge Functions must use the same `BIGDADDY_JWT_SECRET` as the current backend. Never expose the secret to the browser or commit it.
-- Existing database schemas inspected: `platform`, `wallet`, `aviator`. Other game tables/engines must be verified before porting those endpoints.
-- No frontend cutover has been made.
+- Existing database schemas inspected: `platform`, `wallet`, `aviator`, `roulette`, `dice`, `dragon_tiger`, and `andar_bahar`. The `teen_patti` schema is absent in the target project.
+- Two migrations added and applied for atomic user creation/referral registration and atomic authoritative-game bets/token-request resolution.
+- No production frontend cutover has been made. External HTTP testing could not be completed from this environment; active deployment status and SQL privileges were verified.
 
 ## Endpoint inventory
 
 ### Authentication
 - [x] `POST /auth/login` -> Edge Function `auth-login` (active; end-to-end login still needs testing)
 - [x] `GET /auth/me` -> Edge Function `auth-me` (active; end-to-end testing still needed)
-- [ ] `POST /auth/register-referral`
-- [ ] `POST /auth/create-user`
-- [ ] `GET /auth/users`
-- [ ] `GET /auth/admin-payment-info`
-- [ ] `PUT /auth/payment-details`
+- [x] `POST /auth/register-referral` -> `api` (needs end-to-end tests)
+- [x] `POST /auth/create-user` -> `api` + atomic RPC (needs end-to-end tests)
+- [x] `GET /auth/users` -> `api` (needs role-scope tests)
+- [x] `GET /auth/admin-payment-info` -> `api` using profile preferences (needs compatibility review)
+- [x] `PUT /auth/payment-details` -> `api` using profile preferences (needs compatibility review)
 
 ### Configuration, wallet, requests, audit
-- [ ] `GET /config`
-- [ ] `GET /wallet/my-wallet`
-- [ ] `GET /wallet/summary`
-- [ ] `GET /wallet/ledger`
-- [ ] `POST /wallet/transfer`
-- [ ] `POST /wallet/game-pool`
-- [ ] `POST /requests/create`
-- [ ] `GET /requests/list`
-- [ ] `POST /requests/:id/approve`
-- [ ] `POST /requests/:id/reject`
-- [ ] `GET /audit/logs`
+- [x] `GET /config`
+- [x] `GET /wallet/my-wallet`
+- [x] `GET /wallet/summary`
+- [x] `GET /wallet/ledger`
+- [x] `POST /wallet/transfer`
+- [x] `POST /wallet/game-pool`
+- [x] `POST /requests/create`
+- [x] `GET /requests/list`
+- [x] `POST /requests/:id/approve` + `POST /requests/:id/reject` -> atomic RPC
+- [x] `GET /audit/logs`
 
 ### Game APIs
-- [ ] `GET /games/list`
-- [ ] `POST /games/:gameCode/activate`
-- [ ] `GET /games/aviator/state`
-- [ ] `POST /games/aviator/bet`
-- [ ] `POST /games/aviator/cashout`
-- [ ] `GET /games/roulette/state`
-- [ ] `POST /games/roulette/spin`
-- [ ] `POST /games/roulette/bet`
+- [x] `GET /games/list`
+- [x] `POST /games/:gameCode/activate`
+- [x] `GET /games/aviator/state` + `GET /games/aviator/history`
+- [x] `POST /games/aviator/bet`
+- [x] `POST /games/aviator/cashout`
+- [x] `GET /games/roulette/state`
+- [x] `POST /games/roulette/spin` + `POST /games/roulette/bet`
 - [ ] `GET /games/teen-patti/state`
 - [ ] `POST /games/teen-patti/boot`
 - [ ] `POST /games/teen-patti/action`
-- [ ] `GET /games/andar-bahar/state`
-- [ ] `POST /games/andar-bahar/bet`
-- [ ] `GET /games/dragon-tiger/state`
-- [ ] `POST /games/dragon-tiger/bet`
-- [ ] `GET /games/dice/state`
-- [ ] `POST /games/dice/roll`
-- [ ] `POST /games/dice/bet`
+- [x] `GET /games/andar-bahar/state` + `POST /games/andar-bahar/bet`
+- [x] `GET /games/dragon-tiger/state` + `POST /games/dragon-tiger/bet`
+- [x] `GET /games/dice/state` + `POST /games/dice/bet` + `POST /games/dice/roll`
 - [ ] `POST /games/dice/verify`
 
 ## Required migration safeguards
@@ -69,4 +65,4 @@ Production policy: do not change Render traffic, merge to main, or deploy a fron
 
 ## Current blocker / honest status
 
-This is an inventory and cutover checklist, not a claim that all APIs have been migrated. Only the two auth endpoints above currently have active Edge Functions. Do not change the frontend API base to Supabase until the remaining endpoints and realtime/game engines are implemented and tested.
+The shared API router is deployed and the feature-branch frontend is configured to use it, but the migration is not complete. Teen Patti storage/routes and Dice verification are not implemented; game-round creation, live settlement/worker behavior and the full realtime lifecycle still need migration. Core API handlers have not yet passed end-to-end HTTP regression tests. Do not merge/deploy the frontend or enable financial gameplay until those gaps are closed.
