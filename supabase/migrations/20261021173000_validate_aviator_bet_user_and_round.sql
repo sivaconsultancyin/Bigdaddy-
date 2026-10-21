@@ -13,7 +13,17 @@ DECLARE
 BEGIN
   SELECT pg_get_functiondef('aviator.place_crash_bet_atomic(uuid,uuid,bigint,text,numeric)'::regprocedure)
     INTO v_def;
-  IF v_def IS NULL OR position(v_old IN v_def) = 0 THEN
+  IF v_def IS NULL THEN
+    RAISE EXCEPTION 'PLACE_BET_FUNCTION_NOT_FOUND';
+  END IF;
+
+  -- Avoid failing when the guard is already present in the live function.
+  IF position('USER_AND_ROUND_REQUIRED' IN v_def) > 0 THEN
+    RAISE NOTICE 'Aviator user/round validation already installed';
+    RETURN;
+  END IF;
+
+  IF position(v_old IN v_def) = 0 THEN
     RAISE EXCEPTION 'EXPECTED_PLACE_BET_VALIDATION_NOT_FOUND';
   END IF;
   v_def := replace(v_def, v_old, v_new);
