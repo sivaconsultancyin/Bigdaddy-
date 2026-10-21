@@ -239,3 +239,93 @@ $function$;
 REVOKE ALL ON FUNCTION platform.place_authoritative_game_bets_atomic(text,uuid,jsonb,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION platform.place_authoritative_game_bets_atomic(text,uuid,jsonb,text) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION platform.place_authoritative_game_bets_atomic(text,uuid,jsonb,text) TO service_role;
+
+
+-- Resolve token requests with hierarchy validation and any transfer in one transaction.
+CREATE OR REPLACE FUNCTION platform.resolve_token_request_atomic(
+  p_request_id uuid,
+  p_actor_id uuid,
+  p_action text,
+  p_note text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_request record;
+  v_actor record;
+  v_requester record;
+  v_source uuid;
+  v_target uuid;
+  v_tx_type public.transaction_type_enum;
+  v_tx_id uuid;
+BEGIN
+  IF p_request_id IS NULL OR p_actor_id IS NULL OR p_action NOT IN ('APPROVE','REJECT') THEN
+    RAISE EXCEPTION 'INVALID_REQUEST_ACTION' USING ERRCODE = '22023';
+  END IF;
+  SELECT u.id,u.parent_id,ra.role
+  INTO v_actor
+  FROM platform.users u
+  JOIN platform.role_assignments ra ON ra.user_id=u.id
+  WHERE u.id=p_actor_id AND u.is_active=true
+  FOR UPDATE OF u,ra;
+  IF NOT FOUND THEN RAISE EXCEPTION 'ACTOR_NOT_FOUND' USING ERRCODE = '42501'; END IF;
+  IF v_actor.role = 'PLAYER' THEN RAISE EXCEPTION 'PLAYER_CANNOT_RESOLVE_REQUESTS' USING ERRCODE = '42501'; END IF;
+
+  SELECT id,requester_id,approver_id,amount,status
+  INTO v_request
+  FROM platform.token_requests
+  WHERE id=p_request_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'REQUEST_NOT_FOUND' USING ERRCODE = 'P0002'; END IF;
+  IF v_request.approver_id <> p_actor_id THEN RAISE EXCEPTION 'NOT_ASSIGNED_APPROVER' USING ERRCODE = '42501'; END IF;
+  IF v_request.status <> 'PENDING' THEN RAISE EXCEPTION 'REQUEST_ALREADY_RESOLVED' USING ERRCODE = '23505'; END IF;
+
+  SELECT u.id,u.parent_id,ra.role
+  INTO v_requester
+  FROM platform.users u
+  JOIN platform.role_assignments ra ON ra.user_id=u.id
+  WHERE u.id=v_request.requester_id AND u.is_active=true;
+  IF NOT FOUND OR v_requester.parent_id <> p_actor_id THEN
+    RAISE EXCEPTION 'ROLE_HIERARCHY_VIOLATION' USING ERRCODE = '42501';
+  END IF;
+  IF NOT (
+    (v_actor.role='OWNER' AND v_requester.role='SUPER_ADMIN') OR
+    (v_actor.role='SUPER_ADMIN' AND v_requester.role='ADMIN') OR
+    (v_actor.role='ADMIN' AND v_requester.role='PLAYER')
+  ) THEN RAISE EXCEPTION 'ROLE_HIERARCHY_VIOLATION' USING ERRCODE = '42501'; END IF;
+
+  IF p_action='APPROVE' THEN
+    IF v_actor.role='OWNER' THEN
+      SELECT id INTO v_source FROM wallet.wallets WHERE wallet_type='TREASURY' LIMIT 1 FOR UPDATE;
+      v_tx_type := 'TREASURY_TO_ROLE';
+    ELSE
+      SELECT id INTO v_source FROM wallet.wallets WHERE user_id=p_actor_id LIMIT 1 FOR UPDATE;
+      v_tx_type := CASE WHEN v_actor.role='SUPER_ADMIN' THEN 'ROLE_TO_ROLE'::public.transaction_type_enum ELSE 'ROLE_TO_PLAYER'::public.transaction_type_enum END;
+    END IF;
+    SELECT id INTO v_target FROM wallet.wallets WHERE user_id=v_request.requester_id LIMIT 1 FOR UPDATE;
+    IF v_source IS NULL OR v_target IS NULL THEN RAISE EXCEPTION 'WALLET_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
+    SELECT wallet.wallet_transfer_atomic(
+      'TOKEN_REQUEST_' || replace(p_request_id::text,'-',''),
+      v_tx_type,v_request.amount,v_source,v_target,
+      jsonb_build_object('requestId',p_request_id,'approvedBy',p_actor_id)
+    ) INTO v_tx_id;
+    UPDATE wallet.wallet_transactions SET token_request_id=p_request_id WHERE id=v_tx_id;
+    UPDATE platform.token_requests SET status='APPROVED',decision_note=left(p_note,500),resolved_at=now() WHERE id=p_request_id;
+    INSERT INTO platform.audit_logs(actor_id,action,target_type,target_id,details)
+    VALUES(p_actor_id,'TOKEN_REQUEST_APPROVED','TOKEN_REQUEST',p_request_id::text,jsonb_build_object('amount',v_request.amount::text,'transactionId',v_tx_id));
+    RETURN jsonb_build_object('message','TOKEN_REQUEST_APPROVED','requestId',p_request_id,'transactionId',v_tx_id,'amount',v_request.amount::text);
+  END IF;
+
+  UPDATE platform.token_requests SET status='REJECTED',decision_note=left(p_note,500),resolved_at=now() WHERE id=p_request_id;
+  INSERT INTO platform.audit_logs(actor_id,action,target_type,target_id,details)
+  VALUES(p_actor_id,'TOKEN_REQUEST_REJECTED','TOKEN_REQUEST',p_request_id::text,jsonb_build_object('amount',v_request.amount::text));
+  RETURN jsonb_build_object('requestId',p_request_id,'status','REJECTED');
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION platform.resolve_token_request_atomic(uuid,uuid,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION platform.resolve_token_request_atomic(uuid,uuid,text,text) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION platform.resolve_token_request_atomic(uuid,uuid,text,text) TO service_role;
