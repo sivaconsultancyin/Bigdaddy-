@@ -103,7 +103,18 @@ async function handle(req: Request) {
       return response({ status:"ok",service:"BigDaddy Supabase API",databaseConnected:true,mode:"production",productionFinancialApisEnabled:true },200,origin);
     } catch { return response({ status:"degraded",databaseConnected:false,mode:"production",productionFinancialApisEnabled:false },503,origin); }
   }
-  if (req.method === "GET" && path === "/ready") return response({ ready: true, database: "supabase-https" }, 200, origin);
+  if (req.method === "GET" && path === "/ready") {
+    // Readiness must reflect a real database round-trip; a live process alone
+    // is not ready to serve authenticated or financial requests.
+    try {
+      const readinessDb = client();
+      const { error } = await readinessDb.schema("platform").from("users").select("id", { head: true, count: "exact" });
+      if (error) return response({ ready: false, database: "unavailable" }, 503, origin);
+      return response({ ready: true, database: "supabase-https" }, 200, origin);
+    } catch {
+      return response({ ready: false, database: "unavailable" }, 503, origin);
+    }
+  }
   if (req.method === "GET" && path === "/config") {
     return response({
       mode: "production", currency: "tokens", apiBackend: "supabase",
