@@ -133,6 +133,26 @@ async function handle(req: Request) {
     return response({ token, user: safeUser({ ...user, role: actor.role, referral_code: referral.data?.[0]?.code ?? null }), wallet: walletShape(wallet) }, 200, origin);
   }
 
+
+  if (req.method === "POST" && path === "/auth/register-referral") {
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
+    const username = typeof body.username === "string" ? body.username.trim() : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const referralCode = typeof body.referralCode === "string" ? body.referralCode.trim() : "";
+    if (!/^[a-zA-Z0-9_.-]{3,64}$/.test(username) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 1024 || referralCode.length < 3 || referralCode.length > 64) return response({ error: "INVALID_INPUT" }, 400, origin);
+    const passwordHash = await bcrypt.hash(password, 12);
+    const { data, error } = await db.schema("platform").rpc("register_referral_atomic", { p_username: username, p_email: email, p_password_hash: passwordHash, p_referral_code: referralCode });
+    if (error || !data?.user) {
+      const message = error?.message ?? "";
+      const code = message.includes("INVALID_REFERRAL_CODE") ? "INVALID_REFERRAL_CODE" : message.includes("DUPLICATE_ACCOUNT") || message.includes("unique") ? "USERNAME_OR_EMAIL_ALREADY_REGISTERED" : "REGISTRATION_FAILED";
+      return response({ error: code }, code === "USERNAME_OR_EMAIL_ALREADY_REGISTERED" ? 409 : 400, origin);
+    }
+    const token = await signBigDaddyToken({ id:data.user.id, username:data.user.username, role:"PLAYER", parentId:data.user.parentId ?? null });
+    return response({ token, user:data.user, wallet:data.wallet }, 201, origin);
+  }
+
   const auth = await actorFrom(req, db);
   if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
   const actor = auth.actor;
@@ -157,6 +177,27 @@ async function handle(req: Request) {
     } catch { return response({ error: "WALLET_SERVICE_UNAVAILABLE" }, 503, origin); }
   }
 
+
+
+  if (req.method === "POST" && path === "/auth/create-user") {
+    const allowedRole = actor.role === "OWNER" ? ["SUPER_ADMIN"] : actor.role === "SUPER_ADMIN" ? ["ADMIN"] : actor.role === "ADMIN" ? ["PLAYER"] : [];
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
+    const username = typeof body.username === "string" ? body.username.trim() : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const role = String(body.role ?? "");
+    const initialTokens = body.initialTokens == null || body.initialTokens === "" ? "0" : String(body.initialTokens);
+    if (!/^[a-zA-Z0-9_.-]{3,64}$/.test(username) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 1024 || !allowedRole.includes(role) || !/^(0|[1-9][0-9]{0,14})$/.test(initialTokens)) return response({ error: allowedRole.length ? "INVALID_INPUT" : "ROLE_HIERARCHY_VIOLATION" }, allowedRole.length ? 400 : 403, origin);
+    const passwordHash = await bcrypt.hash(password, 12);
+    const { data, error } = await db.schema("platform").rpc("create_user_atomic", { p_actor_id:actor.id,p_username:username,p_email:email,p_password_hash:passwordHash,p_role:role,p_initial_tokens:initialTokens });
+    if (error || !data?.user) {
+      const message = error?.message ?? "";
+      const code = message.includes("DUPLICATE_ACCOUNT") || message.includes("unique") ? "USERNAME_OR_EMAIL_ALREADY_REGISTERED" : message.includes("ROLE_HIERARCHY_VIOLATION") ? "ROLE_HIERARCHY_VIOLATION" : message.includes("INSUFFICIENT_FUNDS") ? "INSUFFICIENT_FUNDS" : "USER_CREATION_FAILED";
+      return response({ error:code }, code === "USERNAME_OR_EMAIL_ALREADY_REGISTERED" ? 409 : code === "ROLE_HIERARCHY_VIOLATION" ? 403 : 400, origin);
+    }
+    return response(data,201,origin);
+  }
 
   if (req.method === "GET" && path === "/auth/users") {
     if (actor.role === "PLAYER") return response({ error: "PLAYERS_CANNOT_LIST_USERS" }, 403, origin);
@@ -490,6 +531,32 @@ async function handle(req: Request) {
     }
     const state = await db.schema(code).from("authoritative_game_rounds").select("id,round_number,status,state,betting_closes_at,opened_at,result,server_seed_hash,server_seed").eq("id", data.roundId).maybeSingle();
     return response({ ...data, ...(state.data ? { round: { id:state.data.id,roundNumber:Number(state.data.round_number),status:state.data.status,state:state.data.state,bettingEndsAt:new Date(state.data.betting_closes_at).getTime(),openedAt:new Date(state.data.opened_at).getTime(),result:state.data.status === "SETTLED" ? state.data.result : null,serverSeedHash:state.data.server_seed_hash,revealedServerSeed:state.data.status === "SETTLED" ? state.data.server_seed : null } } : {}) }, data.replay ? 200 : 201, origin);
+  }
+
+
+  if (req.method === "GET" && path === "/auth/admin-payment-info") {
+    const targetId = actor.role === "PLAYER" ? actor.parentId : actor.id;
+    if (!targetId) return response({ upiId:"", upiQrCode:"", paymentAccountName:"" },200,origin);
+    const { data,error } = await db.schema("platform").from("user_profiles").select("preferences").eq("user_id",targetId).maybeSingle();
+    if (error) return response({ error:"PAYMENT_INFO_UNAVAILABLE" },503,origin);
+    const p = data?.preferences ?? {};
+    return response({ upiId:p.upiId ?? "", upiQrCode:p.upiQrCode ?? "", paymentAccountName:p.paymentAccountName ?? "" },200,origin);
+  }
+  if (req.method === "PUT" && path === "/auth/payment-details") {
+    if (!["OWNER","SUPER_ADMIN","ADMIN"].includes(actor.role)) return response({ error:"ADMIN_ONLY" },403,origin);
+    let body: Record<string,unknown>;
+    try { body = await req.json(); } catch { return response({ error:"INVALID_JSON" },400,origin); }
+    const upiId = typeof body.upiId === "string" ? body.upiId.trim().slice(0,120) : undefined;
+    const upiQrCode = typeof body.upiQrCode === "string" ? body.upiQrCode.slice(0,500000) : undefined;
+    const paymentAccountName = typeof body.paymentAccountName === "string" ? body.paymentAccountName.trim().slice(0,120) : undefined;
+    if (upiId === undefined && upiQrCode === undefined && paymentAccountName === undefined) return response({ error:"NO_PAYMENT_FIELDS" },400,origin);
+    const { data:profile,error:readError } = await db.schema("platform").from("user_profiles").select("preferences").eq("user_id",actor.id).maybeSingle();
+    if (readError || !profile) return response({ error:"PAYMENT_INFO_UNAVAILABLE" },503,origin);
+    const preferences = { ...(profile.preferences ?? {}), ...(upiId !== undefined ? {upiId} : {}), ...(upiQrCode !== undefined ? {upiQrCode} : {}), ...(paymentAccountName !== undefined ? {paymentAccountName} : {}) };
+    const { error } = await db.schema("platform").from("user_profiles").update({ preferences,updated_at:new Date().toISOString() }).eq("user_id",actor.id);
+    if (error) return response({ error:"PAYMENT_INFO_UPDATE_FAILED" },400,origin);
+    try { await audit(db,actor.id,"PAYMENT_DETAILS_UPDATED","USER",actor.id,{ fields:[upiId !== undefined ? "upiId" : null,upiQrCode !== undefined ? "upiQrCode" : null,paymentAccountName !== undefined ? "paymentAccountName" : null].filter(Boolean) }); } catch {}
+    return response({ message:"PAYMENT_DETAILS_UPDATED",user:{id:actor.id,username:actor.username,role:actor.role} },200,origin);
   }
 
   if (/^\/games\/(roulette|dice|dragon-tiger|andar-bahar|teen-patti)(\/|$)/.test(path)) {
