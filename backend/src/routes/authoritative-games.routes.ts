@@ -56,11 +56,20 @@ let engineTimer: NodeJS.Timeout | null = null;
 let engineBusy = false;
 let lastSchemaWarningAt = 0;
 
+function schemaFor(code: GameCode): string {
+  // The caller only supplies values parsed through the fixed GameCode whitelist.
+  return code;
+}
+
 async function hasRuntimeSchema(): Promise<boolean> {
   const rows = await getDatabaseClient().unsafe(
-    "SELECT to_regclass('public.authoritative_game_rounds') AS rounds, to_regclass('public.authoritative_game_bets') AS bets",
+    "SELECT " +
+      "to_regclass('roulette.authoritative_game_rounds') IS NOT NULL AND to_regclass('roulette.authoritative_game_bets') IS NOT NULL AND " +
+      "to_regclass('dice.authoritative_game_rounds') IS NOT NULL AND to_regclass('dice.authoritative_game_bets') IS NOT NULL AND " +
+      "to_regclass('dragon_tiger.authoritative_game_rounds') IS NOT NULL AND to_regclass('dragon_tiger.authoritative_game_bets') IS NOT NULL AND " +
+      "to_regclass('andar_bahar.authoritative_game_rounds') IS NOT NULL AND to_regclass('andar_bahar.authoritative_game_bets') IS NOT NULL AS ready",
   );
-  return Boolean(rows[0]?.rounds && rows[0]?.bets);
+  return Boolean(rows[0]?.ready);
 }
 
 async function auth(req: AuthRequest, res: Response, next: NextFunction) {
@@ -257,19 +266,19 @@ function publicRound(row: any, code: GameCode) {
 async function readGameState(code: GameCode) {
   const sql = getDatabaseClient();
   const rounds = await sql.unsafe(
-    'SELECT * FROM public.authoritative_game_rounds WHERE game_code=$1 ORDER BY round_number DESC LIMIT 1', [code],
+    `SELECT * FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1 ORDER BY round_number DESC LIMIT 1`, [code],
   );
   const history = await sql.unsafe(
-    'SELECT id,round_number,status,result,settled_at FROM public.authoritative_game_rounds WHERE game_code=$1 AND status=\'SETTLED\' ORDER BY round_number DESC LIMIT 25', [code],
+    `SELECT id,round_number,status,result,settled_at FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1 AND status='SETTLED' ORDER BY round_number DESC LIMIT 25`, [code],
   );
   const bets = rounds[0] ? await sql.unsafe(
-    'SELECT b.id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",u.username FROM public.authoritative_game_bets b JOIN platform.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100',
+    `SELECT b.id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",u.username FROM ${schemaFor(code)}.authoritative_game_bets b JOIN platform.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100`,
     [rounds[0].id],
   ) : [];
   const current: any = rounds[0] ? publicRound(rounds[0], code) : null;
   if (current) {
     const aggregateRows = await sql.unsafe(
-      'SELECT selection->>\'type\' AS type, COALESCE(sum(bet_amount),0)::text AS amount FROM public.authoritative_game_bets WHERE round_id=$1 GROUP BY selection->>\'type\'',
+      `SELECT selection->>'type' AS type, COALESCE(sum(bet_amount),0)::text AS amount FROM ${schemaFor(code)}.authoritative_game_bets WHERE round_id=$1 GROUP BY selection->>'type'`,
       [rounds[0].id],
     );
     const totals: Record<string, bigint> = {};
@@ -325,7 +334,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
     if (!(await hasRuntimeSchema())) return res.status(503).json({ error: 'GAME_RUNTIME_MIGRATION_REQUIRED' });
     const replayKeys = rawBets.map((_: any, index: number) => rawBets.length === 1 ? idempotencyBase : idempotencyBase + '_' + index);
     const existingRows = await sql.unsafe(
-      'SELECT b.id,b.user_id,b.round_id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",b.idempotency_key,r.game_code FROM public.authoritative_game_bets b JOIN public.authoritative_game_rounds r ON r.id=b.round_id WHERE b.idempotency_key = ANY($1::text[])',
+      `SELECT b.id,b.user_id,b.round_id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",b.idempotency_key,r.game_code FROM ${schemaFor(code)}.authoritative_game_bets b JOIN ${schemaFor(code)}.authoritative_game_rounds r ON r.id=b.round_id WHERE b.idempotency_key = ANY($1::text[])`,
       [replayKeys],
     );
     if (existingRows.length > 0) {
@@ -338,7 +347,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
           throw new Error('IDEMPOTENCY_KEY_REUSE');
         }
         const same = await sql.unsafe(
-          'SELECT selection=$2::jsonb AS same FROM public.authoritative_game_bets WHERE id=$1',
+          `SELECT selection=$2::jsonb AS same FROM ${schemaFor(code)}.authoritative_game_bets WHERE id=$1`,
           [existing.id, JSON.stringify(selection)],
         );
         if (!same[0]?.same) throw new Error('IDEMPOTENCY_KEY_REUSE');
@@ -359,7 +368,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
       const game = gameRows[0];
       if (!game?.pool_wallet_id) throw new Error('GAME_NOT_CONFIGURED');
       const roundRows = await tx.unsafe(
-        "SELECT * FROM public.authoritative_game_rounds WHERE game_code=$1 AND status='BETTING' AND betting_closes_at>now() ORDER BY round_number DESC LIMIT 1 FOR UPDATE", [code],
+        `SELECT * FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1 AND status='BETTING' AND betting_closes_at>now() ORDER BY round_number DESC LIMIT 1 FOR UPDATE`, [code],
       );
       const round = roundRows[0];
       if (!round) throw new Error('BETTING_CLOSED');
@@ -374,7 +383,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
         const selection = input.selection || input;
         const liability = amount * BigInt(maxLiabilityMultiplier(code, selection));
         const key = rawBets.length === 1 ? idempotencyBase : idempotencyBase + '_' + i;
-        const prior = await tx.unsafe('SELECT id,user_id,round_id,bet_amount,status,(selection=$2::jsonb) AS same_selection FROM public.authoritative_game_bets WHERE idempotency_key=$1', [key, JSON.stringify(selection)]);
+        const prior = await tx.unsafe(`SELECT id,user_id,round_id,bet_amount,status,(selection=$2::jsonb) AS same_selection FROM ${schemaFor(code)}.authoritative_game_bets WHERE idempotency_key=$1`, [key, JSON.stringify(selection)]);
         if (prior[0]) {
           if (prior[0].user_id !== req.actor!.id || prior[0].round_id !== round.id ||
               String(prior[0].bet_amount) !== String(amount) ||
@@ -392,7 +401,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
         }
         await tx.unsafe("UPDATE wallet.wallets SET reserved_balance=reserved_balance+$2::bigint,updated_at=now() WHERE id=$1", [game.pool_wallet_id, liability.toString()]);
         const betRows = await tx.unsafe(
-          "INSERT INTO public.authoritative_game_bets(round_id,user_id,bet_amount,selection,idempotency_key,reserved_liability) VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING id",
+          `INSERT INTO ${schemaFor(code)}.authoritative_game_bets(round_id,user_id,bet_amount,selection,idempotency_key,reserved_liability) VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING id`,
           [round.id, req.actor!.id, amount.toString(), JSON.stringify(selection), key, liability.toString()],
         );
         const betId = betRows[0].id as string;
@@ -400,11 +409,11 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
           "SELECT wallet.wallet_transfer_atomic($1,'BET_ESCROW_LOCK'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
           ['AGAME_BET_' + key, amount.toString(), playerRows[0].id, escrowRows[0].id, JSON.stringify({ gameCode: code, roundId: round.id, betId })],
         );
-        await tx.unsafe('UPDATE public.authoritative_game_bets SET escrow_transaction_id=$1 WHERE id=$2', [txRows[0].id, betId]);
+        await tx.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_bets SET escrow_transaction_id=$1 WHERE id=$2`, [txRows[0].id, betId]);
         result.push({ id: betId, status: 'PENDING', amount: amount.toString(), selection });
       }
       await tx.unsafe(
-        "UPDATE public.authoritative_game_rounds SET state=jsonb_set(jsonb_set(state,'{totalBetsCount}',to_jsonb((SELECT count(*) FROM public.authoritative_game_bets WHERE round_id=$1)::integer),true),'{totalBetAmount}',to_jsonb((SELECT COALESCE(sum(bet_amount),0)::text FROM public.authoritative_game_bets WHERE round_id=$1)),true) WHERE id=$1",
+        `UPDATE ${schemaFor(code)}.authoritative_game_rounds SET state=jsonb_set(jsonb_set(state,'{totalBetsCount}',to_jsonb((SELECT count(*) FROM ${schemaFor(code)}.authoritative_game_bets WHERE round_id=$1)::integer),true),'{totalBetAmount}',to_jsonb((SELECT COALESCE(sum(bet_amount),0)::text FROM ${schemaFor(code)}.authoritative_game_bets WHERE round_id=$1)),true) WHERE id=$1`,
         [round.id],
       );
       return result;
@@ -438,14 +447,14 @@ for (const [path, code] of [
 async function settleRound(roundId: string, code: GameCode) {
   const sql = getDatabaseClient();
   await sql.begin(async (tx) => {
-    const rows = await tx.unsafe('SELECT * FROM public.authoritative_game_rounds WHERE id=$1 FOR UPDATE', [roundId]);
+    const rows = await tx.unsafe(`SELECT * FROM ${schemaFor(code)}.authoritative_game_rounds WHERE id=$1 FOR UPDATE`, [roundId]);
     const round = rows[0];
     if (!round || !canSettleRound(round.status, round.result)) return;
     const gameRows = await tx.unsafe("SELECT pool_wallet_id FROM platform.games WHERE code=$1 LIMIT 1", [code]);
     const poolWalletId = gameRows[0]?.pool_wallet_id;
     const escrowRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1");
     if (!poolWalletId || !escrowRows[0]) throw new Error('GAME_WALLETS_NOT_CONFIGURED');
-    const bets = await tx.unsafe("SELECT * FROM public.authoritative_game_bets WHERE round_id=$1 AND status='PENDING' ORDER BY id FOR UPDATE", [roundId]);
+    const bets = await tx.unsafe(`SELECT * FROM ${schemaFor(code)}.authoritative_game_bets WHERE round_id=$1 AND status='PENDING' ORDER BY id FOR UPDATE`, [roundId]);
     for (const bet of bets) {
       const playerRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [bet.user_id]);
       if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
@@ -470,11 +479,11 @@ async function settleRound(roundId: string, code: GameCode) {
         payoutTxId = payoutRows[0].id;
       }
       await tx.unsafe(
-        "UPDATE public.authoritative_game_bets SET status=$1,payout_amount=$2,stake_release_transaction_id=$3,payout_transaction_id=$4,settled_at=now() WHERE id=$5",
+        `UPDATE ${schemaFor(code)}.authoritative_game_bets SET status=$1,payout_amount=$2,stake_release_transaction_id=$3,payout_transaction_id=$4,settled_at=now() WHERE id=$5`,
         [gross > 0n ? 'WON' : 'LOST', gross.toString(), releaseRows[0].id, payoutTxId, bet.id],
       );
     }
-    await tx.unsafe("UPDATE public.authoritative_game_rounds SET status='SETTLED',settled_at=now(),server_seed=server_seed WHERE id=$1", [roundId]);
+    await tx.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET status='SETTLED',settled_at=now(),server_seed=server_seed WHERE id=$1`, [roundId]);
   });
 }
 
@@ -491,32 +500,32 @@ async function tick() {
       return;
     }
     const activeRows = await sql.unsafe(
-      "SELECT g.code,g.status FROM platform.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM public.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
+      "SELECT g.code,g.status FROM platform.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM roulette.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM dice.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM dragon_tiger.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM andar_bahar.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
     );
     for (const game of activeRows) {
       const code = game.code as GameCode;
-      const latestRows = await sql.unsafe('SELECT * FROM public.authoritative_game_rounds WHERE game_code=$1 ORDER BY round_number DESC LIMIT 1', [code]);
+      const latestRows = await sql.unsafe(`SELECT * FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1 ORDER BY round_number DESC LIMIT 1`, [code]);
       const latest = latestRows[0];
       if (latest?.status === 'BETTING' && new Date(latest.betting_closes_at).getTime() <= Date.now()) {
         const seed = String(latest.server_seed || '');
         const result = makeResult(code, seed);
-        await sql.unsafe("UPDATE public.authoritative_game_rounds SET status='RUNNING',result=$2::jsonb WHERE id=$1 AND status='BETTING'", [latest.id, JSON.stringify(result)]);
+        await sql.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET status='RUNNING',result=$2::jsonb WHERE id=$1 AND status='BETTING'`, [latest.id, JSON.stringify(result)]);
       } else if (latest?.status === 'RUNNING' && Date.now() - new Date(latest.betting_closes_at).getTime() >= 1500) {
         if (!latest.result) {
           const recoveredResult = makeResult(code, String(latest.server_seed || ''));
-          await sql.unsafe("UPDATE public.authoritative_game_rounds SET result=$2::jsonb WHERE id=$1 AND status='RUNNING' AND result IS NULL", [latest.id, JSON.stringify(recoveredResult)]);
+          await sql.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET result=$2::jsonb WHERE id=$1 AND status='RUNNING' AND result IS NULL`, [latest.id, JSON.stringify(recoveredResult)]);
         }
-        await sql.unsafe("UPDATE public.authoritative_game_rounds SET status='RESULT' WHERE id=$1 AND status='RUNNING' AND result IS NOT NULL", [latest.id]);
+        await sql.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET status='RESULT' WHERE id=$1 AND status='RUNNING' AND result IS NOT NULL`, [latest.id]);
       } else if (latest?.status === 'RESULT' && Date.now() - new Date(latest.betting_closes_at).getTime() >= 2700) {
         await settleRound(latest.id, code);
       } else if (game.status === 'ACTIVE' && (!latest || latest.status === 'SETTLED' || latest.status === 'CANCELLED') &&
           (!latest || !latest.settled_at || Date.now() - new Date(latest.settled_at).getTime() >= 2500)) {
-        const gameRows = await sql.unsafe("SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM public.authoritative_game_rounds WHERE game_code=$1", [code]);
+        const gameRows = await sql.unsafe(`SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1`, [code]);
         const roundNumber = Number(gameRows[0].n) + 1;
         const seed = randomBytes(32).toString('hex');
         const seedHash = createHash('sha256').update(seed).digest('hex');
         await sql.unsafe(
-          "INSERT INTO public.authoritative_game_rounds(game_code,round_number,status,state,server_seed_hash,server_seed,opened_at,betting_closes_at) VALUES($1,$2,'BETTING',$3::jsonb,$4,$5,now(),now()+($6::text||' milliseconds')::interval)",
+          `INSERT INTO ${schemaFor(code)}.authoritative_game_rounds(game_code,round_number,status,state,server_seed_hash,server_seed,opened_at,betting_closes_at) VALUES($1,$2,'BETTING',$3::jsonb,$4,$5,now(),now()+($6::text||' milliseconds')::interval)`,
           [code, roundNumber, JSON.stringify({ totalBetsCount: 0, totalBetAmount: '0' }), seedHash, seed, BETTING_MS],
         );
       }

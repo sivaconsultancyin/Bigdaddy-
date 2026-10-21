@@ -27,8 +27,55 @@ CREATE TABLE public.token_supply (id integer PRIMARY KEY, max_supply bigint, tot
 CREATE TABLE public.game_rounds (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), game_code text, round_number bigint, status public.round_status_enum);
 CREATE TABLE public.game_bets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), round_id uuid, user_id uuid, bet_amount bigint, payout_amount bigint DEFAULT 0, status public.bet_status_enum DEFAULT 'PENDING');
 CREATE TABLE public.game_settlements (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), bet_id uuid, round_id uuid, transaction_id uuid);
-CREATE TABLE public.authoritative_game_rounds (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), game_code text, round_number bigint, status text);
-CREATE TABLE public.authoritative_game_bets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), round_id uuid, user_id uuid, status text DEFAULT 'PENDING', bet_amount bigint DEFAULT 0, payout_amount bigint DEFAULT 0, reserved_liability bigint DEFAULT 0, idempotency_key text);
+CREATE TABLE public.authoritative_game_rounds (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_code text NOT NULL CHECK (game_code IN ('roulette','dice','dragon_tiger','andar_bahar')),
+  round_number bigint NOT NULL CHECK (round_number > 0),
+  status text NOT NULL DEFAULT 'BETTING' CHECK (status IN ('BETTING','RUNNING','RESULT','SETTLED','CANCELLED')),
+  state jsonb NOT NULL DEFAULT '{}'::jsonb,
+  result jsonb,
+  server_seed_hash text NOT NULL,
+  server_seed text,
+  opened_at timestamptz NOT NULL DEFAULT now(),
+  betting_closes_at timestamptz NOT NULL,
+  settled_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (game_code, round_number),
+  CHECK (betting_closes_at > opened_at)
+);
+CREATE TABLE public.authoritative_game_bets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  round_id uuid NOT NULL REFERENCES public.authoritative_game_rounds(id) ON DELETE RESTRICT,
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE RESTRICT,
+  bet_amount bigint NOT NULL CHECK (bet_amount > 0),
+  selection jsonb NOT NULL,
+  status text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','WON','LOST','CANCELLED')),
+  payout_amount bigint NOT NULL DEFAULT 0 CHECK (payout_amount >= 0),
+  reserved_liability bigint NOT NULL DEFAULT 0 CHECK (reserved_liability >= 0),
+  idempotency_key text NOT NULL UNIQUE CHECK (length(trim(idempotency_key)) >= 8),
+  escrow_transaction_id uuid REFERENCES public.wallet_transactions(id),
+  stake_release_transaction_id uuid REFERENCES public.wallet_transactions(id),
+  payout_transaction_id uuid REFERENCES public.wallet_transactions(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  settled_at timestamptz
+);
+
+-- Seed settled rows so CI proves the per-game split preserves history and IDs.
+INSERT INTO public.users(id,username) VALUES ('20000000-0000-0000-0000-000000000001','fixture-player');
+INSERT INTO public.authoritative_game_rounds
+  (id,game_code,round_number,status,state,result,server_seed_hash,server_seed,opened_at,betting_closes_at,settled_at)
+VALUES
+  ('30000000-0000-0000-0000-000000000001','roulette',1,'SETTLED','{}','{"number":7,"color":"red"}','roulette-hash','roulette-seed',now()-interval '2 minutes',now()-interval '1 minute',now()),
+  ('30000000-0000-0000-0000-000000000002','dice',1,'SETTLED','{}','{"number":5}','dice-hash','dice-seed',now()-interval '2 minutes',now()-interval '1 minute',now()),
+  ('30000000-0000-0000-0000-000000000003','dragon_tiger',1,'SETTLED','{}','{"winner":"dragon"}','dragon-hash','dragon-seed',now()-interval '2 minutes',now()-interval '1 minute',now()),
+  ('30000000-0000-0000-0000-000000000004','andar_bahar',1,'SETTLED','{}','{"winner":"andar"}','andar-hash','andar-seed',now()-interval '2 minutes',now()-interval '1 minute',now());
+INSERT INTO public.authoritative_game_bets
+  (id,round_id,user_id,bet_amount,selection,status,payout_amount,reserved_liability,idempotency_key)
+VALUES
+  ('40000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',10,'{"type":"red"}','WON',20,0,'fixture-roulette-0001'),
+  ('40000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001',10,'{"type":"odd"}','WON',20,0,'fixture-dice-0000001'),
+  ('40000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001',10,'{"type":"dragon"}','WON',20,0,'fixture-dragontiger-01'),
+  ('40000000-0000-0000-0000-000000000004','30000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000001',10,'{"type":"andar"}','WON',20,0,'fixture-andarbahar-01');
 
 CREATE FUNCTION public.wallet_transfer_atomic(text, public.transaction_type_enum, bigint, uuid, uuid, jsonb DEFAULT '{}'::jsonb)
 RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ SELECT gen_random_uuid() $$;

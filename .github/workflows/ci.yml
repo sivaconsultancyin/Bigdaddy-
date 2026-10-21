@@ -319,3 +319,77 @@ jobs:
         END
         $$;
         SQL
+
+    - name: Apply per-game authoritative schema split
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021140000_split_authoritative_games_by_schema.sql
+
+    - name: Verify per-game tables, foreign keys, and preserved history
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $$
+        DECLARE
+          schema_name text;
+          table_name text;
+        BEGIN
+          FOREACH schema_name IN ARRAY ARRAY['roulette','dice','dragon_tiger','andar_bahar'] LOOP
+            IF to_regclass(format('%I.authoritative_game_rounds', schema_name)) IS NULL
+               OR to_regclass(format('%I.authoritative_game_bets', schema_name)) IS NULL THEN
+              RAISE EXCEPTION 'Missing per-game tables in schema %', schema_name;
+            END IF;
+            IF has_schema_privilege('anon', schema_name, 'USAGE')
+               OR has_schema_privilege('authenticated', schema_name, 'USAGE') THEN
+              RAISE EXCEPTION 'Browser role can access schema %', schema_name;
+            END IF;
+            IF NOT has_schema_privilege('service_role', schema_name, 'USAGE') THEN
+              RAISE EXCEPTION 'service_role cannot access schema %', schema_name;
+            END IF;
+          END LOOP;
+
+          IF (SELECT count(*) FROM roulette.authoritative_game_rounds) <> 1
+             OR (SELECT count(*) FROM dice.authoritative_game_rounds) <> 1
+             OR (SELECT count(*) FROM dragon_tiger.authoritative_game_rounds) <> 1
+             OR (SELECT count(*) FROM andar_bahar.authoritative_game_rounds) <> 1 THEN
+            RAISE EXCEPTION 'Settled round history was not split by game';
+          END IF;
+          IF (SELECT count(*) FROM roulette.authoritative_game_bets) <> 1
+             OR (SELECT count(*) FROM dice.authoritative_game_bets) <> 1
+             OR (SELECT count(*) FROM dragon_tiger.authoritative_game_bets) <> 1
+             OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets) <> 1 THEN
+            RAISE EXCEPTION 'Bet history was not split by game';
+          END IF;
+          IF EXISTS (SELECT 1 FROM roulette.authoritative_game_rounds WHERE game_code <> 'roulette')
+             OR EXISTS (SELECT 1 FROM dice.authoritative_game_rounds WHERE game_code <> 'dice')
+             OR EXISTS (SELECT 1 FROM dragon_tiger.authoritative_game_rounds WHERE game_code <> 'dragon_tiger')
+             OR EXISTS (SELECT 1 FROM andar_bahar.authoritative_game_rounds WHERE game_code <> 'andar_bahar') THEN
+            RAISE EXCEPTION 'Round rows are present in the wrong game schema';
+          END IF;
+          IF (SELECT count(*) FROM public.authoritative_game_rounds) <> 4
+             OR (SELECT count(*) FROM public.authoritative_game_bets) <> 4 THEN
+            RAISE EXCEPTION 'Read-only compatibility views do not preserve all history';
+          END IF;
+          IF (SELECT relkind FROM pg_class WHERE oid=to_regclass('public.authoritative_game_rounds')) <> 'v'
+             OR (SELECT relkind FROM pg_class WHERE oid=to_regclass('public.authoritative_game_bets')) <> 'v' THEN
+            RAISE EXCEPTION 'Shared public runtime objects are not compatibility views';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid='roulette.authoritative_game_bets'::regclass
+              AND confrelid='roulette.authoritative_game_rounds'::regclass
+          ) OR NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid='dice.authoritative_game_bets'::regclass
+              AND confrelid='dice.authoritative_game_rounds'::regclass
+          ) OR NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid='dragon_tiger.authoritative_game_bets'::regclass
+              AND confrelid='dragon_tiger.authoritative_game_rounds'::regclass
+          ) OR NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid='andar_bahar.authoritative_game_bets'::regclass
+              AND confrelid='andar_bahar.authoritative_game_rounds'::regclass
+          ) THEN
+            RAISE EXCEPTION 'Per-game bet-to-round foreign keys are missing';
+          END IF;
+        END
+        $$;
+        SQL
