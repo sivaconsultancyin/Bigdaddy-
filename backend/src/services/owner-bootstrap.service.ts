@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
-import { getDatabaseClient } from '../db/postgres';
+import { getAuthDatabaseClient } from '../db/postgres';
 
 export async function bootstrapOwnerFromEnvironment(): Promise<void> {
-  const sql = getDatabaseClient();
+  const sql = getAuthDatabaseClient();
 
   // Do not require bootstrap credentials on every restart once an Owner exists.
   const existing = await sql.unsafe("SELECT u.id FROM public.users u JOIN public.role_assignments r ON r.user_id=u.id WHERE r.role='OWNER' LIMIT 1");
