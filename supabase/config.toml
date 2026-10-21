@@ -1,1 +1,5 @@
 project_id = "bigdaddy-casino"
+
+[functions.health]
+# Public, read-only connectivity probe. No secrets or user data are returned.
+verify_jwt = false
