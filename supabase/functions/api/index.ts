@@ -9,9 +9,16 @@ const roles: Role[] = ["OWNER", "SUPER_ADMIN", "ADMIN", "PLAYER"];
 function response(body: Record<string, unknown>, status = 200, origin?: string | null) {
   const headers = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
   const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (origin && allowed.length && allowed.includes(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-    headers["Vary"] = "Origin";
+  if (allowed.length > 0) {
+    // Do not leave the default wildcard in place when an allowlist is configured.
+    delete headers["Access-Control-Allow-Origin"];
+    delete headers["Vary"];
+    if (origin && allowed.includes(origin)) {
+      headers["Access-Control-Allow-Origin"] = origin;
+      headers["Vary"] = "Origin";
+    }
+  } else {
+    headers["Access-Control-Allow-Origin"] = "*";
   }
   return new Response(JSON.stringify(body), { status, headers });
 }
