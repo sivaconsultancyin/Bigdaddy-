@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
-import { getAuthDatabaseClient, getDatabaseClient } from '../db/postgres';
+import { getAuthDatabaseClient, getDatabaseClient, getWalletDatabaseClient } from '../db/postgres';
 import { AuthService } from '../services/auth.service';
 import { loginSchema, createUserSchema, referralRegisterSchema, directTransferSchema, aviatorBetSchema, aviatorCashoutSchema } from '../../../shared/src/schemas';
 import { UserRole, TransactionType } from '../../../shared/src/types';
@@ -228,10 +228,11 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
     stage: 'WALLET_QUERY_OR_POOL_WAIT',
   });
   try {
-    const sql = getDatabaseClient();
+    // Isolate the critical balance read from game/admin queries that can occupy the general pool.
+    const sql = getWalletDatabaseClient();
     const rows = actor.role === UserRole.OWNER
-      ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type='TREASURY' LIMIT 1`, [], { timeout: 12000 })
-      : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [actor.id], { timeout: 12000 });
+      ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type='TREASURY' LIMIT 1`)
+      : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
     clearTimeout(deadline);
     if (timeoutSent || res.headersSent || res.writableEnded) return;
     console.info('Wallet my-wallet query completed', {
@@ -257,7 +258,7 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
     if (timedOut) {
       return res.status(503).json({
         error: 'WALLET_DATABASE_TIMEOUT',
-        message: 'Wallet database query exceeded its 12-second limit. Check PostgreSQL query latency and connection-pool saturation.',
+        message: 'Wallet database query timed out. Check PostgreSQL query latency and connection-pool saturation.',
       });
     }
     return res.status(503).json({ error: 'WALLET_SERVICE_UNAVAILABLE' });
