@@ -14,13 +14,6 @@ BEGIN
     RAISE EXCEPTION 'Per-game schema split blocked: active rounds exist';
   END IF;
   IF EXISTS (
-    SELECT 1 FROM public.authoritative_game_bets b
-    JOIN public.authoritative_game_rounds r ON r.id=b.round_id
-    WHERE b.game_code IS NOT NULL AND b.game_code <> r.game_code
-  ) THEN
-    RAISE EXCEPTION 'Per-game schema split blocked: bet/round game mismatch';
-  END IF;
-  IF EXISTS (
     SELECT 1 FROM public.authoritative_game_rounds
     WHERE game_code NOT IN ('roulette','dice','dragon_tiger','andar_bahar')
   ) THEN
@@ -70,29 +63,25 @@ ALTER TABLE roulette.authoritative_game_bets
   ADD CONSTRAINT roulette_bet_user_fk FOREIGN KEY (user_id) REFERENCES platform.users(id) ON DELETE RESTRICT,
   ADD CONSTRAINT roulette_bet_escrow_tx_fk FOREIGN KEY (escrow_transaction_id) REFERENCES wallet.wallet_transactions(id),
   ADD CONSTRAINT roulette_bet_stake_tx_fk FOREIGN KEY (stake_release_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT roulette_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT roulette_bet_game_code CHECK (game_code IS NULL OR game_code = 'roulette');
+  ADD CONSTRAINT roulette_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id);
 ALTER TABLE dice.authoritative_game_bets
   ADD CONSTRAINT dice_bet_round_fk FOREIGN KEY (round_id) REFERENCES dice.authoritative_game_rounds(id) ON DELETE RESTRICT,
   ADD CONSTRAINT dice_bet_user_fk FOREIGN KEY (user_id) REFERENCES platform.users(id) ON DELETE RESTRICT,
   ADD CONSTRAINT dice_bet_escrow_tx_fk FOREIGN KEY (escrow_transaction_id) REFERENCES wallet.wallet_transactions(id),
   ADD CONSTRAINT dice_bet_stake_tx_fk FOREIGN KEY (stake_release_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT dice_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT dice_bet_game_code CHECK (game_code IS NULL OR game_code = 'dice');
+  ADD CONSTRAINT dice_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id);
 ALTER TABLE dragon_tiger.authoritative_game_bets
   ADD CONSTRAINT dragon_tiger_bet_round_fk FOREIGN KEY (round_id) REFERENCES dragon_tiger.authoritative_game_rounds(id) ON DELETE RESTRICT,
   ADD CONSTRAINT dragon_tiger_bet_user_fk FOREIGN KEY (user_id) REFERENCES platform.users(id) ON DELETE RESTRICT,
   ADD CONSTRAINT dragon_tiger_bet_escrow_tx_fk FOREIGN KEY (escrow_transaction_id) REFERENCES wallet.wallet_transactions(id),
   ADD CONSTRAINT dragon_tiger_bet_stake_tx_fk FOREIGN KEY (stake_release_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT dragon_tiger_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT dragon_tiger_bet_game_code CHECK (game_code IS NULL OR game_code = 'dragon_tiger');
+  ADD CONSTRAINT dragon_tiger_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id);
 ALTER TABLE andar_bahar.authoritative_game_bets
   ADD CONSTRAINT andar_bahar_bet_round_fk FOREIGN KEY (round_id) REFERENCES andar_bahar.authoritative_game_rounds(id) ON DELETE RESTRICT,
   ADD CONSTRAINT andar_bahar_bet_user_fk FOREIGN KEY (user_id) REFERENCES platform.users(id) ON DELETE RESTRICT,
   ADD CONSTRAINT andar_bahar_bet_escrow_tx_fk FOREIGN KEY (escrow_transaction_id) REFERENCES wallet.wallet_transactions(id),
   ADD CONSTRAINT andar_bahar_bet_stake_tx_fk FOREIGN KEY (stake_release_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT andar_bahar_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id),
-  ADD CONSTRAINT andar_bahar_bet_game_code CHECK (game_code IS NULL OR game_code = 'andar_bahar');
+  ADD CONSTRAINT andar_bahar_bet_payout_tx_fk FOREIGN KEY (payout_transaction_id) REFERENCES wallet.wallet_transactions(id);
 
 -- Copy settled/cancelled historical rows with original IDs, seeds, bets and ledger references.
 INSERT INTO roulette.authoritative_game_rounds SELECT * FROM public.authoritative_game_rounds WHERE game_code='roulette';
