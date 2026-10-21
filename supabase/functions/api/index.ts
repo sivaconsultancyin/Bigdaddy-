@@ -402,7 +402,7 @@ async function handle(req: Request) {
   }
 
 
-  const requestResolution = path.match(/^\\/requests\\/([^/]+)\\/(approve|reject)$/);
+  const requestResolution = path.match(/^\/requests\/([^/]+)\/(approve|reject)$/);
   if (req.method === "POST" && requestResolution) {
     if (actor.role === "PLAYER") return response({ error: requestResolution[2] === "approve" ? "PLAYER_CANNOT_APPROVE_REQUESTS" : "PLAYER_CANNOT_REJECT_REQUESTS" }, 403, origin);
     const requestId = requestResolution[1];
@@ -434,7 +434,7 @@ async function handle(req: Request) {
   }
 
 
-  const gameStateMatch = path.match(/^\\/games\\/(roulette|dice|dragon-tiger|andar-bahar)\\/state$/);
+  const gameStateMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/state$/);
   if (req.method === "GET" && gameStateMatch) {
     const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
     const { data: rounds, error: roundError } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
@@ -468,7 +468,7 @@ async function handle(req: Request) {
     return response({ round: current, history, bets: mappedBets, allBets: mappedBets }, 200, origin);
   }
 
-  const gameBetMatch = path.match(/^\\/games\\/(roulette|dice|dragon-tiger|andar-bahar)\\/(bet|spin|roll)$/);
+  const gameBetMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/(bet|spin|roll)$/);
   if (req.method === "POST" && gameBetMatch) {
     if (actor.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
     const code = gameBetMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameBetMatch[1] === "andar-bahar" ? "andar_bahar" : gameBetMatch[1];
