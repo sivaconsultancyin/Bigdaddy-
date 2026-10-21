@@ -79,7 +79,7 @@ async function handle(req: Request) {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: { ...corsHeaders, ...(origin ? { "Access-Control-Allow-Origin": origin } : {}) } });
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/";
+  const path = url.pathname.replace(/^\/functions\/v1\/api(?=\/|$)/, "").replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/";
   if (req.method === "GET" && path === "/health") return response({ status: "ok", service: "BigDaddy Supabase API", database: "supabase-https" }, 200, origin);
   if (req.method === "GET" && path === "/ready") return response({ ready: true, database: "supabase-https" }, 200, origin);
   if (req.method === "GET" && path === "/config") {
@@ -157,8 +157,8 @@ async function handle(req: Request) {
       db.schema("platform").from("users").select("id", { count: "exact", head: true }),
     ]);
     if (supply.error || wallets.error || users.error || !supply.data) return response({ error: "WALLET_SERVICE_UNAVAILABLE" }, 503, origin);
-    const total = (wallets.data ?? []).reduce((n, w) => n + BigInt(String(w.balance)) + BigInt(String(w.reserved_balance)), 0n);
-    const sum = (type: string) => (wallets.data ?? []).filter(w => w.wallet_type === type).reduce((n,w) => n + BigInt(String(w.balance)) + BigInt(String(w.reserved_balance)), 0n);
+    const total = (wallets.data ?? []).reduce((n, w) => n + BigInt(String(w.balance)), 0n);
+    const sum = (type: string) => (wallets.data ?? []).filter(w => w.wallet_type === type).reduce((n,w) => n + BigInt(String(w.balance)), 0n);
     const treasury = sum("TREASURY"), pools = sum("GAME_POOL"), escrow = sum("ESCROW");
     const roleWallets = ["SUPER_ADMIN","ADMIN","PLAYER"].reduce((n,t) => n + sum(t), 0n);
     const valid = String(supply.data.max_supply) === String(supply.data.total_minted) && BigInt(String(supply.data.total_minted)) === total;
