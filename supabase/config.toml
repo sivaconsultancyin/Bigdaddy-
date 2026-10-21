@@ -3,3 +3,11 @@ project_id = "bigdaddy-casino"
 [functions.health]
 # Public, read-only connectivity probe. No secrets or user data are returned.
 verify_jwt = false
+
+[functions.auth-login]
+# BigDaddy login creates the existing application's HS256 JWT; the function validates inputs itself.
+verify_jwt = false
+
+[functions.auth-me]
+# The function manually verifies the existing BigDaddy JWT with BIGDADDY_JWT_SECRET.
+verify_jwt = false
