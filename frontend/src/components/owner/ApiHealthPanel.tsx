@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Clock3 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 
-type Probe = { method: string; path: string; label: string; safe: boolean };
+type Probe = { method: string; path: string; label: string; safe: boolean; validationOnly?: boolean };
 type Result = Probe & { status: 'online' | 'degraded' | 'offline' | 'manual'; code?: number; latencyMs?: number; checkedAt: string; error?: string };
 
 const probes: Probe[] = [
@@ -23,9 +23,9 @@ const probes: Probe[] = [
   { method: 'GET', path: '/games/dice/state', label: 'Dice state', safe: true },
   { method: 'GET', path: '/games/dragon-tiger/state', label: 'Dragon Tiger state', safe: true },
   { method: 'GET', path: '/games/andar-bahar/state', label: 'Andar Bahar state', safe: true },
-  { method: 'POST', path: '/auth/login', label: 'Login', safe: false },
-  { method: 'POST', path: '/auth/register-referral', label: 'Referral registration', safe: false },
-  { method: 'POST', path: '/auth/create-user', label: 'Create user', safe: false },
+  { method: 'POST', path: '/auth/login', label: 'Login', safe: true, validationOnly: true },
+  { method: 'POST', path: '/auth/register-referral', label: 'Referral registration', safe: true, validationOnly: true },
+  { method: 'POST', path: '/auth/create-user', label: 'Create user', safe: true, validationOnly: true },
   { method: 'POST', path: '/auth/bootstrap-owner', label: 'Owner bootstrap', safe: false },
   { method: 'POST', path: '/wallet/transfer', label: 'Wallet transfer', safe: false },
   { method: 'POST', path: '/wallet/game-pool', label: 'Game pool allocation', safe: false },
@@ -54,19 +54,26 @@ export const ApiHealthPanel: React.FC = () => {
     setRunning(true);
     const checkedAt = new Date().toISOString();
     const next = await Promise.all(probes.map(async (probe): Promise<Result> => {
-      if (!probe.safe) return { ...probe, status: 'manual', checkedAt, error: 'Not called automatically: endpoint may change balances or game state.' };
+      if (!probe.safe) return { ...probe, status: 'manual', checkedAt, error: 'Skipped for safety: this endpoint can change data, balances, or game state.' };
       const started = performance.now();
       try {
-        await ApiClient.request(probe.path, { method: 'GET' });
+        // For selected POST routes, send JSON null: Zod object schemas reject it before database access or mutations.
+        // Never send credentials, referral codes, usernames, or valid mutation payloads from a health check.
+        await ApiClient.request(probe.path, probe.validationOnly
+          ? { method: 'POST', body: JSON.stringify(null) }
+          : { method: 'GET' });
         return { ...probe, status: 'online', code: 200, latencyMs: Math.round(performance.now() - started), checkedAt };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const match = message.match(/(?:API request failed\s*\(|HTTP\s*)(\d{3})/i);
         const status = (error as { status?: unknown } | null)?.status;
         const code = typeof status === 'number' ? status : match ? Number(match[1]) : undefined;
-        // Auth-required and role-restricted GETs prove the route answered; they do not prove its data dependency works.
-        if (code === 401 || code === 403 || /AUTH_REQUIRED|INVALID_TOKEN|FORBIDDEN|INSUFFICIENT_PERMISSIONS|NOT_AUTHORIZED|OWNER_ONLY|PLAYER_ROLE_REQUIRED/i.test(message)) return { ...probe, status: 'online', code: code ?? (/AUTH_REQUIRED|INVALID_TOKEN/i.test(message) ? 401 : 403), latencyMs: Math.round(performance.now() - started), checkedAt, error: 'Route answered; this owner session is not authorized for that resource.' };
+        // A validation-only POST is expected to fail input validation (400/422); this proves the handler answered without performing a mutation.
+        if (probe.validationOnly && (code === 400 || code === 422)) return { ...probe, status: 'online', code, latencyMs: Math.round(performance.now() - started), checkedAt, error: 'Safe validation probe passed: invalid JSON value was rejected before mutation.' };
+        // Auth-required and role-restricted routes prove the route answered; they do not prove all business dependencies are healthy.
+        if (code === 401 || code === 403 || /AUTH_REQUIRED|INVALID_TOKEN|FORBIDDEN|INSUFFICIENT_PERMISSIONS|NOT_AUTHORIZED|OWNER_ONLY|PLAYER_ROLE_REQUIRED/i.test(message)) return { ...probe, status: 'online', code: code ?? (/AUTH_REQUIRED|INVALID_TOKEN/i.test(message) ? 401 : 403), latencyMs: Math.round(performance.now() - started), checkedAt, error: 'Route answered; this session is not authorized for that resource.' };
         if (code !== undefined && code >= 500) return { ...probe, status: 'degraded', code, latencyMs: Math.round(performance.now() - started), checkedAt, error: message };
+        if (probe.validationOnly && code !== undefined && code >= 200 && code < 300) return { ...probe, status: 'degraded', code, latencyMs: Math.round(performance.now() - started), checkedAt, error: 'Unexpected success for invalid validation probe; verify handler validation before trusting this health result.' };
         if (code !== undefined) return { ...probe, status: 'online', code, latencyMs: Math.round(performance.now() - started), checkedAt, error: `Route answered with HTTP ${code}; check the endpoint-level condition below.` };
         return { ...probe, status: 'offline', latencyMs: Math.round(performance.now() - started), checkedAt, error: message };
       }
@@ -126,7 +133,7 @@ export const ApiHealthPanel: React.FC = () => {
           </div>
         ))}
       </div>
-      <p className="text-[10px] leading-relaxed text-zinc-500">Route inventory is matched to the registered routes in server.ts, production.routes.ts, production.requests.routes.ts and authoritative-games.routes.ts. Read-only GET routes are probed. HTTP 5xx is shown as Degraded with the backend's returned reason; network/timeouts are No response. Financial/game-changing POST routes are deliberately skipped so monitoring never transfers funds, creates users, places bets, cashes out, or changes game state. “Responding” confirms an HTTP response, not successful business logic.</p>
+      <p className="text-[10px] leading-relaxed text-zinc-500">Route inventory is matched to registered backend routes. Read-only GET routes are probed normally. Login, referral registration, and create-user use a validation-only POST with JSON null; expected 400/422 confirms input validation rejected it before mutation. No credentials or valid mutation payloads are sent. All other financial/game-changing POST routes remain skipped. HTTP 5xx shows the backend reason; network/timeouts show No response. “Responding” confirms an HTTP response, not successful business logic.</p>
     </section>
   );
 };
