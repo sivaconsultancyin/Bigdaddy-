@@ -1,5 +1,10 @@
 project_id = "nzvpuoeibqrpcltrszvr"
 
+[api]
+schemas = ["public", "graphql_public", "platform", "wallet", "aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
 [functions.health]
 # Public, read-only connectivity probe. No secrets or user data are returned.
 verify_jwt = false
