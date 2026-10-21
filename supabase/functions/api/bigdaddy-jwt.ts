@@ -52,8 +52,8 @@ export async function verifyBigDaddyToken(token: string): Promise<BigDaddyClaims
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, idempotency-key",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
 };
 
 export function jsonResponse(body: Record<string, unknown>, status = 200) {
