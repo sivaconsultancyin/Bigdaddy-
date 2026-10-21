@@ -17,13 +17,13 @@ export function getJwtSecret(): Uint8Array {
 
 export async function signBigDaddyToken(claims: BigDaddyClaims): Promise<string> {
   return await new SignJWT({
+    id: claims.id,
     username: claims.username,
     role: claims.role,
     parentId: claims.parentId,
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(claims.id)
-    .setClaim("id", claims.id)
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(getJwtSecret());
