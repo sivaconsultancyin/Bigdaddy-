@@ -82,7 +82,8 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
   const round = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
   return { round: { id: round.id, roundNumber: Number(round.round_number), status: round.status, bettingEndsAt: new Date(round.betting_closes_at).getTime(), openedAt: new Date(round.opened_at).getTime(), result: ["RUNNING","RESULT","SETTLED"].includes(round.status) ? round.result : null, serverSeedHash: round.server_seed_hash, revealedServerSeed: round.status === "SETTLED" ? round.server_seed : null } };
 }
-\nasync function handle(req: Request) {
+
+async function handle(req: Request) {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: { ...corsHeaders, ...(origin ? { "Access-Control-Allow-Origin": origin } : {}) } });
   const url = new URL(req.url);
