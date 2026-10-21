@@ -12,6 +12,7 @@ import {
   AuditLog,
 } from '../../../shared/src/types';
 import { TokenRequestModal } from '../components/common/TokenRequestModal';
+import { ApiHealthPanel } from '../components/owner/ApiHealthPanel';
 import { CreateUserModal } from '../components/common/CreateUserModal';
 import { AviatorGame } from '../games/aviator/AviatorGame';
 import { RouletteGame } from '../games/roulette/RouletteGame';
@@ -113,6 +114,9 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   // Strict Role Guard: Owner, Super Admin, and Admin dashboards must NEVER display playable game canvases
   useEffect(() => {
     if (!isPlayer) {
+      if (activeTab === 'api-health' && !isOwner) {
+        setActiveTab('dashboard');
+      }
       if (activeGameCode) {
         setActiveGameCode(null);
       }
@@ -120,7 +124,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
         setActiveTab('dashboard');
       }
     }
-  }, [isPlayer, activeGameCode, activeTab, setActiveGameCode, setActiveTab]);
+  }, [isPlayer, isOwner, activeGameCode, activeTab, setActiveGameCode, setActiveTab]);
 
   const loadData = async () => {
     try {
@@ -306,6 +310,10 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
 
   return (
     <div className="w-full px-3 py-2.5 space-y-3 pb-24 text-zinc-100">
+      {isOwner && activeTab === 'api-health' ? (
+        <ApiHealthPanel />
+      ) : null}
+
       {/* Action Notification Banner */}
       {actionNotice && (
         <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-fadeIn">
