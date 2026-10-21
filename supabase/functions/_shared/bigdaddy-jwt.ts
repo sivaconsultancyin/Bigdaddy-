@@ -17,13 +17,13 @@ export function getJwtSecret(): Uint8Array {
 
 export async function signBigDaddyToken(claims: BigDaddyClaims): Promise<string> {
   return await new SignJWT({
+    id: claims.id,
     username: claims.username,
     role: claims.role,
     parentId: claims.parentId,
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(claims.id)
-    .setClaim("id", claims.id)
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(getJwtSecret());
@@ -52,7 +52,7 @@ export async function verifyBigDaddyToken(token: string): Promise<BigDaddyClaims
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, idempotency-key",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
