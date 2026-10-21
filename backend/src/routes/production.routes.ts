@@ -267,7 +267,7 @@ productionRouter.post('/auth/bootstrap-owner', async (req, res: Response) => {
     return res.status(400).json({ error: 'USERNAME_EMAIL_AND_12_CHARACTER_PASSWORD_REQUIRED' });
   }
   try {
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const owner = await sql.begin(async (tx) => {
       const exists = await tx.unsafe("SELECT user_id FROM public.role_assignments WHERE role='OWNER' LIMIT 1 FOR UPDATE");
       if (exists[0]) throw new Error('OWNER_ALREADY_INITIALIZED');
