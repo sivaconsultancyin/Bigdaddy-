@@ -62,7 +62,8 @@ export const ApiHealthPanel: React.FC = () => {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const match = message.match(/(?:API request failed\s*\(|HTTP\s*)(\d{3})/i);
-        const code = match ? Number(match[1]) : undefined;
+        const status = (error as { status?: unknown } | null)?.status;
+        const code = typeof status === 'number' ? status : match ? Number(match[1]) : undefined;
         // Auth-required and role-restricted GETs prove the route answered; they do not prove its data dependency works.
         if (code === 401 || code === 403 || /AUTH_REQUIRED|INVALID_TOKEN|FORBIDDEN|INSUFFICIENT_PERMISSIONS|NOT_AUTHORIZED|OWNER_ONLY|PLAYER_ROLE_REQUIRED/i.test(message)) return { ...probe, status: 'online', code: code ?? (/AUTH_REQUIRED|INVALID_TOKEN/i.test(message) ? 401 : 403), latencyMs: Math.round(performance.now() - started), checkedAt, error: 'Route answered; this owner session is not authorized for that resource.' };
         if (code !== undefined && code >= 500) return { ...probe, status: 'degraded', code, latencyMs: Math.round(performance.now() - started), checkedAt, error: message };
@@ -112,7 +113,7 @@ export const ApiHealthPanel: React.FC = () => {
         {results.map((r) => (
           <div key={r.method + r.path} className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-2">
             <div className="flex items-start gap-2">
-              {r.status === 'online' ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-400 shrink-0" /> : r.status === 'offline' ? <XCircle className="w-3.5 h-3.5 mt-0.5 text-rose-400 shrink-0" : <AlertTriangle className="w-3.5 h-3.5 mt-0.5 text-amber-400 shrink-0" />}
+              {r.status === 'online' ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-400 shrink-0" /> : r.status === 'offline' ? <XCircle className="w-3.5 h-3.5 mt-0.5 text-rose-400 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 mt-0.5 text-amber-400 shrink-0" />}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] text-zinc-200 font-semibold">{r.label}</span>
