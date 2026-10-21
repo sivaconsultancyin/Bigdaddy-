@@ -153,6 +153,40 @@ ALTER FUNCTION public.place_crash_bet_atomic(uuid, uuid, bigint, text, numeric) 
 ALTER FUNCTION public.cashout_crash_bet_atomic(uuid, uuid, text) SET SCHEMA aviator;
 ALTER FUNCTION public.settle_crash_round_atomic(uuid) SET SCHEMA aviator;
 
+-- Function bodies are stored as text; changing a function's schema does not
+-- rewrite table names inside PL/pgSQL source. Rebind them to the new schemas
+-- before enabling compatibility wrappers, especially settlement INSERT .. ON
+-- CONFLICT statements (which cannot target compatibility views).
+DO $rewrite_runtime_functions$
+DECLARE
+  fn record;
+  definition text;
+BEGIN
+  FOR fn IN
+    SELECT p.oid, n.nspname, p.proname,
+           pg_get_function_identity_arguments(p.oid) AS identity_args
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE (n.nspname = 'wallet' AND p.proname = 'wallet_transfer_atomic')
+       OR (n.nspname = 'aviator' AND p.proname IN (
+         'place_crash_bet_atomic', 'cashout_crash_bet_atomic', 'settle_crash_round_atomic'
+       ))
+  LOOP
+    definition := pg_get_functiondef(fn.oid);
+    definition := replace(definition, 'public.wallet_transactions', 'wallet.wallet_transactions');
+    definition := replace(definition, 'public.ledger_entries', 'wallet.ledger_entries');
+    definition := replace(definition, 'public.token_supply', 'wallet.token_supply');
+    definition := replace(definition, 'public.wallets', 'wallet.wallets');
+    definition := replace(definition, 'public.wallet_transfer_atomic', 'wallet.wallet_transfer_atomic');
+    definition := replace(definition, 'public.games', 'platform.games');
+    definition := replace(definition, 'public.game_rounds', 'aviator.game_rounds');
+    definition := replace(definition, 'public.game_bets', 'aviator.game_bets');
+    definition := replace(definition, 'public.game_settlements', 'aviator.game_settlements');
+    EXECUTE definition;
+  END LOOP;
+END
+$rewrite_runtime_functions$;
+
 CREATE FUNCTION public.place_crash_bet_atomic(
   p_user_id uuid, p_round_id uuid, p_amount bigint, p_idempotency_key text, p_auto_cashout numeric
 ) RETURNS uuid LANGUAGE sql SECURITY INVOKER SET search_path = pg_catalog, pg_temp
