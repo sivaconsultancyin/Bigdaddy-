@@ -41,7 +41,12 @@ productionRouter.post('/auth/login', async (req, res: Response) => {
     const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM platform.users u JOIN platform.role_assignments ra ON ra.user_id=u.id LEFT JOIN platform.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE lower(u.username)=lower($1::text) LIMIT 1', [parsed.data.username]);
     const user = rows[0] as unknown as UserRow | undefined;
     if (!user || !user.is_active || !(await bcrypt.compare(parsed.data.password, user.password_hash))) return res.status(401).json({ error: 'INVALID_USERNAME_OR_PASSWORD' });
-    const wallets = await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
+    // Owner funds live in the Treasury wallet, not a user-owned wallet.
+    // Return the same wallet shape for login and /auth/me so the client can
+    // initialize its session consistently for every role.
+    const wallets = user.role === UserRole.OWNER
+      ? await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type=$1 LIMIT 1', ['TREASURY'])
+      : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
     await sql.unsafe("INSERT INTO platform.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_LOGIN','USER',$2,$3::jsonb)", [user.id, user.id, JSON.stringify({ ip: req.ip })]);
     return res.json({ token: tokenFor(user), user: safeUser(user), wallet: wallets[0] || null });
   } catch (error) {
@@ -90,7 +95,10 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
 productionRouter.get('/auth/me', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const user = req.authUser!;
   const sql = getAuthDatabaseClient();
-  const wallets = await sql.unsafe('SELECT id,wallet_type,balance::text AS balance,reserved_balance::text AS reserved_balance,game_code FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
+  // Keep /auth/me wallet shape aligned with /auth/login and /wallet/my-wallet.
+  const wallets = user.role === UserRole.OWNER
+    ? await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type=$1 LIMIT 1', ['TREASURY'])
+    : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",game_code AS "gameCode",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [user.id]);
   return res.json({ user: safeUser(user), wallet: wallets[0] || null });
 });
 
