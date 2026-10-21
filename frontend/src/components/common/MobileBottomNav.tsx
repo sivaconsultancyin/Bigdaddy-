@@ -1,9 +1,9 @@
 import React from 'react';
-import { Home, Gamepad2, Coins, User as UserIcon, ShieldAlert, Users } from 'lucide-react';
+import { Home, Gamepad2, Coins, User as UserIcon, ShieldAlert, Users, Activity } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../../../shared/src/types';
 
-export type MobileTab = 'dashboard' | 'games' | 'wallet' | 'profile';
+export type MobileTab = 'dashboard' | 'games' | 'wallet' | 'profile' | 'api-health';
 
 interface MobileBottomNavProps {
   activeTab: MobileTab;
@@ -18,6 +18,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 }) => {
   const { user } = useAuth();
   const isPlayer = user?.role === UserRole.PLAYER;
+  const isOwner = user?.role === UserRole.OWNER;
 
   // Games tab is STRICTLY restricted to Player accounts only
   const tabs = isPlayer
@@ -63,10 +64,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         },
       ];
 
+  const visibleTabs = !isPlayer && isOwner
+    ? [...tabs, { id: 'api-health' as MobileTab, label: 'API Health', icon: Activity }]
+    : tabs;
+
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-zinc-950/95 backdrop-blur-xl border-t border-amber-500/20 z-40 px-2 py-1 shadow-[0_-8px_20px_rgba(0,0,0,0.6)]">
       <div className="flex items-center justify-around h-13">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
 
