@@ -54,6 +54,7 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
   const parsed = referralRegisterSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || 'INVALID_INPUT' });
   const { username, email, password, referralCode } = parsed.data;
+  const passwordHash = await bcrypt.hash(password, 12);
   try {
     const sql = getAuthDatabaseClient();
     const created = await sql.begin(async (tx) => {
@@ -61,7 +62,6 @@ productionRouter.post('/auth/register-referral', async (req, res: Response) => {
       if (!refs[0]) throw new Error('INVALID_REFERRAL_CODE');
       const duplicates = await tx.unsafe('SELECT id FROM public.users WHERE lower(username)=lower($1) OR lower(email)=lower($2) LIMIT 1', [username, email]);
       if (duplicates[0]) throw new Error('DUPLICATE_ACCOUNT');
-      const passwordHash = await bcrypt.hash(password, 12);
       const users = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id,referred_by_user_id) VALUES($1,$2,$3,$4,$5) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username, email, passwordHash, refs[0].admin_id, refs[0].owner_user_id]);
       const user = users[0] as unknown as UserRow;
       await tx.unsafe("INSERT INTO public.role_assignments(user_id,role,assigned_by) VALUES($1,'PLAYER',$2)", [user.id, refs[0].admin_id]);
@@ -99,7 +99,7 @@ productionRouter.get('/auth/users', requireDatabaseUser, async (req: AuthReq, re
   if (actor.role === UserRole.PLAYER) return res.status(403).json({ error: 'PLAYERS_CANNOT_LIST_USERS' });
   const startedAt = Date.now();
   try {
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const rows = await sql.unsafe('WITH RECURSIVE descendants AS (SELECT u.id,u.username,u.email,u.parent_id,u.is_active,u.created_at,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.parent_id=$1 UNION SELECT c.id,c.username,c.email,c.parent_id,c.is_active,c.created_at,cr.role FROM public.users c JOIN public.role_assignments cr ON cr.user_id=c.id JOIN descendants d ON c.parent_id=d.id) SELECT d.id,d.username,d.email,d.parent_id AS "parentId",d.role,d.is_active AS "isActive",rc.code AS "referralCode",w.id AS "walletId",w.balance::text AS "walletBalance" FROM descendants d LEFT JOIN public.wallets w ON w.user_id=d.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=d.id AND rc.is_active=true ORDER BY d.created_at DESC', [actor.id]);
     console.info('Auth users query completed', {
       route: '/auth/users',
@@ -127,13 +127,13 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
   const { username, email, password, role, initialTokens } = parsed.data;
   const allowed = (actor.role === UserRole.OWNER && role === UserRole.SUPER_ADMIN) || (actor.role === UserRole.SUPER_ADMIN && role === UserRole.ADMIN) || (actor.role === UserRole.ADMIN && role === UserRole.PLAYER);
   if (!allowed) return res.status(403).json({ error: 'ROLE_HIERARCHY_VIOLATION' });
+  const passwordHash = await bcrypt.hash(password, 12);
   try {
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const user = await sql.begin(async (tx) => {
       const dup = await tx.unsafe('SELECT id FROM public.users WHERE lower(username)=lower($1) OR lower(email)=lower($2) LIMIT 1', [username, email]);
       if (dup[0]) throw new Error('DUPLICATE_ACCOUNT');
-      const hash = await bcrypt.hash(password, 12);
-      const rows = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id) VALUES($1,$2,$3,$4) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username, email, hash, actor.id]);
+      const rows = await tx.unsafe('INSERT INTO public.users(username,email,password_hash,parent_id) VALUES($1,$2,$3,$4) RETURNING id,username,email,password_hash,parent_id,referred_by_user_id,is_active', [username, email, passwordHash, actor.id]);
       const created = rows[0] as unknown as UserRow;
       created.role = role;
       const walletType = role === UserRole.SUPER_ADMIN ? 'SUPER_ADMIN' : role === UserRole.ADMIN ? 'ADMIN' : 'PLAYER';
@@ -267,7 +267,7 @@ productionRouter.post('/auth/bootstrap-owner', async (req, res: Response) => {
     return res.status(400).json({ error: 'USERNAME_EMAIL_AND_12_CHARACTER_PASSWORD_REQUIRED' });
   }
   try {
-    const sql = getDatabaseClient();
+    const sql = getAuthDatabaseClient();
     const owner = await sql.begin(async (tx) => {
       const exists = await tx.unsafe("SELECT user_id FROM public.role_assignments WHERE role='OWNER' LIMIT 1 FOR UPDATE");
       if (exists[0]) throw new Error('OWNER_ALREADY_INITIALIZED');
