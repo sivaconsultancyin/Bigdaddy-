@@ -7,7 +7,7 @@ type Actor = BigDaddyClaims & { parentId: string | null };
 const roles: Role[] = ["OWNER", "SUPER_ADMIN", "ADMIN", "PLAYER"];
 
 function response(body: Record<string, unknown>, status = 200, origin?: string | null) {
-  const headers = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
+  const headers: Record<string, string> = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
   const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   if (allowed.length > 0) {
     // Do not leave the default wildcard in place when an allowlist is configured.
