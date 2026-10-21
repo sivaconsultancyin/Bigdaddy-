@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,6 +11,8 @@ import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
 import { authoritativeGamesRouter } from './backend/src/routes/authoritative-games.routes';
 import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
+import { healthMonitorRouter } from './backend/src/routes/health-monitor.routes';
+import { recordHealthFailure } from './backend/src/services/health-monitor.service';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -121,6 +124,43 @@ async function startServer() {
   // Bound request body size to reduce accidental or abusive memory exhaustion.
   app.use(express.json({ limit: '256kb' }));
 
+  // Capture failed/slow API responses with a request ID. Never record request bodies,
+  // credentials, authorization headers, or query strings.
+  app.use((req, res, next) => {
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    res.setHeader('X-Request-Id', requestId);
+    const originalJson = res.json.bind(res);
+    (res as any).json = (body: any) => {
+      if (body && typeof body === 'object') {
+        res.locals.healthReasonCode = typeof body.error === 'string' ? body.error : typeof body.code === 'string' ? body.code : '';
+        res.locals.healthReason = typeof body.message === 'string' ? body.message : typeof body.error === 'string' ? body.error : '';
+      }
+      return originalJson(body);
+    };
+    res.once('finish', () => {
+      const statusCode = res.statusCode;
+      const durationMs = Date.now() - startedAt;
+      const pathName = req.path;
+      const expectedValidationProbe = ['/auth/login', '/auth/register-referral', '/auth/create-user'].includes(pathName) && [400, 422].includes(statusCode);
+      const healthPanelProbe = pathName === '/monitoring/failures';
+      const shouldRecord = !healthPanelProbe && !expectedValidationProbe &&
+        (statusCode >= 500 || durationMs >= 5000 || (statusCode === 401 && pathName === '/auth/login') || (statusCode >= 400 && statusCode < 500 && ![401, 403].includes(statusCode)));
+      if (shouldRecord) {
+        recordHealthFailure({
+          requestId,
+          method: req.method,
+          path: pathName,
+          statusCode,
+          durationMs,
+          reasonCode: res.locals.healthReasonCode || (durationMs >= 5000 ? 'SLOW_REQUEST' : `HTTP_${statusCode}`),
+          reason: res.locals.healthReason || (durationMs >= 5000 ? 'Request took longer than 5 seconds.' : `Request completed with HTTP ${statusCode}.`),
+        });
+      }
+    });
+    next();
+  });
+
   // Explicit CORS allowlist. Production configuration rejects wildcard origins.
   app.use((req, res, next) => {
     const origin = req.headers.origin;
@@ -192,6 +232,7 @@ async function startServer() {
     app.use('/api', productionRouter);
     app.use('/api', productionRequestsRouter);
     app.use('/api', authoritativeGamesRouter);
+    app.use('/api/monitoring', healthMonitorRouter);
     // Unsupported games remain unavailable until persistent settlement is implemented.
     app.use('/api/games', (_req, res) => res.status(503).json({ error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION' }));
     app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
