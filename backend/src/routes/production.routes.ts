@@ -153,7 +153,7 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
         const target = await tx.unsafe('SELECT id FROM public.wallets WHERE user_id=$1 LIMIT 1', [created.id]);
         if (!source[0] || !target[0]) throw new Error('WALLET_NOT_FOUND');
         const txType = actor.role === UserRole.OWNER ? TransactionType.TREASURY_TO_ROLE : actor.role === UserRole.SUPER_ADMIN ? TransactionType.ROLE_TO_ROLE : TransactionType.ROLE_TO_PLAYER;
-        await tx.unsafe('SELECT public.wallet_transfer_atomic($1,$2::public.transaction_type_enum,$3::bigint,$4::uuid,$5::uuid,$6::jsonb)', ['CREATE_' + randomUUID(), txType, amount.toString(), source[0].id, target[0].id, JSON.stringify({ actorId: actor.id, createdUserId: created.id })]);
+        await tx.unsafe('SELECT wallet.wallet_transfer_atomic($1,$2::public.transaction_type_enum,$3::bigint,$4::uuid,$5::uuid,$6::jsonb)', ['CREATE_' + randomUUID(), txType, amount.toString(), source[0].id, target[0].id, JSON.stringify({ actorId: actor.id, createdUserId: created.id })]);
       }
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'USER_CREATED','USER',$2,$3::jsonb)", [actor.id, created.id, JSON.stringify({ role, initialTokens: amount.toString() })]);
       return created;
@@ -237,7 +237,7 @@ productionRouter.post('/wallet/transfer', requireDatabaseUser, async (req: AuthR
       if (!source[0] || !target[0]) throw new Error('WALLET_NOT_FOUND');
       const key = String(req.headers['idempotency-key'] || ('TRANSFER_' + randomUUID()));
       const txType = actor.role === UserRole.OWNER ? TransactionType.TREASURY_TO_ROLE : actor.role === UserRole.SUPER_ADMIN ? TransactionType.ROLE_TO_ROLE : TransactionType.ROLE_TO_PLAYER;
-      const moved = await tx.unsafe('SELECT public.wallet_transfer_atomic($1,$2::public.transaction_type_enum,$3::bigint,$4::uuid,$5::uuid,$6::jsonb) AS id', [key, txType, amount, source[0].id, target[0].id, JSON.stringify({ senderId: actor.id, recipientId, note })]);
+      const moved = await tx.unsafe('SELECT wallet.wallet_transfer_atomic($1,$2::public.transaction_type_enum,$3::bigint,$4::uuid,$5::uuid,$6::jsonb) AS id', [key, txType, amount, source[0].id, target[0].id, JSON.stringify({ senderId: actor.id, recipientId, note })]);
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'DIRECT_TRANSFER','WALLET',$2,$3::jsonb)", [actor.id, target[0].id, JSON.stringify({ amount, recipientId, transactionId: moved[0].id })]);
       const balances = await tx.unsafe('SELECT id,balance::text AS balance FROM public.wallets WHERE id IN ($1::uuid,$2::uuid)', [source[0].id, target[0].id]);
       return { transactionId: moved[0].id, balances };
@@ -309,7 +309,7 @@ productionRouter.post('/wallet/game-pool', requireDatabaseUser, async (req: Auth
       const target = await tx.unsafe('SELECT w.id FROM public.wallets w JOIN public.games g ON g.pool_wallet_id=w.id WHERE g.code=$1 LIMIT 1 FOR UPDATE OF w', [gameCode]);
       if (!source[0] || !target[0]) throw new Error('GAME_POOL_WALLET_MISSING');
       const moved = await tx.unsafe(
-        "SELECT public.wallet_transfer_atomic($1,'POOL_ALLOCATION'::public.transaction_type_enum,$2::bigint,$3::uuid,$4::uuid,$5::jsonb) AS id",
+        "SELECT wallet.wallet_transfer_atomic($1,'POOL_ALLOCATION'::public.transaction_type_enum,$2::bigint,$3::uuid,$4::uuid,$5::jsonb) AS id",
         [suppliedKey.trim(), amountText, source[0].id, target[0].id, JSON.stringify({ allocatedBy: actor.id, game: gameCode })]
       );
       const balance = await tx.unsafe('SELECT balance::text AS balance FROM public.wallets WHERE id=$1', [target[0].id]);
