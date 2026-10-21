@@ -103,9 +103,10 @@ export const ApiHealthPanel: React.FC = () => {
 
   useEffect(() => {
     void checkEndpoints();
-    const timer = window.setInterval(() => { void checkEndpoints(); }, 10000);
+    void loadFailures();
+    const timer = window.setInterval(() => { void checkEndpoints(); void loadFailures(); }, 10000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [checkEndpoints, loadFailures]);
 
   const online = results.filter(r => r.status === 'online').length;
   const degraded = results.filter(r => r.status === 'degraded').length;
