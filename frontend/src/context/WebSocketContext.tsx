@@ -202,7 +202,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (simIntervalRef.current) return;
     let inFlight = false;
     disposedRef.current = false;
-    const apiBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
+    const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
     const refreshWalletForResult = (key: string, round: any) => {
       if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
       const resultKey = `${round.id}:${round.status}`;
@@ -260,8 +260,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const controller = new AbortController();
           const timeoutId = window.setTimeout(() => controller.abort(), key === 'aviator' ? 7000 : 5000);
           try {
+            const token = window.localStorage.getItem('bigdaddy_auth_token');
             const response = await fetch(apiBase + path, {
-              headers: { Accept: 'application/json' },
+              headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
               signal: controller.signal,
             });
             if (!response.ok) return { key, data: null, error: `HTTP_${response.status}` };
