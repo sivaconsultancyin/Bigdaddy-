@@ -212,6 +212,10 @@ async function startServer() {
     res.json(getPublicConfigInfo());
   });
 
+  // Read-only Owner diagnostics are mounted before the database readiness gate so
+  // recent in-process failures remain visible while PostgreSQL is unavailable.
+  app.use('/api/monitoring', healthMonitorRouter);
+
   // Production-only API surface: never mount the legacy in-memory routers.
   if (!config.isProduction || !config.productionValid) {
     app.use('/api', (req, res, next) => {
@@ -232,7 +236,6 @@ async function startServer() {
     app.use('/api', productionRouter);
     app.use('/api', productionRequestsRouter);
     app.use('/api', authoritativeGamesRouter);
-    app.use('/api/monitoring', healthMonitorRouter);
     // Unsupported games remain unavailable until persistent settlement is implemented.
     app.use('/api/games', (_req, res) => res.status(503).json({ error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION' }));
     app.use('/api/audit', (_req, res) => res.status(503).json({ error: 'AUDIT_API_NOT_READY' }));
