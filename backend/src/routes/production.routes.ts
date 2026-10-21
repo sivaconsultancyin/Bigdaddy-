@@ -230,8 +230,8 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
   try {
     const sql = getDatabaseClient();
     const rows = actor.role === UserRole.OWNER
-      ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type='TREASURY' LIMIT 1`)
-      : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
+      ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type='TREASURY' LIMIT 1`, [], { timeout: 12000 })
+      : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [actor.id], { timeout: 12000 });
     clearTimeout(deadline);
     if (timeoutSent || res.headersSent || res.writableEnded) return;
     console.info('Wallet my-wallet query completed', {
@@ -252,6 +252,14 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
       error,
     });
     if (timeoutSent || res.headersSent || res.writableEnded) return;
+    const dbErrorCode = (error as { code?: string })?.code;
+    const timedOut = dbErrorCode === '57014' || /timeout|timed out/i.test(error instanceof Error ? error.message : String(error));
+    if (timedOut) {
+      return res.status(503).json({
+        error: 'WALLET_DATABASE_TIMEOUT',
+        message: 'Wallet database query exceeded its 12-second limit. Check PostgreSQL query latency and connection-pool saturation.',
+      });
+    }
     return res.status(503).json({ error: 'WALLET_SERVICE_UNAVAILABLE' });
   }
 });
