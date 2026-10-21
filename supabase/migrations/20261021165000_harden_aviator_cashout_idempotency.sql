@@ -29,7 +29,9 @@ BEGIN
     RAISE EXCEPTION 'cashout function not found';
   END IF;
 
-  IF position(v_new IN v_definition) > 0 THEN
+  -- Be idempotent even if pg_get_functiondef formatting differs.
+  IF position('INVALID_CASHOUT_IDEMPOTENCY_KEY' IN v_definition) > 0
+     AND position('length(p_idempotency_key) > 96' IN v_definition) > 0 THEN
     RAISE NOTICE 'Cashout idempotency validation already installed';
     RETURN;
   END IF;
