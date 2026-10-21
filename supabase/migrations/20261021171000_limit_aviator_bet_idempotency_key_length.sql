@@ -14,7 +14,17 @@ DECLARE
 BEGIN
   SELECT pg_get_functiondef('aviator.place_crash_bet_atomic(uuid,uuid,bigint,text,numeric)'::regprocedure)
     INTO v_def;
-  IF v_def IS NULL OR position(v_old IN v_def) = 0 THEN
+  IF v_def IS NULL THEN
+    RAISE EXCEPTION 'PLACE_BET_FUNCTION_NOT_FOUND';
+  END IF;
+
+  -- Safe on databases where the hardening has already been applied.
+  IF position('length(p_idempotency_key) > 119' IN v_def) > 0 THEN
+    RAISE NOTICE 'Aviator bet idempotency length limit already installed';
+    RETURN;
+  END IF;
+
+  IF position(v_old IN v_def) = 0 THEN
     RAISE EXCEPTION 'EXPECTED_PLACE_BET_VALIDATION_NOT_FOUND';
   END IF;
   v_def := replace(v_def, v_old, v_new);
