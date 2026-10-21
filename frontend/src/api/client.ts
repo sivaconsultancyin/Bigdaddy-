@@ -1,6 +1,7 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 
 const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
+const SUPABASE_WALLET_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/wallet-my-wallet';
 const API_BASE = import.meta.env.PROD ? SUPABASE_API_BASE : (import.meta.env.VITE_API_BASE_URL || '/api');
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
@@ -44,7 +45,12 @@ export class ApiClient {
     // Allow time for cold start while backend/database limits remain enforced.
     const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      // The dedicated wallet read endpoint uses its own Edge Function in production;
+      // all other wallet mutations/ledger routes remain in the deployed api Edge Function.
+      const requestUrl = import.meta.env.PROD && endpoint === '/wallet/my-wallet'
+        ? SUPABASE_WALLET_BASE
+        : `${API_BASE}${endpoint}`;
+      const response = await fetch(requestUrl, {
         ...options,
         headers,
         signal: options.signal ?? controller.signal,
