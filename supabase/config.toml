@@ -15,3 +15,7 @@ verify_jwt = false
 [functions.wallet-my-wallet]
 # Authenticates the existing BigDaddy JWT and revalidates the user/role in the database.
 verify_jwt = false
+
+[functions.api]
+# The function validates the existing BigDaddy HS256 JWT itself.
+verify_jwt = false
