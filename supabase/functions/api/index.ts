@@ -290,7 +290,7 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
   const activate = path.match(/^\/games\/([^/]+)\/activate$/);
   if (req.method === "POST" && activate) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
-    const gameCode = decodeURIComponent(activate[1]);
+    const gameCode = decodeURIComponent(activate[1]).replace(/-/g, "_");
     const pool = await db.schema("platform").from("game_pools").select("wallet_id").eq("game_code", gameCode).maybeSingle();
     if (pool.error || !pool.data) return response({ error: "GAME_POOL_NOT_FOUND" }, 404, origin);
     const { data: wallet, error: walletError } = await db.schema("wallet").from("wallets").select("balance,reserved_balance").eq("id", pool.data.wallet_id).maybeSingle();
@@ -303,13 +303,28 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
   if (req.method === "GET" && path === "/games/aviator/state") {
     const { data: rounds, error } = await db.schema("aviator").from("game_rounds")
       .select("id,game_code,round_number,status,crash_multiplier,started_at,ended_at,server_seed_hash,revealed_server_seed")
-      .order("round_number", { ascending: false }).limit(25);
+      .eq("game_code","aviator").order("round_number", { ascending: false }).limit(25);
     if (error) return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
-    const current = (rounds ?? []).find(r => r.status === "RUNNING" || r.status === "WAITING") ?? (rounds ?? [])[0] ?? null;
-    const history = (rounds ?? []).filter(r => r.status === "CRASHED" || r.status === "SETTLED").map(r => ({
+    const row = (rounds ?? []).find(r => r.status === "RUNNING" || r.status === "WAITING") ?? (rounds ?? [])[0] ?? null;
+    const history = (rounds ?? []).filter(r => r.status === "SETTLED").map(r => ({
       roundNumber: Number(r.round_number), crashMultiplier: Number(r.crash_multiplier ?? 0), endedAt: r.ended_at,
+      serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
     }));
-    return response({ round: current, history, state: current }, 200, origin);
+    if (!row) return response({ round: null, bets: [], history }, 200, origin);
+    const elapsedSeconds = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
+    const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
+    const crashed = ["CRASHED","SETTLED"].includes(row.status);
+    const multiplier = row.status === "RUNNING" ? Math.min(liveMultiplier, Number(row.crash_multiplier ?? liveMultiplier)) : crashed ? Number(row.crash_multiplier ?? 1) : 1;
+    const { data: betRows, error: betError } = await db.schema("aviator").from("game_bets")
+      .select("id,round_id,bet_amount,auto_cashout,status,payout_amount,cashed_out_at,user_id")
+      .eq("round_id",row.id).order("created_at",{ascending:false}).limit(100);
+    if (betError) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
+    const ids = [...new Set((betRows ?? []).map(b => b.user_id))];
+    const { data: userRows } = ids.length ? await db.schema("platform").from("users").select("id,username").in("id",ids) : { data: [] };
+    const names = new Map((userRows ?? []).map(u => [u.id,u.username]));
+    const bets = (betRows ?? []).map(b => ({ id:b.id, roundId:b.round_id, betAmount:String(b.bet_amount), autoCashout:b.auto_cashout, status:b.status, payoutAmount:String(b.payout_amount ?? 0), cashedOutAt:b.cashed_out_at, username:names.get(b.user_id) ?? "Player" }));
+    const current = { id:row.id, roundNumber:Number(row.round_number), status:row.status, startedAt:row.started_at, endedAt:row.ended_at, multiplier, crashMultiplier:crashed ? row.crash_multiplier : null, serverSeedHash:row.server_seed_hash, revealedServerSeed:row.revealed_server_seed };
+    return response({ round: current, bets, history }, 200, origin);
   }
 
 
@@ -339,7 +354,10 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
       p_user_id: actor.id, p_round_id: round.id, p_amount: amount, p_idempotency_key: key, p_auto_cashout: autoCashout,
     });
     if (error || !betId) return response({ error: /INSUFFICIENT_FUNDS/i.test(error?.message ?? "") ? "INSUFFICIENT_FUNDS" : "BET_REJECTED" }, 400, origin);
-    return response({ betId, roundId: round.id, amount, status: "PENDING" }, 201, origin);
+    const { data: bet, error: betError } = await db.schema("aviator").from("game_bets")
+      .select("id,round_id,bet_amount,auto_cashout,status").eq("id",betId).maybeSingle();
+    if (betError || !bet) return response({ error: "BET_CREATED_BUT_READBACK_FAILED", betId }, 503, origin);
+    return response({ bet: { id:bet.id, roundId:bet.round_id, betAmount:String(bet.bet_amount), autoCashout:bet.auto_cashout, status:bet.status } }, 201, origin);
   }
 
   if (req.method === "POST" && path === "/games/aviator/cashout") {
