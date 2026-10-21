@@ -1,4 +1,4 @@
-project_id = "bigdaddy-casino"
+project_id = "nzvpuoeibqrpcltrszvr"
 
 [functions.health]
 # Public, read-only connectivity probe. No secrets or user data are returned.
