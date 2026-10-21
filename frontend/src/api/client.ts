@@ -2,6 +2,14 @@ import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
 
+// Preserve the HTTP status for diagnostics without changing the user-facing error message.
+export class ApiRequestError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 export class ApiClient {
   public static getToken(): string | null {
     return localStorage.getItem('bigdaddy_auth_token');
@@ -45,7 +53,7 @@ export class ApiClient {
       const data = contentType.includes('application/json') ? await response.json() : null;
 
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || `API request failed (${response.status})`);
+        throw new ApiRequestError(response.status, data?.message || data?.error || `API request failed (${response.status})`);
       }
 
       return data as T;
