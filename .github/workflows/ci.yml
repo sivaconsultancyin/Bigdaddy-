@@ -232,3 +232,90 @@ jobs:
         END
         $$;
         SQL
+
+
+  validate-schema-cutover:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install PostgreSQL client
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+
+    - name: Create isolated schema-cutover fixture
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/schema-cutover-fixture.sql
+
+    - name: Apply transactional schema cutover
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021130000_move_platform_wallet_aviator_tables.sql
+
+    - name: Verify tables, compatibility views, and function boundaries
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $$
+        DECLARE
+          name text;
+        BEGIN
+          FOREACH name IN ARRAY ARRAY['users','user_profiles','role_assignments','referral_codes','audit_logs','token_requests','user_sessions','games','game_pools'] LOOP
+            IF to_regclass('platform.' || name) IS NULL OR (SELECT relkind FROM pg_class WHERE oid=to_regclass('public.' || name)) <> 'v' THEN
+              RAISE EXCEPTION 'Platform table/view cutover incomplete for %', name;
+            END IF;
+          END LOOP;
+          FOREACH name IN ARRAY ARRAY['wallets','wallet_transactions','ledger_entries','token_supply'] LOOP
+            IF to_regclass('wallet.' || name) IS NULL OR (SELECT relkind FROM pg_class WHERE oid=to_regclass('public.' || name)) <> 'v' THEN
+              RAISE EXCEPTION 'Wallet table/view cutover incomplete for %', name;
+            END IF;
+          END LOOP;
+          FOREACH name IN ARRAY ARRAY['game_rounds','game_bets','game_settlements'] LOOP
+            IF to_regclass('aviator.' || name) IS NULL OR (SELECT relkind FROM pg_class WHERE oid=to_regclass('public.' || name)) <> 'v' THEN
+              RAISE EXCEPTION 'Aviator table/view cutover incomplete for %', name;
+            END IF;
+          END LOOP;
+          IF to_regprocedure('wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)') IS NULL
+             OR to_regprocedure('aviator.place_crash_bet_atomic(uuid,uuid,bigint,text,numeric)') IS NULL
+             OR to_regprocedure('aviator.cashout_crash_bet_atomic(uuid,uuid,text)') IS NULL
+             OR to_regprocedure('aviator.settle_crash_round_atomic(uuid)') IS NULL THEN
+            RAISE EXCEPTION 'Schema-owned financial/game functions are missing';
+          END IF;
+          IF has_schema_privilege('anon','wallet','USAGE') OR has_schema_privilege('authenticated','aviator','USAGE') THEN
+            RAISE EXCEPTION 'Browser role can access a private schema';
+          END IF;
+          IF NOT has_function_privilege('service_role','wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)','EXECUTE') THEN
+            RAISE EXCEPTION 'service_role cannot execute wallet transfer API';
+          END IF;
+          IF to_regclass('public.authoritative_game_rounds') IS NULL OR to_regclass('public.authoritative_game_bets') IS NULL THEN
+            RAISE EXCEPTION 'Authoritative game compatibility tables were unexpectedly removed';
+          END IF;
+          IF EXISTS (
+            SELECT 1 FROM platform.games g JOIN wallet.wallets w ON w.id=g.pool_wallet_id
+            WHERE g.code <> 'aviator' AND g.status='COMING_SOON' AND w.game_code <> g.code
+          ) THEN
+            RAISE EXCEPTION 'Coming-soon game still points at a different game pool';
+          END IF;
+          IF (SELECT balance FROM wallet.wallets WHERE game_code='aviator') <> 1000266
+             OR EXISTS (SELECT 1 FROM wallet.wallets WHERE game_code <> 'aviator' AND (balance <> 0 OR reserved_balance <> 0)) THEN
+            RAISE EXCEPTION 'Pool reconciliation unexpectedly changed wallet balances/reservations';
+          END IF;
+        END
+        $$;
+        SQL
