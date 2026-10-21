@@ -156,6 +156,32 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
     } catch { return response({ error: "WALLET_SERVICE_UNAVAILABLE" }, 503, origin); }
   }
 
+
+  if (req.method === "GET" && path === "/auth/users") {
+    if (actor.role === "PLAYER") return response({ error: "PLAYERS_CANNOT_LIST_USERS" }, 403, origin);
+    const [userRows, roleRows, referralRows, walletRows] = await Promise.all([
+      db.schema("platform").from("users").select("id,username,email,parent_id,is_active,created_at"),
+      db.schema("platform").from("role_assignments").select("user_id,role"),
+      db.schema("platform").from("referral_codes").select("owner_user_id,code").eq("is_active",true),
+      db.schema("wallet").from("wallets").select("id,user_id,balance"),
+    ]);
+    if (userRows.error || roleRows.error || referralRows.error || walletRows.error) return response({ error: "USER_LIST_SERVICE_UNAVAILABLE" }, 503, origin);
+    const roleMap = new Map((roleRows.data ?? []).map(r => [r.user_id,r.role]));
+    const referralMap = new Map((referralRows.data ?? []).map(r => [r.owner_user_id,r.code]));
+    const walletMap = new Map((walletRows.data ?? []).filter(w => w.user_id).map(w => [w.user_id,w]));
+    const children = new Map<string, any[]>();
+    for (const u of userRows.data ?? []) {
+      if (!u.parent_id) continue;
+      const arr = children.get(u.parent_id) ?? []; arr.push(u); children.set(u.parent_id,arr);
+    }
+    const descendants:any[] = []; const queue = [...(children.get(actor.id) ?? [])]; const seen = new Set<string>();
+    while (queue.length) { const u = queue.shift(); if (!u || seen.has(u.id)) continue; seen.add(u.id);
+      const w = walletMap.get(u.id); descendants.push({ id:u.id,username:u.username,email:u.email,parentId:u.parent_id,role:roleMap.get(u.id),isActive:u.is_active,referralCode:referralMap.get(u.id) ?? null,walletId:w?.id ?? null,walletBalance:w ? String(w.balance) : null });
+      queue.push(...(children.get(u.id) ?? []));
+    }
+    return response({ users: descendants }, 200, origin);
+  }
+
   if (req.method === "GET" && path === "/wallet/summary") {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
     const [supply, wallets, users] = await Promise.all([
@@ -286,6 +312,15 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
     return response({ round: current, history, state: current }, 200, origin);
   }
 
+
+  if (req.method === "GET" && path === "/games/aviator/history") {
+    const { data, error } = await db.schema("aviator").from("game_rounds")
+      .select("round_number,crash_multiplier,ended_at,server_seed_hash,revealed_server_seed")
+      .eq("game_code","aviator").eq("status","SETTLED").order("round_number",{ascending:false}).limit(20);
+    if (error) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
+    return response({ history: (data ?? []).map(r => ({ roundNumber:Number(r.round_number), crashMultiplier:r.crash_multiplier == null ? null : Number(r.crash_multiplier), endedAt:r.ended_at, serverSeedHash:r.server_seed_hash, revealedServerSeed:r.revealed_server_seed })) }, 200, origin);
+  }
+
   if (req.method === "POST" && path === "/games/aviator/bet") {
     if (actor.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
     let body: Record<string, unknown>;
@@ -345,6 +380,29 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
     if (error || !data) return response({ error: "TOKEN_REQUEST_CREATION_FAILED" }, 400, origin);
     try { await audit(db, actor.id, "TOKEN_REQUEST_CREATED", "TOKEN_REQUEST", data.id, { amount, approverId: actor.parentId }); } catch {}
     return response({ request: { id:data.id, requesterId:data.requester_id, approverId:data.approver_id, amount:String(data.amount), status:data.status, note:data.requester_note, createdAt:data.created_at } }, 201, origin);
+  }
+
+
+  const requestResolution = path.match(/^\\/requests\\/([^/]+)\\/(approve|reject)$/);
+  if (req.method === "POST" && requestResolution) {
+    if (actor.role === "PLAYER") return response({ error: requestResolution[2] === "approve" ? "PLAYER_CANNOT_APPROVE_REQUESTS" : "PLAYER_CANNOT_REJECT_REQUESTS" }, 403, origin);
+    const requestId = requestResolution[1];
+    if (!/^[0-9a-f-]{36}$/i.test(requestId)) return response({ error: "REQUEST_NOT_FOUND" }, 404, origin);
+    let body: Record<string, unknown> = {};
+    try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
+    const note = typeof body.decisionNote === "string" ? body.decisionNote.slice(0,500) : null;
+    const { data, error } = await db.schema("platform").rpc("resolve_token_request_atomic", {
+      p_request_id: requestId, p_actor_id: actor.id, p_action: requestResolution[2] === "approve" ? "APPROVE" : "REJECT", p_note: note,
+    });
+    if (error || !data) {
+      const message = error?.message ?? "";
+      const known = ["NOT_ASSIGNED_APPROVER","ROLE_HIERARCHY_VIOLATION","PLAYER_CANNOT_RESOLVE_REQUESTS","REQUEST_NOT_FOUND","REQUEST_ALREADY_RESOLVED","INSUFFICIENT_FUNDS","WALLET_NOT_FOUND"];
+      const code = known.find(x => message.includes(x));
+      const status = code === "NOT_ASSIGNED_APPROVER" || code === "ROLE_HIERARCHY_VIOLATION" || code === "PLAYER_CANNOT_RESOLVE_REQUESTS" ? 403 :
+        code === "REQUEST_NOT_FOUND" ? 404 : code === "REQUEST_ALREADY_RESOLVED" ? 409 : 400;
+      return response({ error: code ?? "TOKEN_REQUEST_RESOLUTION_FAILED" }, status, origin);
+    }
+    return response(data, 200, origin);
   }
 
   if (req.method === "GET" && path === "/audit/logs") {
