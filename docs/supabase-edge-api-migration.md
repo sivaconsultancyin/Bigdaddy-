@@ -6,13 +6,14 @@ Production policy: do not change Render traffic, merge to main, or deploy a fron
 
 ## Current verified state
 
-- Active Supabase Edge Functions: `health`, `auth-login`, `auth-me`, and `api` (API router version 3 deployed).
-- Feature-branch frontend API client and live-state polling now point to `https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api` for production builds; this branch has not been merged or deployed as the live frontend.
+- Active Supabase Edge Functions: `health`, `auth-login`, `auth-me`, and `api` (API router version 4 deployed).
+- Feature-branch frontend API client and live-state polling point to `https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api` for production builds. Live-state polling now includes the BigDaddy bearer token and no longer falls back to Render in production; this branch has not been merged or deployed as the live frontend.
+- Updated Edge Function CORS to allow `PUT` and the `Idempotency-Key` request header (needed for payment-details updates and bet/pool idempotency).
 - The API router includes login/me, user listing/creation/referral registration, wallet reads/transfers/pool allocation, token requests, audit logs, Aviator state/history/bet/cashout, payment preferences, and state/bet routes for Roulette, Dice, Dragon Tiger, and Andar Bahar. These routes still need contract/regression tests.
 - Existing BigDaddy JWT is a custom HS256 token; Edge Functions must use the same `BIGDADDY_JWT_SECRET` as the current backend. Never expose the secret to the browser or commit it.
 - Existing database schemas inspected: `platform`, `wallet`, `aviator`, `roulette`, `dice`, `dragon_tiger`, and `andar_bahar`. The `teen_patti` schema is absent in the target project.
 - Two migrations added and applied for atomic user creation/referral registration and atomic authoritative-game bets/token-request resolution.
-- No production frontend cutover has been made. External HTTP testing could not be completed from this environment; active deployment status and SQL privileges were verified.
+- No production frontend cutover has been made. External HTTP testing could not be completed from this environment; active deployment status and SQL function existence were verified. Security advisors still report RLS-enabled game tables with no policies; keep them inaccessible to public roles and review grants before exposing any table through the Data API.
 
 ## Endpoint inventory
 
