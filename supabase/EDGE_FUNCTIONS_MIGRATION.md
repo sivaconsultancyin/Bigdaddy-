@@ -90,3 +90,15 @@ The functions are deployed with gateway JWT verification disabled because the ex
 - Login attempts are audited; if the audit insert fails, login fails closed.
 - Test successful login, invalid password, inactive user, expired/tampered token, disabled user, role mismatch, OWNER treasury wallet, and ordinary user wallet before cutover.
 - Do not migrate registration, bootstrap-owner, wallet transfers, bets, or settlements as part of this first auth slice.
+
+## Wallet API routing status
+
+Wallet API paths are handled by Supabase Edge Functions; this is not a removal of the existing API routes.
+
+- `GET /wallet/my-wallet`: dedicated `wallet-my-wallet` Edge Function. It validates the existing BigDaddy JWT, rechecks the active user and assigned role, and returns only that user's wallet (or the OWNER treasury wallet).
+- `GET /wallet/summary`, `GET /wallet/ledger`, `POST /wallet/transfer`, `POST /wallet/game-pool`, and the token-request approval/rejection flows: handled by the deployed `api` Edge Function. Financial mutations must continue to use atomic database RPCs and idempotency keys.
+- Production frontend source routes `/wallet/my-wallet` to `/functions/v1/wallet-my-wallet`; other wallet and request paths continue to use `/functions/v1/api`.
+- `wallet-my-wallet` is deployed separately with gateway JWT verification disabled because it validates the legacy BigDaddy HS256 token itself. Never remove that in-function validation.
+- The frontend routing change is on `feature/supabase-data-api-migration` / PR #61; it is not live until that branch is merged and the frontend is redeployed. The existing `api` wallet routes remain available meanwhile.
+
+Before production cutover, verify wallet reads for OWNER and ordinary roles, invalid/expired tokens, inactive accounts, and role mismatch. Verify transfers and pool allocation with idempotency/replay tests; do not use real balances for destructive tests.
