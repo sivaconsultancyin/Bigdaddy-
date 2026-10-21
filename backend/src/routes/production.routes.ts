@@ -210,11 +210,30 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
 productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const actor = req.authUser!;
   const startedAt = Date.now();
+  let timeoutSent = false;
+  const deadline = setTimeout(() => {
+    if (res.headersSent || res.writableEnded) return;
+    timeoutSent = true;
+    console.error('Wallet database lookup timed out', {
+      route: '/wallet/my-wallet',
+      role: actor.role,
+      durationMs: Date.now() - startedAt,
+      stage: 'WALLET_QUERY_OR_POOL_WAIT',
+    });
+    res.status(503).json({ error: 'WALLET_DATABASE_TIMEOUT', message: 'Wallet balance lookup timed out. Check PostgreSQL query latency and connection-pool saturation.' });
+  }, 15000);
+  console.info('Wallet my-wallet query started', {
+    route: '/wallet/my-wallet',
+    role: actor.role,
+    stage: 'WALLET_QUERY_OR_POOL_WAIT',
+  });
   try {
     const sql = getDatabaseClient();
     const rows = actor.role === UserRole.OWNER
       ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type='TREASURY' LIMIT 1`)
       : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
+    clearTimeout(deadline);
+    if (timeoutSent || res.headersSent || res.writableEnded) return;
     console.info('Wallet my-wallet query completed', {
       route: '/wallet/my-wallet',
       role: actor.role,
@@ -224,6 +243,7 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
     if (!rows[0]) return res.status(404).json({ error: 'WALLET_NOT_FOUND' });
     return res.json({ wallet: rows[0] });
   } catch (error) {
+    clearTimeout(deadline);
     console.error('Wallet my-wallet query failed', {
       route: '/wallet/my-wallet',
       userId: actor.id,
@@ -231,6 +251,7 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
       durationMs: Date.now() - startedAt,
       error,
     });
+    if (timeoutSent || res.headersSent || res.writableEnded) return;
     return res.status(503).json({ error: 'WALLET_SERVICE_UNAVAILABLE' });
   }
 });
