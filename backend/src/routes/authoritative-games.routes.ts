@@ -70,7 +70,7 @@ async function auth(req: AuthRequest, res: Response, next: NextFunction) {
     const token = AuthService.verifyToken(header.slice(7));
     if (!token?.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
     const rows = await getDatabaseClient().unsafe(
-      'SELECT id,username,role FROM platform.users WHERE id=$1 AND is_active=true LIMIT 1', [token.id],
+      'SELECT u.id,u.username,ra.role FROM platform.users u JOIN platform.role_assignments ra ON ra.user_id=u.id WHERE u.id=$1 AND u.is_active=true LIMIT 1', [token.id],
     );
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
     if (!isPlayerRole(rows[0].role)) {
