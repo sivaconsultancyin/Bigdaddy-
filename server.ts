@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,6 +11,8 @@ import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
 import { authoritativeGamesRouter } from './backend/src/routes/authoritative-games.routes';
 import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
+import { healthMonitorRouter } from './backend/src/routes/health-monitor.routes';
+import { recordHealthFailure } from './backend/src/services/health-monitor.service';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,11 +54,13 @@ function startPersistentAviatorEngine() {
 
   child.on('error', (error) => {
     console.error('Aviator engine worker process failed to launch:', error.message);
+    recordHealthFailure({ requestId: randomUUID(), method: 'WORKER', path: '/internal/aviator-worker', statusCode: 500, durationMs: 0, reasonCode: 'AVIATOR_WORKER_LAUNCH_FAILED', reason: 'Aviator worker failed to launch. Check Render child-process/npm startup logs.' });
   });
   child.on('exit', (code, signal) => {
     if (aviatorWorkerProcess === child) aviatorWorkerProcess = null;
     if (aviatorWorkerStopping) return;
     console.error(`Aviator engine worker exited (code=${code}, signal=${signal ?? 'none'}).`);
+    recordHealthFailure({ requestId: randomUUID(), method: 'WORKER', path: '/internal/aviator-worker', statusCode: 500, durationMs: 0, reasonCode: 'AVIATOR_WORKER_EXITED', reason: `Aviator worker exited unexpectedly (code=${code}, signal=${signal ?? 'none'}). It will be restarted automatically.` });
     // Recover the game worker without restarting or blocking the API process.
     aviatorWorkerRestartTimer = setTimeout(() => {
       aviatorWorkerRestartTimer = null;
@@ -95,11 +100,13 @@ async function startServer() {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
+      recordHealthFailure({ requestId: randomUUID(), method: 'STARTUP', path: '/internal/database-connect', statusCode: 503, durationMs: 0, reasonCode: /timeout|ETIMEDOUT/i.test(message) ? 'DATABASE_CONNECT_TIMEOUT' : /ENETUNREACH|EHOSTUNREACH|ECONNREFUSED/i.test(message) ? 'DATABASE_NETWORK_UNREACHABLE' : 'DATABASE_STARTUP_FAILED', reason: /timeout|ETIMEDOUT/i.test(message) ? 'Database connection timed out during startup.' : /ENETUNREACH|EHOSTUNREACH|ECONNREFUSED/i.test(message) ? 'Database host/network is unreachable or refused the connection.' : 'Database startup connection check failed; see Render server logs for the underlying error.' });
       console.error('Production database startup check failed; financial APIs remain disabled:', message);
     }
   } else if (config.isProduction) {
     // Keep liveness/readiness endpoints available; config validation below keeps
     // every financial/game API closed until required secrets are configured.
+    recordHealthFailure({ requestId: randomUUID(), method: 'STARTUP', path: '/internal/database-connect', statusCode: 503, durationMs: 0, reasonCode: 'DATABASE_URL_MISSING', reason: 'DATABASE_URL is not configured; production financial APIs remain disabled.' });
     console.error('Production startup blocked from financial traffic: DATABASE_URL is missing.');
   }
 
@@ -120,6 +127,43 @@ async function startServer() {
 
   // Bound request body size to reduce accidental or abusive memory exhaustion.
   app.use(express.json({ limit: '256kb' }));
+
+  // Capture failed/slow API responses with a request ID. Never record request bodies,
+  // credentials, authorization headers, or query strings.
+  app.use((req, res, next) => {
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    res.setHeader('X-Request-Id', requestId);
+    const originalJson = res.json.bind(res);
+    (res as any).json = (body: any) => {
+      if (body && typeof body === 'object') {
+        if (!res.locals.healthReasonCode) res.locals.healthReasonCode = typeof body.error === 'string' ? body.error : typeof body.code === 'string' ? body.code : '';
+        if (!res.locals.healthReason) res.locals.healthReason = typeof body.message === 'string' ? body.message : typeof body.error === 'string' ? body.error : '';
+      }
+      return originalJson(body);
+    };
+    res.once('finish', () => {
+      const statusCode = res.statusCode;
+      const durationMs = Date.now() - startedAt;
+      const pathName = req.path;
+      const expectedValidationProbe = ['/auth/login', '/auth/register-referral', '/auth/create-user'].includes(pathName) && [400, 422].includes(statusCode);
+      const healthPanelProbe = pathName === '/monitoring/failures';
+      const shouldRecord = !healthPanelProbe && !expectedValidationProbe &&
+        (statusCode >= 500 || durationMs >= 5000 || (statusCode === 401 && pathName === '/auth/login') || (statusCode >= 400 && statusCode < 500 && ![401, 403].includes(statusCode)));
+      if (shouldRecord) {
+        recordHealthFailure({
+          requestId,
+          method: req.method,
+          path: pathName,
+          statusCode,
+          durationMs,
+          reasonCode: res.locals.healthReasonCode || (durationMs >= 5000 ? 'SLOW_REQUEST' : `HTTP_${statusCode}`),
+          reason: res.locals.healthReason || (durationMs >= 5000 ? 'Request took longer than 5 seconds.' : `Request completed with HTTP ${statusCode}.`),
+        });
+      }
+    });
+    next();
+  });
 
   // Explicit CORS allowlist. Production configuration rejects wildcard origins.
   app.use((req, res, next) => {
@@ -172,6 +216,10 @@ async function startServer() {
     res.json(getPublicConfigInfo());
   });
 
+  // Read-only Owner diagnostics are mounted before the database readiness gate so
+  // recent in-process failures remain visible while PostgreSQL is unavailable.
+  app.use('/api/monitoring', healthMonitorRouter);
+
   // Production-only API surface: never mount the legacy in-memory routers.
   if (!config.isProduction || !config.productionValid) {
     app.use('/api', (req, res, next) => {
@@ -200,7 +248,23 @@ async function startServer() {
   // Central fallback for rejected async handlers (including DB timeout errors).
   app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (res.headersSent) return next(error);
-    console.error('Unhandled API request failure:', error instanceof Error ? error.message : String(error));
+    const detail = error instanceof Error ? error.message : String(error);
+    const reasonCode = /timeout|ETIMEDOUT|statement timeout/i.test(detail)
+      ? 'DATABASE_QUERY_TIMEOUT'
+      : /deadlock/i.test(detail)
+        ? 'DATABASE_DEADLOCK'
+        : /too many clients|pool|connection/i.test(detail)
+          ? 'DATABASE_CONNECTION_OR_POOL_FAILURE'
+          : 'UNHANDLED_API_EXCEPTION';
+    res.locals.healthReasonCode = reasonCode;
+    res.locals.healthReason = reasonCode === 'DATABASE_QUERY_TIMEOUT'
+      ? 'Database query or lock wait exceeded its configured timeout.'
+      : reasonCode === 'DATABASE_DEADLOCK'
+        ? 'Database reported a deadlock while processing the request.'
+        : reasonCode === 'DATABASE_CONNECTION_OR_POOL_FAILURE'
+          ? 'Database connection failed or the connection pool could not serve the request.'
+          : 'Unhandled backend exception; use the request ID to locate the underlying Render log entry.';
+    console.error('Unhandled API request failure:', detail);
     return res.status(503).json({ error: 'REQUEST_FAILED', message: 'The request could not be completed because a backend dependency timed out or failed. Please retry.' });
   });
 

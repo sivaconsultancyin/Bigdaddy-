@@ -4,6 +4,8 @@ import { ApiClient } from '../../api/client';
 
 type Probe = { method: string; path: string; label: string; safe: boolean; validationOnly?: boolean };
 type Result = Probe & { status: 'online' | 'degraded' | 'offline' | 'manual'; code?: number; latencyMs?: number; checkedAt: string; error?: string };
+type FailureEvent = { id: string; occurredAt: string; requestId: string; method: string; path: string; statusCode: number; durationMs: number; component: string; reasonCode: string; reason: string; recovery: string };
+type FailureResponse = { events: FailureEvent[]; persistence: 'database' | 'memory-fallback'; note: string };
 
 const probes: Probe[] = [
   // Keep this inventory aligned with server.ts and the three mounted production routers.
@@ -47,6 +49,21 @@ export const ApiHealthPanel: React.FC = () => {
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [failures, setFailures] = useState<FailureEvent[]>([]);
+  const [failurePersistence, setFailurePersistence] = useState<'database' | 'memory-fallback' | 'unavailable'>('unavailable');
+  const [failureNote, setFailureNote] = useState<string>('Loading failure history…');
+
+  const loadFailures = useCallback(async () => {
+    try {
+      const response = await ApiClient.request<FailureResponse>('/monitoring/failures?limit=100');
+      setFailures(response.events || []);
+      setFailurePersistence(response.persistence);
+      setFailureNote(response.note);
+    } catch (error) {
+      setFailurePersistence('unavailable');
+      setFailureNote(error instanceof Error ? error.message : 'Could not load failure history. Check Owner authorization and API/database connectivity.');
+    }
+  }, []);
 
   const checkEndpoints = useCallback(async () => {
     if (runningRef.current) return;
@@ -86,9 +103,10 @@ export const ApiHealthPanel: React.FC = () => {
 
   useEffect(() => {
     void checkEndpoints();
-    const timer = window.setInterval(() => { void checkEndpoints(); }, 10000);
+    void loadFailures();
+    const timer = window.setInterval(() => { void checkEndpoints(); void loadFailures(); }, 10000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [checkEndpoints, loadFailures]);
 
   const online = results.filter(r => r.status === 'online').length;
   const degraded = results.filter(r => r.status === 'degraded').length;
@@ -132,6 +150,31 @@ export const ApiHealthPanel: React.FC = () => {
             </div>
           </div>
         ))}
+      </div>
+      <div className="rounded-xl border border-rose-500/25 bg-zinc-900/70 p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-zinc-100">Failure details · recent 100</h3>
+          <button onClick={() => { void loadFailures(); }} className="text-[10px] rounded-md border border-zinc-700 px-2 py-1 text-zinc-300">Refresh failures</button>
+        </div>
+        <p className="text-[10px] text-zinc-400">{failurePersistence === 'database' ? 'Persisted in database' : failurePersistence === 'memory-fallback' ? 'Memory fallback — recent process events only' : 'Failure history unavailable'} · {failureNote}</p>
+        {failures.length === 0 ? (
+          <p className="text-[11px] text-zinc-500">No recorded failures in the available history.</p>
+        ) : (
+          <div className="space-y-2 max-h-[520px] overflow-y-auto">
+            {failures.map((event) => (
+              <article key={event.id} className="rounded-lg border border-rose-500/20 bg-zinc-950 p-2.5 space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <span className="text-[11px] font-bold text-rose-300">{event.component} · HTTP {event.statusCode}</span>
+                  <span className="text-[9px] text-zinc-500">{new Date(event.occurredAt).toLocaleString()}</span>
+                </div>
+                <p className="text-[10px] font-mono text-zinc-300 break-all">{event.method} {event.path}</p>
+                <p className="text-[10px] text-zinc-300"><strong>Reason:</strong> {event.reasonCode} — {event.reason}</p>
+                <p className="text-[10px] text-zinc-400"><strong>Where/Duration:</strong> {event.durationMs} ms · Request ID: {event.requestId}</p>
+                <p className="text-[10px] text-cyan-300"><strong>Next steps:</strong> {event.recovery}</p>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
       <p className="text-[10px] leading-relaxed text-zinc-500">Route inventory is matched to registered backend routes. Read-only GET routes are probed normally. Login, referral registration, and create-user use a validation-only POST with JSON null; expected 400/422 confirms input validation rejected it before mutation. No credentials or valid mutation payloads are sent. All other financial/game-changing POST routes remain skipped. HTTP 5xx shows the backend reason; network/timeouts show No response. “Responding” confirms an HTTP response, not successful business logic.</p>
     </section>
