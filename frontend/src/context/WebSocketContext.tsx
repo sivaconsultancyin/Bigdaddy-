@@ -38,7 +38,9 @@ export interface RouletteBetFeedItem {
 
 interface WebSocketContextType {
   isConnected: boolean;
-  apiHealth: 'checking' | 'online' | 'offline';
+  apiHealth: 'checking' | 'online' | 'degraded' | 'offline';
+  apiLastCheckedAt: number | null;
+  apiResponseTimeMs: number | null;
   roundDataStatus: 'waiting' | 'fresh' | 'stale' | 'offline';
   lastSuccessfulRoundAt: number | null;
   lastRoundError: string | null;
@@ -79,7 +81,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const userRef = useRef(user);
   userRef.current = user;
   const [isConnected, setIsConnected] = useState(false);
-  const [apiHealth, setApiHealth] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [apiHealth, setApiHealth] = useState<'checking' | 'online' | 'degraded' | 'offline'>('checking');
+  const [apiLastCheckedAt, setApiLastCheckedAt] = useState<number | null>(null);
+  const [apiResponseTimeMs, setApiResponseTimeMs] = useState<number | null>(null);
   const [roundDataStatus, setRoundDataStatus] = useState<'waiting' | 'fresh' | 'stale' | 'offline'>('waiting');
   const [lastSuccessfulRoundAt, setLastSuccessfulRoundAt] = useState<number | null>(null);
   const [lastRoundError, setLastRoundError] = useState<string | null>(null);
@@ -215,16 +219,28 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // stalled game endpoint is reported as degraded, not mistaken for a healthy round feed.
         if (now - lastHealthCheckAtRef.current >= 10000) {
           lastHealthCheckAtRef.current = now;
+          const healthStartedAt = performance.now();
           const healthController = new AbortController();
           const healthTimeout = window.setTimeout(() => healthController.abort(), 8000);
-          void fetch(apiBase.replace(/\/$/, '') + '/ready', {
+          void fetch(apiBase.replace(/\/$/, '') + '/health', {
             headers: { Accept: 'application/json' },
             signal: healthController.signal,
-          }).then((response) => {
+          }).then(async (response) => {
+            const health = await response.json().catch(() => null);
             if (disposedRef.current) return;
-            setApiHealth(response.ok ? 'online' : 'offline');
+            // Any HTTP response proves the API process is reachable. Only mark it
+            // Online when its database is connected and production mode is ready.
+            const databaseConnected = health?.databaseConnected === true;
+            const productionReady = health?.mode !== 'production' || health?.productionFinancialApisEnabled === true;
+            setApiHealth(response.ok && databaseConnected && productionReady ? 'online' : 'degraded');
+            setApiLastCheckedAt(Date.now());
+            setApiResponseTimeMs(Math.round(performance.now() - healthStartedAt));
           }).catch(() => {
-            if (!disposedRef.current) setApiHealth('offline');
+            if (!disposedRef.current) {
+              setApiHealth('offline');
+              setApiLastCheckedAt(Date.now());
+              setApiResponseTimeMs(null);
+            }
           }).finally(() => window.clearTimeout(healthTimeout));
         }
         const pollOtherGames = now - otherGamesPollAtRef.current >= 1500;
@@ -404,6 +420,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       value={{
         isConnected,
         apiHealth,
+        apiLastCheckedAt,
+        apiResponseTimeMs,
         roundDataStatus,
         lastSuccessfulRoundAt,
         lastRoundError,

@@ -7,6 +7,7 @@ import { MobileBottomNav, MobileTab } from '../frontend/src/components/common/Mo
 import { MobileDashboard } from '../frontend/src/pages/MobileDashboard';
 import { Login } from '../frontend/src/pages/Login';
 import { AlertTriangle } from 'lucide-react';
+import { ApiStatusBanner } from '../frontend/src/components/common/ApiStatusBanner';
 
 const MainLayout: React.FC = () => {
   const { user, loading, refreshWallet, configError, authError } = useAuth();
@@ -117,11 +118,18 @@ const MainLayout: React.FC = () => {
   );
 };
 
+const AppShell: React.FC = () => (
+  <>
+    <ApiStatusBanner />
+    <MainLayout />
+  </>
+);
+
 export function App() {
   return (
     <AuthProvider>
       <WebSocketProvider>
-        <MainLayout />
+        <AppShell />
       </WebSocketProvider>
     </AuthProvider>
   );
