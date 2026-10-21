@@ -416,7 +416,14 @@ async function handle(req: Request) {
   const activate = path.match(/^\/games\/([^/]+)\/activate$/);
   if (req.method === "POST" && activate) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
-    const gameCode = decodeURIComponent(activate[1]).replace(/-/g, "_");
+    let gameCode: string;
+    try { gameCode = decodeURIComponent(activate[1]).replace(/-/g, "_"); }
+    catch { return response({ error: "INVALID_GAME_CODE" }, 400, origin); }
+    // Match pool allocation and the advertised game list: never activate a game
+    // until this API has the authoritative routes needed to run it.
+    if (!["aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"].includes(gameCode)) {
+      return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 404, origin);
+    }
     const pool = await db.schema("platform").from("game_pools").select("wallet_id").eq("game_code", gameCode).maybeSingle();
     if (pool.error || !pool.data) return response({ error: "GAME_POOL_NOT_FOUND" }, 404, origin);
     const { data: wallet, error: walletError } = await db.schema("wallet").from("wallets").select("balance,reserved_balance").eq("id", pool.data.wallet_id).maybeSingle();
