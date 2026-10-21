@@ -2,7 +2,7 @@ name: BigDaddy Casino CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, feature/supabase-data-api-migration ]
   pull_request:
     branches: [ main, master ]
 
