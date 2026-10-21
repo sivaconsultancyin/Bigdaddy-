@@ -17,18 +17,48 @@ function tokenFor(user: UserRow) {
   return AuthService.generateToken({ ...safeUser(user), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as any);
 }
 async function requireDatabaseUser(req: AuthReq, res: Response, next: NextFunction) {
+  const startedAt = Date.now();
+  let timeoutSent = false;
+  // Fail quickly when the DB pool or auth query stalls instead of letting the
+  // frontend's 45-second AbortController expire with no diagnostic response.
+  const deadline = setTimeout(() => {
+    if (res.headersSent || res.writableEnded) return;
+    timeoutSent = true;
+    console.error('Production authentication database timed out', {
+      route: req.path,
+      durationMs: Date.now() - startedAt,
+      stage: 'AUTH_USER_LOOKUP',
+    });
+    res.status(503).json({ error: 'AUTH_DATABASE_TIMEOUT', message: 'Authentication database lookup timed out. Check PostgreSQL connectivity and connection-pool saturation.' });
+  }, 15000);
   try {
     const header = req.headers.authorization;
-    if (!header || !header.startsWith('Bearer ')) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+    if (!header || !header.startsWith('Bearer ')) {
+      clearTimeout(deadline);
+      return res.status(401).json({ error: 'AUTH_REQUIRED' });
+    }
     const payload = AuthService.verifyToken(header.slice(7));
-    if (!payload || !payload.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
+    if (!payload || !payload.id) {
+      clearTimeout(deadline);
+      return res.status(401).json({ error: 'INVALID_TOKEN' });
+    }
+    console.info('Production authentication lookup started', { route: req.path, stage: 'AUTH_USER_LOOKUP' });
     const sql = getAuthDatabaseClient();
     const rows = await sql.unsafe('SELECT u.id,u.username,u.email,u.password_hash,u.parent_id,u.referred_by_user_id,u.is_active,ra.role,rc.code AS referral_code FROM platform.users u JOIN platform.role_assignments ra ON ra.user_id=u.id LEFT JOIN platform.referral_codes rc ON rc.owner_user_id=u.id AND rc.is_active=true WHERE u.id=$1 AND u.is_active=true LIMIT 1', [payload.id]);
+    clearTimeout(deadline);
+    if (timeoutSent || res.headersSent || res.writableEnded) return;
+    console.info('Production authentication lookup completed', { route: req.path, durationMs: Date.now() - startedAt, userFound: Boolean(rows[0]) });
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
     req.authUser = rows[0] as unknown as UserRow;
     next();
   } catch (error) {
-    console.error('Production authentication failed:', error);
+    clearTimeout(deadline);
+    console.error('Production authentication failed:', {
+      route: req.path,
+      durationMs: Date.now() - startedAt,
+      error,
+    });
+    if (timeoutSent || res.headersSent || res.writableEnded) return;
     return res.status(503).json({ error: 'AUTH_SERVICE_UNAVAILABLE' });
   }
 }
@@ -180,11 +210,30 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
 productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const actor = req.authUser!;
   const startedAt = Date.now();
+  let timeoutSent = false;
+  const deadline = setTimeout(() => {
+    if (res.headersSent || res.writableEnded) return;
+    timeoutSent = true;
+    console.error('Wallet database lookup timed out', {
+      route: '/wallet/my-wallet',
+      role: actor.role,
+      durationMs: Date.now() - startedAt,
+      stage: 'WALLET_QUERY_OR_POOL_WAIT',
+    });
+    res.status(503).json({ error: 'WALLET_DATABASE_TIMEOUT', message: 'Wallet balance lookup timed out. Check PostgreSQL query latency and connection-pool saturation.' });
+  }, 15000);
+  console.info('Wallet my-wallet query started', {
+    route: '/wallet/my-wallet',
+    role: actor.role,
+    stage: 'WALLET_QUERY_OR_POOL_WAIT',
+  });
   try {
     const sql = getDatabaseClient();
     const rows = actor.role === UserRole.OWNER
       ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE wallet_type='TREASURY' LIMIT 1`)
       : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM wallet.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
+    clearTimeout(deadline);
+    if (timeoutSent || res.headersSent || res.writableEnded) return;
     console.info('Wallet my-wallet query completed', {
       route: '/wallet/my-wallet',
       role: actor.role,
@@ -194,6 +243,7 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
     if (!rows[0]) return res.status(404).json({ error: 'WALLET_NOT_FOUND' });
     return res.json({ wallet: rows[0] });
   } catch (error) {
+    clearTimeout(deadline);
     console.error('Wallet my-wallet query failed', {
       route: '/wallet/my-wallet',
       userId: actor.id,
@@ -201,6 +251,7 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
       durationMs: Date.now() - startedAt,
       error,
     });
+    if (timeoutSent || res.headersSent || res.writableEnded) return;
     return res.status(503).json({ error: 'WALLET_SERVICE_UNAVAILABLE' });
   }
 });
