@@ -92,7 +92,23 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
 
 async function handle(req: Request) {
   const origin = req.headers.get("origin");
-  if (req.method === "OPTIONS") return new Response("ok", { headers: { ...corsHeaders, ...(origin ? { "Access-Control-Allow-Origin": origin } : {}) } });
+  if (req.method === "OPTIONS") {
+    const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const headers: Record<string, string> = { ...corsHeaders };
+    if (allowed.length > 0) {
+      // Match the same origin policy used for normal responses. Never reflect an
+      // arbitrary Origin on preflight when an allowlist is configured.
+      delete headers["Access-Control-Allow-Origin"];
+      delete headers["Vary"];
+      if (origin && allowed.includes(origin)) {
+        headers["Access-Control-Allow-Origin"] = origin;
+        headers["Vary"] = "Origin";
+      }
+    } else {
+      headers["Access-Control-Allow-Origin"] = "*";
+    }
+    return new Response(null, { status: 204, headers });
+  }
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/functions\/v1\/api(?=\/|$)/, "").replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/";
   if (req.method === "GET" && path === "/health") {
