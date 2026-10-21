@@ -112,7 +112,7 @@ async function handle(req: Request) {
     try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
     const username = typeof body.username === "string" ? body.username.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
-    if (!/^[a-zA-Z0-9_.-]{3,64}$/.test(username) || password.length < 1 || password.length > 1024) {
+    const validLoginName = /^[a-zA-Z0-9_.-]{3,64}$/.test(username) || /^[^\\s@]{1,128}@[A-Za-z0-9.-]{1,190}\\.[A-Za-z]{2,}$/.test(username);\n    if (!validLoginName || password.length < 1 || password.length > 1024) {
       return response({ error: "INVALID_USERNAME_OR_PASSWORD" }, 400, origin);
     }
     const { data: users, error: userError } = await db.schema("platform").from("users")
