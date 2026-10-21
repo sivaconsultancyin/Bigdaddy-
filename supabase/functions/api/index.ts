@@ -385,7 +385,11 @@ async function handle(req: Request) {
     const { data, error } = await db.schema("platform").from("games")
       .select("id,code,name,status,min_bet,max_bet,config").order("name");
     if (error) return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
-    return response({ games: data ?? [] }, 200, origin);
+    // Only expose games with implemented routes in this Edge API. In particular,
+    // Teen Patti and dice verification are not implemented here yet; advertising
+    // them from the database makes the UI open games whose requests will 404.
+    const supportedGames = new Set(["aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"]);
+    return response({ games: (data ?? []).filter((game) => supportedGames.has(game.code)) }, 200, origin);
   }
 
   if (req.method === "POST" && path === "/wallet/game-pool") {
@@ -488,7 +492,11 @@ async function handle(req: Request) {
     try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
     const betId = String(body.betId ?? "");
     if (!/^[0-9a-f-]{36}$/i.test(betId)) return response({ error: "INVALID_BET_ID" }, 400, origin);
-    const key = req.headers.get("idempotency-key")?.trim() || `CASHOUT_${betId.replace(/-/g,"")}`;
+    const suppliedKey = req.headers.get("idempotency-key")?.trim();
+    const key = suppliedKey || `CASHOUT_${betId.replace(/-/g,"")}`;
+    if (key.length < 8 || key.length > 119 || !/^[A-Za-z0-9_-]+$/.test(key)) {
+      return response({ error: "INVALID_IDEMPOTENCY_KEY" }, 400, origin);
+    }
     const { data, error } = await db.schema("aviator").rpc("cashout_crash_bet_atomic", {
       p_user_id: actor.id, p_bet_id: betId, p_idempotency_key: key,
     });
