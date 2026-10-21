@@ -191,7 +191,7 @@ jobs:
             RAISE EXCEPTION 'Expected exactly two double-entry ledger rows';
           END IF;
         END
-        $;
+        $$;
         SQL
 
     - name: Verify wallet API boundary grants and execution
@@ -230,5 +230,5 @@ jobs:
             RAISE EXCEPTION 'Wallet wrapper did not create exactly two additional ledger rows';
           END IF;
         END
-        $;
+        $$;
         SQL
