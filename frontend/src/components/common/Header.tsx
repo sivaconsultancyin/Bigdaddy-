@@ -66,6 +66,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenTokenRequest, onGoToLobby 
                 <span className="flex items-center gap-0.5 text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> API Online
                 </span>
+              ) : apiHealth === 'degraded' ? (
+                <span className="flex items-center gap-0.5 text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> API Degraded
+                </span>
               ) : apiHealth === 'offline' ? (
                 <span className="flex items-center gap-0.5 text-rose-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span> API Offline
