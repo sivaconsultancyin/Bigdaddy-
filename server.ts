@@ -54,11 +54,13 @@ function startPersistentAviatorEngine() {
 
   child.on('error', (error) => {
     console.error('Aviator engine worker process failed to launch:', error.message);
+    recordHealthFailure({ requestId: randomUUID(), method: 'WORKER', path: '/internal/aviator-worker', statusCode: 500, durationMs: 0, reasonCode: 'AVIATOR_WORKER_LAUNCH_FAILED', reason: 'Aviator worker failed to launch. Check Render child-process/npm startup logs.' });
   });
   child.on('exit', (code, signal) => {
     if (aviatorWorkerProcess === child) aviatorWorkerProcess = null;
     if (aviatorWorkerStopping) return;
     console.error(`Aviator engine worker exited (code=${code}, signal=${signal ?? 'none'}).`);
+    recordHealthFailure({ requestId: randomUUID(), method: 'WORKER', path: '/internal/aviator-worker', statusCode: 500, durationMs: 0, reasonCode: 'AVIATOR_WORKER_EXITED', reason: `Aviator worker exited unexpectedly (code=${code}, signal=${signal ?? 'none'}). It will be restarted automatically.` });
     // Recover the game worker without restarting or blocking the API process.
     aviatorWorkerRestartTimer = setTimeout(() => {
       aviatorWorkerRestartTimer = null;
@@ -98,11 +100,13 @@ async function startServer() {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
+      recordHealthFailure({ requestId: randomUUID(), method: 'STARTUP', path: '/internal/database-connect', statusCode: 503, durationMs: 0, reasonCode: /timeout|ETIMEDOUT/i.test(message) ? 'DATABASE_CONNECT_TIMEOUT' : /ENETUNREACH|EHOSTUNREACH|ECONNREFUSED/i.test(message) ? 'DATABASE_NETWORK_UNREACHABLE' : 'DATABASE_STARTUP_FAILED', reason: /timeout|ETIMEDOUT/i.test(message) ? 'Database connection timed out during startup.' : /ENETUNREACH|EHOSTUNREACH|ECONNREFUSED/i.test(message) ? 'Database host/network is unreachable or refused the connection.' : 'Database startup connection check failed; see Render server logs for the underlying error.' });
       console.error('Production database startup check failed; financial APIs remain disabled:', message);
     }
   } else if (config.isProduction) {
     // Keep liveness/readiness endpoints available; config validation below keeps
     // every financial/game API closed until required secrets are configured.
+    recordHealthFailure({ requestId: randomUUID(), method: 'STARTUP', path: '/internal/database-connect', statusCode: 503, durationMs: 0, reasonCode: 'DATABASE_URL_MISSING', reason: 'DATABASE_URL is not configured; production financial APIs remain disabled.' });
     console.error('Production startup blocked from financial traffic: DATABASE_URL is missing.');
   }
 
@@ -244,7 +248,23 @@ async function startServer() {
   // Central fallback for rejected async handlers (including DB timeout errors).
   app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (res.headersSent) return next(error);
-    console.error('Unhandled API request failure:', error instanceof Error ? error.message : String(error));
+    const detail = error instanceof Error ? error.message : String(error);
+    const reasonCode = /timeout|ETIMEDOUT|statement timeout/i.test(detail)
+      ? 'DATABASE_QUERY_TIMEOUT'
+      : /deadlock/i.test(detail)
+        ? 'DATABASE_DEADLOCK'
+        : /too many clients|pool|connection/i.test(detail)
+          ? 'DATABASE_CONNECTION_OR_POOL_FAILURE'
+          : 'UNHANDLED_API_EXCEPTION';
+    res.locals.healthReasonCode = reasonCode;
+    res.locals.healthReason = reasonCode === 'DATABASE_QUERY_TIMEOUT'
+      ? 'Database query or lock wait exceeded its configured timeout.'
+      : reasonCode === 'DATABASE_DEADLOCK'
+        ? 'Database reported a deadlock while processing the request.'
+        : reasonCode === 'DATABASE_CONNECTION_OR_POOL_FAILURE'
+          ? 'Database connection failed or the connection pool could not serve the request.'
+          : 'Unhandled backend exception; use the request ID to locate the underlying Render log entry.';
+    console.error('Unhandled API request failure:', detail);
     return res.status(503).json({ error: 'REQUEST_FAILED', message: 'The request could not be completed because a backend dependency timed out or failed. Please retry.' });
   });
 
