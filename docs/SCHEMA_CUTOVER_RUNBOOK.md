@@ -33,3 +33,10 @@ Stop and roll back if any wallet balance or reservation changes unexpectedly; a 
 ## Environment boundary
 
 Repository CI's PostgreSQL fixtures are intentionally minimal and do not represent a real Supabase project. CI passing is not a staging or production database test. This repository change does not connect to or modify either database.
+
+
+## Dependency inventory (before writing a move migration)
+
+Run `scripts/db/schema-dependency-inventory.sql` on the same staging clone and retain its output with the preflight baseline. It reports target table columns and enum/domain types, constraints and inbound/outbound foreign keys, non-internal triggers, RLS flags/policies, table/schema grants, candidate financial/game function definitions, dependent views, and type dependencies. Review these results before deciding whether each object can move directly or must be recreated in dependency order.
+
+This inventory is deliberately read-only. It does not prove that production/staging is reconciled, and it does not perform a schema cutover. In particular, `authoritative_game_bets` and `authoritative_game_rounds` contain multiple game codes in the current design; a per-game schema migration must split/copy rows by game_code and preserve IDs and foreign-key relationships rather than blindly moving the shared tables.
