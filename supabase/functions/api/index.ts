@@ -123,9 +123,12 @@ async function handle(req: Request) {
     if (!validLoginName || password.length < 1 || password.length > 1024) {
       return response({ error: "INVALID_USERNAME_OR_PASSWORD" }, 400, origin);
     }
-    const { data: users, error: userError } = await db.schema("platform").from("users")
-      .select("id,username,email,password_hash,parent_id,referred_by_user_id,is_active")
-      .ilike("username", username).limit(2);
+    const userLookup = db.schema("platform").from("users")
+      .select("id,username,email,password_hash,parent_id,referred_by_user_id,is_active");
+    // Email login is accepted by validation above, so query the email column for it.
+    const { data: users, error: userError } = username.includes("@")
+      ? await userLookup.eq("email", username.toLowerCase()).limit(2)
+      : await userLookup.ilike("username", username).limit(2);
     if (userError) return response({ error: "AUTH_SERVICE_UNAVAILABLE" }, 503, origin);
     if (!users || users.length !== 1 || !users[0].is_active || !(await bcrypt.compare(password, users[0].password_hash))) {
       return response({ error: "INVALID_USERNAME_OR_PASSWORD" }, 401, origin);
