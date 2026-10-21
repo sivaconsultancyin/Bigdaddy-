@@ -175,7 +175,7 @@ productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthR
   try {
     const sql = getDatabaseClient();
     const rows = actor.role === UserRole.OWNER
-      ? await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE wallet_type=\\'TREASURY\\' LIMIT 1')
+      ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1`)
       : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
     console.info('Wallet my-wallet query completed', {
       route: '/wallet/my-wallet',
