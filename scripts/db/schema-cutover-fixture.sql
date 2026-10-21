@@ -32,6 +32,25 @@ CREATE TABLE public.authoritative_game_bets (id uuid PRIMARY KEY DEFAULT gen_ran
 
 CREATE FUNCTION public.wallet_transfer_atomic(text, public.transaction_type_enum, bigint, uuid, uuid, jsonb DEFAULT '{}'::jsonb)
 RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ SELECT gen_random_uuid() $$;
+INSERT INTO public.wallets(id,wallet_type,balance,reserved_balance,game_code) VALUES
+ ('00000000-0000-0000-0000-000000000001','GAME_POOL',1000266,0,'aviator'),
+ ('00000000-0000-0000-0000-000000000002','GAME_POOL',0,0,'roulette'),
+ ('00000000-0000-0000-0000-000000000003','GAME_POOL',0,0,'dice'),
+ ('00000000-0000-0000-0000-000000000004','GAME_POOL',0,0,'dragon_tiger'),
+ ('00000000-0000-0000-0000-000000000005','GAME_POOL',0,0,'andar_bahar');
+INSERT INTO public.games(id,code,status,pool_wallet_id,min_bet,max_bet) VALUES
+ ('10000000-0000-0000-0000-000000000001','aviator','ACTIVE','00000000-0000-0000-0000-000000000001',10,100000),
+ ('10000000-0000-0000-0000-000000000002','roulette','COMING_SOON','00000000-0000-0000-0000-000000000001',10,100000),
+ ('10000000-0000-0000-0000-000000000003','dice','COMING_SOON','00000000-0000-0000-0000-000000000001',10,100000),
+ ('10000000-0000-0000-0000-000000000004','dragon_tiger','COMING_SOON','00000000-0000-0000-0000-000000000001',10,100000),
+ ('10000000-0000-0000-0000-000000000005','andar_bahar','COMING_SOON','00000000-0000-0000-0000-000000000001',10,100000);
+INSERT INTO public.game_pools(game_code,wallet_id) VALUES
+ ('aviator','00000000-0000-0000-0000-000000000001'),
+ ('roulette','00000000-0000-0000-0000-000000000001'),
+ ('dice','00000000-0000-0000-0000-000000000001'),
+ ('dragon_tiger','00000000-0000-0000-0000-000000000001'),
+ ('andar_bahar','00000000-0000-0000-0000-000000000001');
+
 CREATE SCHEMA wallet;
 CREATE FUNCTION wallet.wallet_transfer_atomic(text, public.transaction_type_enum, bigint, uuid, uuid, jsonb DEFAULT '{}'::jsonb)
 RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ SELECT public.wallet_transfer_atomic($1,$2,$3,$4,$5,$6) $$;
