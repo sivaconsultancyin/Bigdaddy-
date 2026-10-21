@@ -47,7 +47,7 @@ async function tick() {
 
       phase = 'find crashed round for recovery';
       const crashedRows = await tx.unsafe(
-        "SELECT id FROM public.game_rounds WHERE game_code='aviator' AND status='CRASHED' ORDER BY round_number DESC LIMIT 1"
+        "SELECT id FROM aviator.game_rounds WHERE game_code='aviator' AND status='CRASHED' ORDER BY round_number DESC LIMIT 1"
       );
       if (crashedRows[0]?.id) {
         console.info('Aviator engine retrying crashed-round settlement.', { roundId: crashedRows[0].id });
@@ -56,7 +56,7 @@ async function tick() {
 
       phase = 'check game activation';
       const games = await tx.unsafe(
-        "SELECT id,pool_wallet_id FROM public.games WHERE code='aviator' AND status='ACTIVE' LIMIT 1"
+        "SELECT id,pool_wallet_id FROM platform.games WHERE code='aviator' AND status='ACTIVE' LIMIT 1"
       );
       if (!games[0]) return null;
 
@@ -65,7 +65,7 @@ async function tick() {
         "SELECT id,round_number,status,started_at,ended_at,server_seed,crash_multiplier," +
         "EXTRACT(EPOCH FROM (now()-started_at)) AS elapsed_seconds," +
         "EXTRACT(EPOCH FROM (now()-ended_at)) AS seconds_since_end " +
-        "FROM public.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1"
+        "FROM aviator.game_rounds WHERE game_code='aviator' ORDER BY round_number DESC LIMIT 1"
       );
 
       // Keep a full 20-second inter-round cooldown measured from the crash
@@ -84,14 +84,14 @@ async function tick() {
       if (!rows[0] || rows[0].status === 'SETTLED') {
         phase = 'create next WAITING round';
         const maxRows = await tx.unsafe(
-          "SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM public.game_rounds WHERE game_code='aviator'"
+          "SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM aviator.game_rounds WHERE game_code='aviator'"
         );
         const roundNumber = Number(maxRows[0].n) + 1;
         const seed = randomBytes(32).toString('hex');
         const commitment = createHash('sha256').update(seed).digest('hex');
         const crash = fairCrashMultiplier(seed, roundNumber);
         await tx.unsafe(
-          "INSERT INTO public.game_rounds(game_code,round_number,status,server_seed,server_seed_hash,crash_multiplier,started_at) " +
+          "INSERT INTO aviator.game_rounds(game_code,round_number,status,server_seed,server_seed_hash,crash_multiplier,started_at) " +
           "VALUES('aviator',$1,'WAITING',$2,$3,$4,now())",
           [roundNumber, seed, commitment, crash]
         );
@@ -116,7 +116,7 @@ async function tick() {
         if (ageSeconds >= 5) {
           phase = 'open betting round';
           const opened = await tx.unsafe(
-            "UPDATE public.game_rounds SET status='RUNNING',started_at=now() WHERE id=$1 AND status='WAITING' RETURNING round_number",
+            "UPDATE aviator.game_rounds SET status='RUNNING',started_at=now() WHERE id=$1 AND status='WAITING' RETURNING round_number",
             [round.id]
           );
           if (opened[0]) console.info('Aviator round entered RUNNING.', { roundNumber: opened[0].round_number });
@@ -130,7 +130,7 @@ async function tick() {
         if (multiplier >= crash) {
           phase = 'persist crash result';
           const crashed = await tx.unsafe(
-            "UPDATE public.game_rounds SET status='CRASHED',ended_at=now(),revealed_server_seed=server_seed " +
+            "UPDATE aviator.game_rounds SET status='CRASHED',ended_at=now(),revealed_server_seed=server_seed " +
             "WHERE id=$1 AND status='RUNNING' RETURNING id,round_number",
             [round.id]
           );
@@ -146,14 +146,14 @@ async function tick() {
 
         phase = 'process automatic cashouts';
         const autoBets = await tx.unsafe(
-          "SELECT id,user_id FROM public.game_bets WHERE round_id=$1 AND status='PENDING' " +
+          "SELECT id,user_id FROM aviator.game_bets WHERE round_id=$1 AND status='PENDING' " +
           "AND auto_cashout IS NOT NULL AND auto_cashout <= $2",
           [round.id, multiplier]
         );
         for (const bet of autoBets) {
           try {
             await tx.unsafe(
-              'SELECT public.cashout_crash_bet_atomic($1::uuid,$2::uuid,$3)',
+              'SELECT aviator.cashout_crash_bet_atomic($1::uuid,$2::uuid,$3)',
               [bet.user_id, bet.id, 'AUTO_CASHOUT_' + bet.id]
             );
           } catch (error) {
@@ -173,7 +173,7 @@ async function tick() {
       await client.begin(async (tx) => {
         await tx.unsafe("SET LOCAL lock_timeout = '2s'");
         await tx.unsafe("SET LOCAL statement_timeout = '15s'");
-        await tx.unsafe('SELECT public.settle_crash_round_atomic($1::uuid)', [roundToSettle]);
+        await tx.unsafe('SELECT aviator.settle_crash_round_atomic($1::uuid)', [roundToSettle]);
       });
       console.info('Aviator crashed round settlement completed.', { roundId: roundToSettle });
     }
