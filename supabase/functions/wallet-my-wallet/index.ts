@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-import { corsHeaders, jsonResponse, verifyBigDaddyToken } from "../auth-me/bigdaddy-jwt.ts";
+import { corsHeaders, jsonResponse, verifyBigDaddyToken } from "./bigdaddy-jwt.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
