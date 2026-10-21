@@ -98,5 +98,95 @@ jobs:
         $$;
         SQL
 
-    - name: Verify migration is repeatable
+    - name: Verify schema migration is repeatable
       run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021100000_prepare_game_schema_isolation.sql
+
+    - name: Create minimal wallet function test fixtures
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        CREATE TYPE public.transaction_type_enum AS ENUM ('BET_ESCROW_LOCK');
+        CREATE TABLE public.wallets (
+          id uuid PRIMARY KEY,
+          balance bigint NOT NULL,
+          reserved_balance bigint NOT NULL DEFAULT 0,
+          updated_at timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE TABLE public.wallet_transactions (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          idempotency_key varchar(128) NOT NULL UNIQUE,
+          type public.transaction_type_enum NOT NULL,
+          amount bigint NOT NULL,
+          source_wallet_id uuid NOT NULL,
+          target_wallet_id uuid NOT NULL,
+          metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+        );
+        CREATE TABLE public.ledger_entries (
+          transaction_id uuid NOT NULL,
+          wallet_id uuid NOT NULL,
+          direction text NOT NULL,
+          amount bigint NOT NULL,
+          balance_after bigint NOT NULL,
+          description text NOT NULL
+        );
+        CREATE TABLE public.token_supply (
+          id integer PRIMARY KEY,
+          max_supply bigint NOT NULL
+        );
+        INSERT INTO public.wallets(id, balance, reserved_balance) VALUES
+          ('00000000-0000-0000-0000-000000000001', 1000, 0),
+          ('00000000-0000-0000-0000-000000000002', 0, 0);
+        INSERT INTO public.token_supply(id, max_supply) VALUES (1, 1000);
+        SQL
+
+    - name: Apply wallet idempotency hardening migration
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021110000_harden_wallet_transfer_idempotency.sql
+
+    - name: Verify exact replay and conflicting-key rejection
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $$
+        DECLARE
+          first_id uuid;
+          replay_id uuid;
+          conflict_rejected boolean := false;
+        BEGIN
+          first_id := public.wallet_transfer_atomic(
+            'wallet-test-key-0001', 'BET_ESCROW_LOCK', 100,
+            '00000000-0000-0000-0000-000000000001',
+            '00000000-0000-0000-0000-000000000002',
+            '{"purpose":"ci-test"}'::jsonb
+          );
+          replay_id := public.wallet_transfer_atomic(
+            'wallet-test-key-0001', 'BET_ESCROW_LOCK', 100,
+            '00000000-0000-0000-0000-000000000001',
+            '00000000-0000-0000-0000-000000000002',
+            '{"purpose":"ci-test"}'::jsonb
+          );
+          IF first_id IS DISTINCT FROM replay_id THEN
+            RAISE EXCEPTION 'Exact idempotent replay returned a different transaction';
+          END IF;
+
+          BEGIN
+            PERFORM public.wallet_transfer_atomic(
+              'wallet-test-key-0001', 'BET_ESCROW_LOCK', 101,
+              '00000000-0000-0000-0000-000000000001',
+              '00000000-0000-0000-0000-000000000002',
+              '{"purpose":"ci-test"}'::jsonb
+            );
+          EXCEPTION WHEN SQLSTATE '22023' THEN
+            conflict_rejected := true;
+          END;
+
+          IF NOT conflict_rejected THEN
+            RAISE EXCEPTION 'Conflicting idempotency-key reuse was not rejected';
+          END IF;
+          IF (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 900
+             OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 100 THEN
+            RAISE EXCEPTION 'Wallet balances do not match the single transfer';
+          END IF;
+          IF (SELECT count(*) FROM public.ledger_entries) <> 2 THEN
+            RAISE EXCEPTION 'Expected exactly two double-entry ledger rows';
+          END IF;
+        END
+        $$;
+        SQL
