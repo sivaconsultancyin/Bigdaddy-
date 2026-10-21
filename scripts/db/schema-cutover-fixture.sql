@@ -30,6 +30,23 @@ CREATE TABLE public.game_settlements (id uuid PRIMARY KEY DEFAULT gen_random_uui
 CREATE TABLE public.authoritative_game_rounds (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), game_code text, round_number bigint, status text);
 CREATE TABLE public.authoritative_game_bets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), round_id uuid, user_id uuid, status text DEFAULT 'PENDING', bet_amount bigint DEFAULT 0, payout_amount bigint DEFAULT 0, reserved_liability bigint DEFAULT 0, idempotency_key text);
 
+-- Seed settled rows so CI proves the per-game split preserves history and IDs.
+INSERT INTO public.users(id,username) VALUES ('20000000-0000-0000-0000-000000000001','fixture-player');
+INSERT INTO public.authoritative_game_rounds
+  (id,game_code,round_number,status,state,result,server_seed_hash,server_seed,opened_at,betting_closes_at,settled_at)
+VALUES
+  ('30000000-0000-0000-0000-000000000001','roulette',1,'SETTLED','{}','{"number":7,"color":"red"}','roulette-hash','roulette-seed',now()-interval '2 minutes',now()-interval '1 minute',now()),
+  ('30000000-0000-0000-0000-000000000002','dice',1,'SETTLED','{}','{"number":5}','dice-hash','dice-seed',now()-interval '2 minutes',now()-interval '1 minute',now()),
+  ('30000000-0000-0000-0000-000000000003','dragon_tiger',1,'SETTLED','{}','{"winner":"dragon"}','dragon-hash','dragon-seed',now()-interval '2 minutes',now()-interval '1 minute',now()),
+  ('30000000-0000-0000-0000-000000000004','andar_bahar',1,'SETTLED','{}','{"winner":"andar"}','andar-hash','andar-seed',now()-interval '2 minutes',now()-interval '1 minute',now());
+INSERT INTO public.authoritative_game_bets
+  (id,round_id,user_id,status,bet_amount,payout_amount,reserved_liability,idempotency_key)
+VALUES
+  ('40000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','WON',10,20,0,'fixture-roulette-0001'),
+  ('40000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','WON',10,20,0,'fixture-dice-0000001'),
+  ('40000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','WON',10,20,0,'fixture-dragontiger-01'),
+  ('40000000-0000-0000-0000-000000000004','30000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000001','WON',10,20,0,'fixture-andarbahar-01');
+
 CREATE FUNCTION public.wallet_transfer_atomic(text, public.transaction_type_enum, bigint, uuid, uuid, jsonb DEFAULT '{}'::jsonb)
 RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ SELECT gen_random_uuid() $$;
 INSERT INTO public.wallets(id,wallet_type,balance,reserved_balance,game_code) VALUES
