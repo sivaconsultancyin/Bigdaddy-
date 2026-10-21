@@ -1,6 +1,7 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
+const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
+const API_BASE = import.meta.env.PROD ? SUPABASE_API_BASE : (import.meta.env.VITE_API_BASE_URL || '/api');
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
 export class ApiRequestError extends Error {
