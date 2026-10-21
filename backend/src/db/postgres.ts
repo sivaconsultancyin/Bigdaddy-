@@ -10,6 +10,7 @@ import postgres from 'postgres';
  */
 let client: ReturnType<typeof postgres> | null = null;
 let authClient: ReturnType<typeof postgres> | null = null;
+let walletClient: ReturnType<typeof postgres> | null = null;
 let engineClient: ReturnType<typeof postgres> | null = null;
 let activeConnectionString: string | null = null;
 let connected = false;
@@ -106,6 +107,26 @@ export function getDatabaseClient(): ReturnType<typeof postgres> {
 }
 
 /**
+ * A dedicated one-connection pool for wallet balance reads. These requests
+ * must not queue behind long-running admin/game queries in the general pool.
+ */
+export function getWalletDatabaseClient(): ReturnType<typeof postgres> {
+  if (!connected || !activeConnectionString) {
+    throw new Error('Wallet database is not connected. Configure DATABASE_URL on the backend.');
+  }
+  if (!walletClient) {
+    walletClient = postgres(activeConnectionString, {
+      max: 1,
+      idle_timeout: 10,
+      connect_timeout: 5,
+      connection: { statement_timeout: 10000, lock_timeout: 2000 },
+      prepare: false,
+    });
+  }
+  return walletClient;
+}
+
+/**
  * Keep the persistent game loop off the user/API connection pool. A stalled
  * engine query must not consume every connection used by login, wallet, and
  * bet endpoints. One connection is enough because the engine serializes ticks.
@@ -127,15 +148,18 @@ export function isDatabaseConnected(): boolean {
 export async function closeDatabase(): Promise<void> {
   const current = client;
   const currentAuth = authClient;
+  const currentWallet = walletClient;
   const currentEngine = engineClient;
   client = null;
   authClient = null;
+  walletClient = null;
   engineClient = null;
   activeConnectionString = null;
   connected = false;
   await Promise.all([
     current?.end({ timeout: 5 }),
     currentAuth?.end({ timeout: 5 }),
+    currentWallet?.end({ timeout: 5 }),
     currentEngine?.end({ timeout: 5 }),
   ]);
 }
