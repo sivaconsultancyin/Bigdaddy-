@@ -29,3 +29,74 @@ jobs:
 
     - name: Build frontend application
       run: bun run build
+
+  validate-schema-migration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install PostgreSQL client
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+
+    - name: Create Supabase role fixtures
+      run: |
+        psql -v ON_ERROR_STOP=1 -c "CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN;"
+
+    - name: Apply schema preparation migration
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021100000_prepare_game_schema_isolation.sql
+
+    - name: Verify schema access boundaries
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $$
+        DECLARE
+          schema_name text;
+        BEGIN
+          FOREACH schema_name IN ARRAY ARRAY[
+            'platform', 'wallet', 'aviator', 'roulette', 'dice',
+            'dragon_tiger', 'andar_bahar', 'teen_patti'
+          ] LOOP
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_namespace WHERE nspname = schema_name
+            ) THEN
+              RAISE EXCEPTION 'Missing schema: %', schema_name;
+            END IF;
+
+            IF has_schema_privilege('anon', schema_name, 'USAGE')
+               OR has_schema_privilege('authenticated', schema_name, 'USAGE') THEN
+              RAISE EXCEPTION 'Client role unexpectedly has USAGE on schema %', schema_name;
+            END IF;
+
+            IF NOT has_schema_privilege('service_role', schema_name, 'USAGE') THEN
+              RAISE EXCEPTION 'service_role lacks USAGE on schema %', schema_name;
+            END IF;
+          END LOOP;
+        END
+        $$;
+        SQL
+
+    - name: Verify migration is repeatable
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021100000_prepare_game_schema_isolation.sql
