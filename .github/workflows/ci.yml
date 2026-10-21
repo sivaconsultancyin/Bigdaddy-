@@ -306,6 +306,16 @@ jobs:
           IF to_regclass('public.authoritative_game_rounds') IS NULL OR to_regclass('public.authoritative_game_bets') IS NULL THEN
             RAISE EXCEPTION 'Authoritative game compatibility tables were unexpectedly removed';
           END IF;
+          IF EXISTS (
+            SELECT 1 FROM platform.games g JOIN wallet.wallets w ON w.id=g.pool_wallet_id
+            WHERE g.code <> 'aviator' AND g.status='COMING_SOON' AND w.game_code <> g.code
+          ) THEN
+            RAISE EXCEPTION 'Coming-soon game still points at a different game pool';
+          END IF;
+          IF (SELECT balance FROM wallet.wallets WHERE game_code='aviator') <> 1000266
+             OR EXISTS (SELECT 1 FROM wallet.wallets WHERE game_code <> 'aviator' AND (balance <> 0 OR reserved_balance <> 0)) THEN
+            RAISE EXCEPTION 'Pool reconciliation unexpectedly changed wallet balances/reservations';
+          END IF;
         END
         $$;
         SQL
