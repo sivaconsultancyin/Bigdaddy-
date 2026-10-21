@@ -69,7 +69,7 @@ productionRequestsRouter.post('/requests/:id/approve', auth, async (req: AuthReq
       const target = await tx.unsafe('SELECT id FROM public.wallets WHERE user_id=$1 LIMIT 1', [request.requester_id]);
       if (!source[0] || !target[0]) throw new Error('WALLET_NOT_FOUND');
       const type = actor.role === UserRole.OWNER ? TransactionType.TREASURY_TO_ROLE : actor.role === UserRole.SUPER_ADMIN ? TransactionType.ROLE_TO_ROLE : TransactionType.ROLE_TO_PLAYER;
-      const moved = await tx.unsafe('SELECT public.wallet_transfer_atomic($1,$2::public.transaction_type_enum,$3::bigint,$4::uuid,$5::uuid,$6::jsonb) AS id', ['TOKEN_REQUEST_' + request.id, type, request.amount, source[0].id, target[0].id, JSON.stringify({ requestId: request.id, approvedBy: actor.id })]);
+      const moved = await tx.unsafe('SELECT wallet.wallet_transfer_atomic($1,$2::public.transaction_type_enum,$3::bigint,$4::uuid,$5::uuid,$6::jsonb) AS id', ['TOKEN_REQUEST_' + request.id, type, request.amount, source[0].id, target[0].id, JSON.stringify({ requestId: request.id, approvedBy: actor.id })]);
       await tx.unsafe('UPDATE public.wallet_transactions SET token_request_id=$1 WHERE id=$2', [request.id, moved[0].id]);
       await tx.unsafe("UPDATE public.token_requests SET status='APPROVED',decision_note=$1,resolved_at=now() WHERE id=$2", [note, request.id]);
       await tx.unsafe("INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,details) VALUES($1,'TOKEN_REQUEST_APPROVED','TOKEN_REQUEST',$2,$3::jsonb)", [actor.id, request.id, JSON.stringify({ amount: request.amount, transactionId: moved[0].id })]);

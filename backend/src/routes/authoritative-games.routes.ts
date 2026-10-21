@@ -397,7 +397,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
         );
         const betId = betRows[0].id as string;
         const txRows = await tx.unsafe(
-          "SELECT public.wallet_transfer_atomic($1,'BET_ESCROW_LOCK'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
+          "SELECT wallet.wallet_transfer_atomic($1,'BET_ESCROW_LOCK'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
           ['AGAME_BET_' + key, amount.toString(), playerRows[0].id, escrowRows[0].id, JSON.stringify({ gameCode: code, roundId: round.id, betId })],
         );
         await tx.unsafe('UPDATE public.authoritative_game_bets SET escrow_transaction_id=$1 WHERE id=$2', [txRows[0].id, betId]);
@@ -456,14 +456,14 @@ async function settleRound(roundId: string, code: GameCode) {
       const amount = BigInt(String(bet.bet_amount));
       const gross = multiplier > 0 ? amount * BigInt(multiplier) : 0n;
       const releaseRows = await tx.unsafe(
-        "SELECT public.wallet_transfer_atomic($1,'BET_LOSS_GAME_POOL'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
+        "SELECT wallet.wallet_transfer_atomic($1,'BET_LOSS_GAME_POOL'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
         ['AGAME_STAKE_RELEASE_' + bet.id, amount.toString(), escrowRows[0].id, poolWalletId,
           JSON.stringify({ gameCode: code, roundId, betId: bet.id, settlement: 'stake_to_pool' })],
       );
       let payoutTxId: string | null = null;
       if (gross > 0n) {
         const payoutRows = await tx.unsafe(
-          "SELECT public.wallet_transfer_atomic($1,'BET_WIN_PAYOUT'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
+          "SELECT wallet.wallet_transfer_atomic($1,'BET_WIN_PAYOUT'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
           ['AGAME_PAYOUT_' + bet.id, gross.toString(), poolWalletId, playerRows[0].id,
             JSON.stringify({ gameCode: code, roundId, betId: bet.id, multiplier })],
         );
