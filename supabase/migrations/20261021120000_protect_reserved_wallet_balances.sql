@@ -1,6 +1,6 @@
 -- Prevent transfers from consuming funds reserved for outstanding liabilities.
--- BET_WIN_PAYOUT is the only transfer type allowed to spend reserved game-pool
--- funds, and only when the payout is covered by the pool's current reservation.
+-- Reserved balance is already included in balance; never count it as new supply.
+-- BET_WIN_PAYOUT may spend game-pool funds only up to the current reservation.
 
 CREATE OR REPLACE FUNCTION wallet.wallet_transfer_atomic(
   p_idempotency_key text,
@@ -99,7 +99,7 @@ BEGIN
 
   SELECT ts.max_supply INTO v_max_supply FROM wallet.token_supply AS ts WHERE ts.id = 1;
   IF NOT FOUND THEN RAISE EXCEPTION 'TOKEN_SUPPLY_MASTER_MISSING'; END IF;
-  SELECT COALESCE(SUM(w.balance::numeric + COALESCE(w.reserved_balance, 0)::numeric), 0)
+  SELECT COALESCE(SUM(w.balance::numeric), 0)
     INTO v_total_supply FROM wallet.wallets AS w;
   IF v_total_supply <> v_max_supply THEN
     RAISE EXCEPTION 'TOKEN_SUPPLY_INVARIANT_VIOLATED: total %, expected %', v_total_supply, v_max_supply;
