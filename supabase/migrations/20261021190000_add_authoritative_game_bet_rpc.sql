@@ -225,7 +225,7 @@ BEGIN
   END LOOP;
 
   EXECUTE format(
-    'UPDATE %I.authoritative_game_rounds SET state=jsonb_set(jsonb_set(state,''{totalBetsCount}'',to_jsonb((SELECT count(*) FROM %I.authoritative_game_bets WHERE round_id=$1)::integer),true),''{totalBetAmount}'',to_jsonb((SELECT COALESCE(sum(bet_amount),0)::text FROM %I.authoritative_game_bets WHERE round_id=$1),true) WHERE id=$1',
+    'UPDATE %I.authoritative_game_rounds SET state=jsonb_set(jsonb_set(state,''{totalBetsCount}'',to_jsonb((SELECT count(*) FROM %I.authoritative_game_bets WHERE round_id=$1)::integer),true),''{totalBetAmount}'',to_jsonb((SELECT COALESCE(sum(bet_amount),0)::text FROM %I.authoritative_game_bets WHERE round_id=$1)),true) WHERE id=$1',
     v_schema,v_schema,v_schema
   ) USING v_round.id;
 
