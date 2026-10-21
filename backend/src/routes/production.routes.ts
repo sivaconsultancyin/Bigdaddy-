@@ -97,9 +97,27 @@ productionRouter.get('/auth/me', requireDatabaseUser, async (req: AuthReq, res: 
 productionRouter.get('/auth/users', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const actor = req.authUser!;
   if (actor.role === UserRole.PLAYER) return res.status(403).json({ error: 'PLAYERS_CANNOT_LIST_USERS' });
-  const sql = getDatabaseClient();
-  const rows = await sql.unsafe('WITH RECURSIVE descendants AS (SELECT u.id,u.username,u.email,u.parent_id,u.is_active,u.created_at,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.parent_id=$1 UNION ALL SELECT c.id,c.username,c.email,c.parent_id,c.is_active,c.created_at,cr.role FROM public.users c JOIN public.role_assignments cr ON cr.user_id=c.id JOIN descendants d ON c.parent_id=d.id) SELECT d.id,d.username,d.email,d.parent_id AS "parentId",d.role,d.is_active AS "isActive",rc.code AS "referralCode",w.id AS "walletId",w.balance::text AS "walletBalance" FROM descendants d LEFT JOIN public.wallets w ON w.user_id=d.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=d.id AND rc.is_active=true ORDER BY d.created_at DESC', [actor.id]);
-  return res.json({ users: rows });
+  const startedAt = Date.now();
+  try {
+    const sql = getDatabaseClient();
+    const rows = await sql.unsafe('WITH RECURSIVE descendants AS (SELECT u.id,u.username,u.email,u.parent_id,u.is_active,u.created_at,ra.role FROM public.users u JOIN public.role_assignments ra ON ra.user_id=u.id WHERE u.parent_id=$1 UNION SELECT c.id,c.username,c.email,c.parent_id,c.is_active,c.created_at,cr.role FROM public.users c JOIN public.role_assignments cr ON cr.user_id=c.id JOIN descendants d ON c.parent_id=d.id) SELECT d.id,d.username,d.email,d.parent_id AS "parentId",d.role,d.is_active AS "isActive",rc.code AS "referralCode",w.id AS "walletId",w.balance::text AS "walletBalance" FROM descendants d LEFT JOIN public.wallets w ON w.user_id=d.id LEFT JOIN public.referral_codes rc ON rc.owner_user_id=d.id AND rc.is_active=true ORDER BY d.created_at DESC', [actor.id]);
+    console.info('Auth users query completed', {
+      route: '/auth/users',
+      role: actor.role,
+      durationMs: Date.now() - startedAt,
+      rowCount: rows.length,
+    });
+    return res.json({ users: rows });
+  } catch (error) {
+    console.error('Auth users query failed', {
+      route: '/auth/users',
+      userId: actor.id,
+      role: actor.role,
+      durationMs: Date.now() - startedAt,
+      error,
+    });
+    return res.status(503).json({ error: 'USER_LIST_SERVICE_UNAVAILABLE' });
+  }
 });
 
 productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: AuthReq, res: Response) => {
@@ -153,12 +171,30 @@ productionRouter.post('/auth/create-user', requireDatabaseUser, async (req: Auth
 
 productionRouter.get('/wallet/my-wallet', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const actor = req.authUser!;
-  const sql = getDatabaseClient();
-  const rows = actor.role === UserRole.OWNER
-    ? await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE wallet_type=\'TREASURY\' LIMIT 1')
-    : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
-  if (!rows[0]) return res.status(404).json({ error: 'WALLET_NOT_FOUND' });
-  return res.json({ wallet: rows[0] });
+  const startedAt = Date.now();
+  try {
+    const sql = getDatabaseClient();
+    const rows = actor.role === UserRole.OWNER
+      ? await sql.unsafe(`SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE wallet_type='TREASURY' LIMIT 1`)
+      : await sql.unsafe('SELECT id,user_id AS "userId",wallet_type AS "walletType",balance::text AS balance,reserved_balance::text AS "reservedBalance",created_at AS "createdAt",updated_at AS "updatedAt" FROM public.wallets WHERE user_id=$1 LIMIT 1', [actor.id]);
+    console.info('Wallet my-wallet query completed', {
+      route: '/wallet/my-wallet',
+      role: actor.role,
+      durationMs: Date.now() - startedAt,
+      rowFound: Boolean(rows[0]),
+    });
+    if (!rows[0]) return res.status(404).json({ error: 'WALLET_NOT_FOUND' });
+    return res.json({ wallet: rows[0] });
+  } catch (error) {
+    console.error('Wallet my-wallet query failed', {
+      route: '/wallet/my-wallet',
+      userId: actor.id,
+      role: actor.role,
+      durationMs: Date.now() - startedAt,
+      error,
+    });
+    return res.status(503).json({ error: 'WALLET_SERVICE_UNAVAILABLE' });
+  }
 });
 
 productionRouter.get('/wallet/summary', requireDatabaseUser, async (req: AuthReq, res: Response) => {
