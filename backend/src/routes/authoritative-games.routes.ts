@@ -70,7 +70,7 @@ async function auth(req: AuthRequest, res: Response, next: NextFunction) {
     const token = AuthService.verifyToken(header.slice(7));
     if (!token?.id) return res.status(401).json({ error: 'INVALID_TOKEN' });
     const rows = await getDatabaseClient().unsafe(
-      'SELECT id,username,role FROM public.users WHERE id=$1 AND is_active=true LIMIT 1', [token.id],
+      'SELECT id,username,role FROM platform.users WHERE id=$1 AND is_active=true LIMIT 1', [token.id],
     );
     if (!rows[0]) return res.status(401).json({ error: 'USER_NOT_FOUND_OR_DISABLED' });
     if (!isPlayerRole(rows[0].role)) {
@@ -263,7 +263,7 @@ async function readGameState(code: GameCode) {
     'SELECT id,round_number,status,result,settled_at FROM public.authoritative_game_rounds WHERE game_code=$1 AND status=\'SETTLED\' ORDER BY round_number DESC LIMIT 25', [code],
   );
   const bets = rounds[0] ? await sql.unsafe(
-    'SELECT b.id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",u.username FROM public.authoritative_game_bets b JOIN public.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100',
+    'SELECT b.id,b.bet_amount::text AS amount,b.selection,b.status,b.payout_amount::text AS "payoutAmount",u.username FROM public.authoritative_game_bets b JOIN platform.users u ON u.id=b.user_id WHERE b.round_id=$1 ORDER BY b.created_at DESC LIMIT 100',
     [rounds[0].id],
   ) : [];
   const current: any = rounds[0] ? publicRound(rounds[0], code) : null;
@@ -354,7 +354,7 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
     }
     const placed = await sql.begin(async (tx) => {
       const gameRows = await tx.unsafe(
-        "SELECT id,pool_wallet_id,min_bet,max_bet FROM public.games WHERE code=$1 AND status='ACTIVE' LIMIT 1", [code],
+        "SELECT id,pool_wallet_id,min_bet,max_bet FROM platform.games WHERE code=$1 AND status='ACTIVE' LIMIT 1", [code],
       );
       const game = gameRows[0];
       if (!game?.pool_wallet_id) throw new Error('GAME_NOT_CONFIGURED');
@@ -363,8 +363,8 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
       );
       const round = roundRows[0];
       if (!round) throw new Error('BETTING_CLOSED');
-      const poolRows = await tx.unsafe("SELECT id,balance,reserved_balance FROM public.wallets WHERE id=$1", [game.pool_wallet_id]);
-      const escrowRows = await tx.unsafe("SELECT id FROM public.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1");
+      const poolRows = await tx.unsafe("SELECT id,balance,reserved_balance FROM wallet.wallets WHERE id=$1", [game.pool_wallet_id]);
+      const escrowRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1");
       if (!poolRows[0] || !escrowRows[0]) throw new Error('GAME_WALLETS_NOT_CONFIGURED');
       const result = [];
       for (let i = 0; i < rawBets.length; i++) {
@@ -382,15 +382,15 @@ async function placeBets(req: AuthRequest, res: Response, code: GameCode) {
           result.push({ id: prior[0].id, status: prior[0].status || 'PENDING', replay: true });
           continue;
         }
-        const playerRows = await tx.unsafe("SELECT id,balance FROM public.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [req.actor!.id]);
+        const playerRows = await tx.unsafe("SELECT id,balance FROM wallet.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [req.actor!.id]);
         if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
         // Acquire every wallet row in one stable order before changing reservations or balances.
-        await tx.unsafe("SELECT id FROM public.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[game.pool_wallet_id, escrowRows[0].id, playerRows[0].id]]);
-        const fundsRows = await tx.unsafe("SELECT balance,reserved_balance FROM public.wallets WHERE id=$1", [game.pool_wallet_id]);
+        await tx.unsafe("SELECT id FROM wallet.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[game.pool_wallet_id, escrowRows[0].id, playerRows[0].id]]);
+        const fundsRows = await tx.unsafe("SELECT balance,reserved_balance FROM wallet.wallets WHERE id=$1", [game.pool_wallet_id]);
         if (!fundsRows[0] || !canReserveLiability(fundsRows[0].balance, fundsRows[0].reserved_balance || 0, liability)) {
           throw new Error('GAME_POOL_INSUFFICIENT');
         }
-        await tx.unsafe("UPDATE public.wallets SET reserved_balance=reserved_balance+$2::bigint,updated_at=now() WHERE id=$1", [game.pool_wallet_id, liability.toString()]);
+        await tx.unsafe("UPDATE wallet.wallets SET reserved_balance=reserved_balance+$2::bigint,updated_at=now() WHERE id=$1", [game.pool_wallet_id, liability.toString()]);
         const betRows = await tx.unsafe(
           "INSERT INTO public.authoritative_game_bets(round_id,user_id,bet_amount,selection,idempotency_key,reserved_liability) VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING id",
           [round.id, req.actor!.id, amount.toString(), JSON.stringify(selection), key, liability.toString()],
@@ -441,16 +441,16 @@ async function settleRound(roundId: string, code: GameCode) {
     const rows = await tx.unsafe('SELECT * FROM public.authoritative_game_rounds WHERE id=$1 FOR UPDATE', [roundId]);
     const round = rows[0];
     if (!round || !canSettleRound(round.status, round.result)) return;
-    const gameRows = await tx.unsafe("SELECT pool_wallet_id FROM public.games WHERE code=$1 LIMIT 1", [code]);
+    const gameRows = await tx.unsafe("SELECT pool_wallet_id FROM platform.games WHERE code=$1 LIMIT 1", [code]);
     const poolWalletId = gameRows[0]?.pool_wallet_id;
-    const escrowRows = await tx.unsafe("SELECT id FROM public.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1");
+    const escrowRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1");
     if (!poolWalletId || !escrowRows[0]) throw new Error('GAME_WALLETS_NOT_CONFIGURED');
     const bets = await tx.unsafe("SELECT * FROM public.authoritative_game_bets WHERE round_id=$1 AND status='PENDING' ORDER BY id FOR UPDATE", [roundId]);
     for (const bet of bets) {
-      const playerRows = await tx.unsafe("SELECT id FROM public.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [bet.user_id]);
+      const playerRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [bet.user_id]);
       if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
-      await tx.unsafe("SELECT id FROM public.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[poolWalletId, escrowRows[0].id, playerRows[0].id]]);
-      const reservationRows = await tx.unsafe('UPDATE public.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id', [poolWalletId, String(bet.reserved_liability)]);
+      await tx.unsafe("SELECT id FROM wallet.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[poolWalletId, escrowRows[0].id, playerRows[0].id]]);
+      const reservationRows = await tx.unsafe('UPDATE wallet.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id', [poolWalletId, String(bet.reserved_liability)]);
       if (!reservationRows[0]) throw new Error('GAME_POOL_RESERVATION_INVARIANT_FAILED');
       const multiplier = payoutMultiplier(code, bet.selection, round.result);
       const amount = BigInt(String(bet.bet_amount));
@@ -491,7 +491,7 @@ async function tick() {
       return;
     }
     const activeRows = await sql.unsafe(
-      "SELECT g.code,g.status FROM public.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM public.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
+      "SELECT g.code,g.status FROM platform.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM public.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
     );
     for (const game of activeRows) {
       const code = game.code as GameCode;
