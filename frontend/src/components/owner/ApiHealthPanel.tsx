@@ -69,7 +69,7 @@ export const ApiHealthPanel: React.FC = () => {
         const match = message.match(/(?:API request failed\s*\(|HTTP\s*)(\d{3})/i);
         const code = match ? Number(match[1]) : undefined;
         // Auth-required and role-restricted GETs prove the route answered; they do not prove its data dependency works.
-        if (code === 401 || code === 403) return { ...probe, status: 'online', code, latencyMs: Math.round(performance.now() - started), checkedAt, error: 'Route reachable; current account is not authorized for this resource.' };
+        if (code === 401 || code === 403 || /AUTH_REQUIRED|INVALID_TOKEN|FORBIDDEN|INSUFFICIENT_PERMISSIONS|NOT_AUTHORIZED/i.test(message)) return { ...probe, status: 'online', code: code ?? ( /AUTH_REQUIRED|INVALID_TOKEN/i.test(message) ? 401 : 403), latencyMs: Math.round(performance.now() - started), checkedAt, error: 'Route reachable; current account is not authorized for this resource.' };
         return { ...probe, status: 'offline', code, latencyMs: Math.round(performance.now() - started), checkedAt, error: message };
       }
     }));
