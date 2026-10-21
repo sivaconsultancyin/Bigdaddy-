@@ -32,6 +32,7 @@ CREATE TABLE public.authoritative_game_bets (id uuid PRIMARY KEY DEFAULT gen_ran
 
 CREATE FUNCTION public.wallet_transfer_atomic(text, public.transaction_type_enum, bigint, uuid, uuid, jsonb DEFAULT '{}'::jsonb)
 RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ SELECT gen_random_uuid() $$;
+CREATE SCHEMA wallet;
 CREATE FUNCTION wallet.wallet_transfer_atomic(text, public.transaction_type_enum, bigint, uuid, uuid, jsonb DEFAULT '{}'::jsonb)
 RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ SELECT public.wallet_transfer_atomic($1,$2,$3,$4,$5,$6) $$;
 CREATE FUNCTION public.place_crash_bet_atomic(uuid, uuid, bigint, text, numeric)
