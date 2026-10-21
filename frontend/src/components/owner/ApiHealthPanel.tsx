@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Clock3 } from 'lucide-react';
-import { ApiClient } from '../api/client';
+import { ApiClient } from '../../api/client';
 
 type Probe = { method: string; path: string; label: string; safe: boolean };
 type Result = Probe & { status: 'online' | 'offline' | 'manual'; code?: number; latencyMs?: number; checkedAt: string; error?: string };
@@ -50,10 +50,12 @@ const probes: Probe[] = [
 export const ApiHealthPanel: React.FC = () => {
   const [results, setResults] = useState<Result[]>([]);
   const [running, setRunning] = useState(false);
+  const runningRef = useRef(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
 
   const checkEndpoints = useCallback(async () => {
-    if (running) return;
+    if (runningRef.current) return;
+    runningRef.current = true;
     setRunning(true);
     const checkedAt = new Date().toISOString();
     const next = await Promise.all(probes.map(async (probe): Promise<Result> => {
@@ -73,8 +75,9 @@ export const ApiHealthPanel: React.FC = () => {
     }));
     setResults(next);
     setLastChecked(checkedAt);
+    runningRef.current = false;
     setRunning(false);
-  }, [running]);
+  }, []);
 
   useEffect(() => {
     void checkEndpoints();
