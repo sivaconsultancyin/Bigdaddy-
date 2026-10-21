@@ -88,7 +88,14 @@ async function handle(req: Request) {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { ...corsHeaders, ...(origin ? { "Access-Control-Allow-Origin": origin } : {}) } });
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/functions\/v1\/api(?=\/|$)/, "").replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/";
-  if (req.method === "GET" && path === "/health") return response({ status: "ok", service: "BigDaddy Supabase API", database: "supabase-https" }, 200, origin);
+  if (req.method === "GET" && path === "/health") {
+    try {
+      const healthDb = client();
+      const { error } = await healthDb.schema("platform").from("users").select("id", { head: true, count: "exact" });
+      if (error) return response({ status:"degraded",databaseConnected:false,mode:"production",productionFinancialApisEnabled:false },503,origin);
+      return response({ status:"ok",service:"BigDaddy Supabase API",databaseConnected:true,mode:"production",productionFinancialApisEnabled:true },200,origin);
+    } catch { return response({ status:"degraded",databaseConnected:false,mode:"production",productionFinancialApisEnabled:false },503,origin); }
+  }
   if (req.method === "GET" && path === "/ready") return response({ ready: true, database: "supabase-https" }, 200, origin);
   if (req.method === "GET" && path === "/config") {
     return response({
@@ -152,6 +159,41 @@ async function handle(req: Request) {
     const token = await signBigDaddyToken({ id:data.user.id, username:data.user.username, role:"PLAYER", parentId:data.user.parentId ?? null });
     return response({ token, user:data.user, wallet:data.wallet }, 201, origin);
   }
+
+  const gameStateMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/state$/);
+  if (req.method === "GET" && gameStateMatch) {
+    const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
+    const { data: rounds, error: roundError } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
+    if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
+    if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
+    const row = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
+    const result = ["RUNNING","RESULT","SETTLED"].includes(row.status) ? row.result : null;
+    const current: Record<string, any> = {
+      id: row.id, roundNumber: Number(row.round_number),
+      status: row.status === "SETTLED" ? "RESULT" : row.status === "RUNNING" ? (code === "roulette" ? "SPINNING" : code === "dice" ? "ROLLING" : code === "dragon_tiger" ? "REVEALING" : "DEALING") : row.status,
+      bettingEndsAt: new Date(row.betting_closes_at).getTime(), openedAt: new Date(row.opened_at).getTime(),
+      totalBetsCount: Number(row.state?.totalBetsCount ?? 0), totalBetAmount: String(row.state?.totalBetAmount ?? "0"),
+      serverSeedHash: row.server_seed_hash, revealedServerSeed: row.status === "SETTLED" ? row.server_seed : null,
+    };
+    if (code === "roulette") { current.spinEndsAt = current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
+    if (code === "dice") { current.rolledNumber = result?.number ?? null; current.numberBetsAmount = {}; }
+    if (code === "dragon_tiger") { current.dragonCard = result?.dragonCard ?? null; current.tigerCard = result?.tigerCard ?? null; current.winner = result?.winner ?? null; current.dragonBetAmount = "0"; current.tigerBetAmount = "0"; current.tieBetAmount = "0"; }
+    if (code === "andar_bahar") { current.jokerCard = result?.jokerCard ?? null; current.dealCards = result?.dealCards ?? []; current.winningSide = result?.winner ?? null; current.winningCard = result?.dealCards?.[Math.max(0,(result?.dealCards?.length ?? 1)-1)]?.card ?? null; current.totalCardsDealt = result?.totalCardsDealt ?? 0; current.firstSide = "bahar"; current.andarBetAmount = "0"; current.baharBetAmount = "0"; }
+    const { data: bets, error: betsError } = await db.schema(code).from("authoritative_game_bets").select("id,user_id,bet_amount,selection,status,payout_amount").eq("round_id", row.id).order("created_at", { ascending: false }).limit(100);
+    if (betsError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
+    const userIds = [...new Set((bets ?? []).map(b => b.user_id))];
+    const { data: users } = userIds.length ? await db.schema("platform").from("users").select("id,username").in("id", userIds) : { data: [] };
+    const names = new Map((users ?? []).map(u => [u.id,u.username]));
+    const mappedBets = (bets ?? []).map(b => ({ id:b.id, amount:String(b.bet_amount), type:b.selection?.type, selection:b.selection, status:b.status, payoutAmount:String(b.payout_amount ?? 0), username:names.get(b.user_id) ?? "Player" }));
+    const totals = new Map<string,bigint>();
+    for (const b of bets ?? []) { const type = String(b.selection?.type ?? ""); totals.set(type,(totals.get(type) ?? 0n)+BigInt(String(b.bet_amount))); }
+    if (code === "dice") current.numberBetsAmount = Object.fromEntries([...totals].map(([k,v]) => [k,v.toString()]));
+    if (code === "dragon_tiger") { current.dragonBetAmount=String(totals.get("dragon")??0n); current.tigerBetAmount=String(totals.get("tiger")??0n); current.tieBetAmount=String((totals.get("tie")??0n)+(totals.get("suited_tie")??0n)); }
+    if (code === "andar_bahar") { current.andarBetAmount=String(totals.get("andar")??0n); current.baharBetAmount=String(totals.get("bahar")??0n); }
+    const history = rounds.filter(r => r.status === "SETTLED").map(r => ({ roundNumber:Number(r.round_number), result:r.result, timestamp:r.settled_at }));
+    return response({ round: current, history, bets: mappedBets, allBets: mappedBets }, 200, origin);
+  }
+
 
   const auth = await actorFrom(req, db);
   if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
@@ -474,40 +516,6 @@ async function handle(req: Request) {
     return response({ logs: data ?? [] }, 200, origin);
   }
 
-
-  const gameStateMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/state$/);
-  if (req.method === "GET" && gameStateMatch) {
-    const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
-    const { data: rounds, error: roundError } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
-    if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
-    if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
-    const row = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
-    const result = ["RUNNING","RESULT","SETTLED"].includes(row.status) ? row.result : null;
-    const current: Record<string, any> = {
-      id: row.id, roundNumber: Number(row.round_number),
-      status: row.status === "SETTLED" ? "RESULT" : row.status === "RUNNING" ? (code === "roulette" ? "SPINNING" : code === "dice" ? "ROLLING" : code === "dragon_tiger" ? "REVEALING" : "DEALING") : row.status,
-      bettingEndsAt: new Date(row.betting_closes_at).getTime(), openedAt: new Date(row.opened_at).getTime(),
-      totalBetsCount: Number(row.state?.totalBetsCount ?? 0), totalBetAmount: String(row.state?.totalBetAmount ?? "0"),
-      serverSeedHash: row.server_seed_hash, revealedServerSeed: row.status === "SETTLED" ? row.server_seed : null,
-    };
-    if (code === "roulette") { current.spinEndsAt = current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
-    if (code === "dice") { current.rolledNumber = result?.number ?? null; current.numberBetsAmount = {}; }
-    if (code === "dragon_tiger") { current.dragonCard = result?.dragonCard ?? null; current.tigerCard = result?.tigerCard ?? null; current.winner = result?.winner ?? null; current.dragonBetAmount = "0"; current.tigerBetAmount = "0"; current.tieBetAmount = "0"; }
-    if (code === "andar_bahar") { current.jokerCard = result?.jokerCard ?? null; current.dealCards = result?.dealCards ?? []; current.winningSide = result?.winner ?? null; current.winningCard = result?.dealCards?.[Math.max(0,(result?.dealCards?.length ?? 1)-1)]?.card ?? null; current.totalCardsDealt = result?.totalCardsDealt ?? 0; current.firstSide = "bahar"; current.andarBetAmount = "0"; current.baharBetAmount = "0"; }
-    const { data: bets, error: betsError } = await db.schema(code).from("authoritative_game_bets").select("id,user_id,bet_amount,selection,status,payout_amount").eq("round_id", row.id).order("created_at", { ascending: false }).limit(100);
-    if (betsError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
-    const userIds = [...new Set((bets ?? []).map(b => b.user_id))];
-    const { data: users } = userIds.length ? await db.schema("platform").from("users").select("id,username").in("id", userIds) : { data: [] };
-    const names = new Map((users ?? []).map(u => [u.id,u.username]));
-    const mappedBets = (bets ?? []).map(b => ({ id:b.id, amount:String(b.bet_amount), type:b.selection?.type, selection:b.selection, status:b.status, payoutAmount:String(b.payout_amount ?? 0), username:names.get(b.user_id) ?? "Player" }));
-    const totals = new Map<string,bigint>();
-    for (const b of bets ?? []) { const type = String(b.selection?.type ?? ""); totals.set(type,(totals.get(type) ?? 0n)+BigInt(String(b.bet_amount))); }
-    if (code === "dice") current.numberBetsAmount = Object.fromEntries([...totals].map(([k,v]) => [k,v.toString()]));
-    if (code === "dragon_tiger") { current.dragonBetAmount=String(totals.get("dragon")??0n); current.tigerBetAmount=String(totals.get("tiger")??0n); current.tieBetAmount=String((totals.get("tie")??0n)+(totals.get("suited_tie")??0n)); }
-    if (code === "andar_bahar") { current.andarBetAmount=String(totals.get("andar")??0n); current.baharBetAmount=String(totals.get("bahar")??0n); }
-    const history = rounds.filter(r => r.status === "SETTLED").map(r => ({ roundNumber:Number(r.round_number), result:r.result, timestamp:r.settled_at }));
-    return response({ round: current, history, bets: mappedBets, allBets: mappedBets }, 200, origin);
-  }
 
   const gameBetMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/(bet|spin|roll)$/);
   if (req.method === "POST" && gameBetMatch) {
