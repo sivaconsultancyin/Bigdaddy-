@@ -137,8 +137,8 @@ async function startServer() {
     const originalJson = res.json.bind(res);
     (res as any).json = (body: any) => {
       if (body && typeof body === 'object') {
-        res.locals.healthReasonCode = typeof body.error === 'string' ? body.error : typeof body.code === 'string' ? body.code : '';
-        res.locals.healthReason = typeof body.message === 'string' ? body.message : typeof body.error === 'string' ? body.error : '';
+        if (!res.locals.healthReasonCode) res.locals.healthReasonCode = typeof body.error === 'string' ? body.error : typeof body.code === 'string' ? body.code : '';
+        if (!res.locals.healthReason) res.locals.healthReason = typeof body.message === 'string' ? body.message : typeof body.error === 'string' ? body.error : '';
       }
       return originalJson(body);
     };
