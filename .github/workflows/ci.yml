@@ -141,6 +141,9 @@ jobs:
     - name: Apply wallet idempotency hardening migration
       run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021110000_harden_wallet_transfer_idempotency.sql
 
+    - name: Apply wallet API boundary migration
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261021120000_wallet_transfer_api_boundary.sql
+
     - name: Verify exact replay and conflicting-key rejection
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
@@ -189,4 +192,43 @@ jobs:
           END IF;
         END
         $$;
+
+    - name: Verify wallet API boundary grants and execution
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $$
+        BEGIN
+          IF has_function_privilege('anon', 'wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)', 'EXECUTE') THEN
+            RAISE EXCEPTION 'anon unexpectedly has wallet API execute privilege';
+          END IF;
+          IF has_function_privilege('authenticated', 'wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)', 'EXECUTE') THEN
+            RAISE EXCEPTION 'authenticated unexpectedly has wallet API execute privilege';
+          END IF;
+          IF NOT has_function_privilege('service_role', 'wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)', 'EXECUTE') THEN
+            RAISE EXCEPTION 'service_role cannot execute wallet API';
+          END IF;
+        END
+        $$;
+
+        SET ROLE service_role;
+        SELECT wallet.wallet_transfer_atomic(
+          'wallet-wrapper-key-0002', 'BET_ESCROW_LOCK', 50,
+          '00000000-0000-0000-0000-000000000001',
+          '00000000-0000-0000-0000-000000000002',
+          '{"purpose":"wrapper-test"}'::jsonb
+        );
+        RESET ROLE;
+
+        DO $$
+        BEGIN
+          IF (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 850
+             OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 150 THEN
+            RAISE EXCEPTION 'Wallet wrapper did not execute exactly one transfer';
+          END IF;
+          IF (SELECT count(*) FROM public.ledger_entries) <> 4 THEN
+            RAISE EXCEPTION 'Wallet wrapper did not create exactly two additional ledger rows';
+          END IF;
+        END
+        $$;
+        SQL
         SQL
