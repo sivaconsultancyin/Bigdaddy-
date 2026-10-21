@@ -73,6 +73,55 @@ ALTER TABLE public.game_rounds SET SCHEMA aviator;
 ALTER TABLE public.game_bets SET SCHEMA aviator;
 ALTER TABLE public.game_settlements SET SCHEMA aviator;
 
+-- Reconcile the historical shared-pool pointer without moving any funds.
+-- Aviator remains on its existing pool. Non-Aviator games are currently
+-- COMING_SOON and each has its own zero-balance pool wallet; restore those
+-- pointers so activating a game cannot silently spend from the Aviator pool.
+DO $pool_reconcile$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM platform.games g
+    WHERE g.code <> 'aviator' AND g.status::text = 'ACTIVE'
+      AND EXISTS (
+        SELECT 1 FROM wallet.wallets shared_pool
+        WHERE shared_pool.id = g.pool_wallet_id
+          AND shared_pool.wallet_type::text = 'GAME_POOL'
+          AND shared_pool.game_code = 'aviator'
+      )
+  ) THEN
+    RAISE EXCEPTION 'Pool reconciliation blocked: a non-Aviator game is ACTIVE on the Aviator pool';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM platform.games g
+    WHERE g.code <> 'aviator' AND g.status::text = 'COMING_SOON'
+      AND NOT EXISTS (
+        SELECT 1 FROM wallet.wallets own_pool
+        WHERE own_pool.wallet_type::text = 'GAME_POOL'
+          AND own_pool.game_code = g.code
+      )
+  ) THEN
+    RAISE EXCEPTION 'Pool reconciliation blocked: a coming-soon game has no dedicated pool wallet';
+  END IF;
+END
+$pool_reconcile$;
+
+UPDATE platform.games g
+SET pool_wallet_id = w.id
+FROM wallet.wallets w
+WHERE g.code <> 'aviator'
+  AND g.status::text = 'COMING_SOON'
+  AND w.wallet_type::text = 'GAME_POOL'
+  AND w.game_code = g.code
+  AND g.pool_wallet_id IS DISTINCT FROM w.id;
+
+UPDATE platform.game_pools gp
+SET wallet_id = w.id
+FROM wallet.wallets w
+WHERE gp.game_code <> 'aviator'
+  AND w.wallet_type::text = 'GAME_POOL'
+  AND w.game_code = gp.game_code
+  AND gp.wallet_id IS DISTINCT FROM w.id;
+
 -- Move the implementation of wallet_transfer_atomic into the wallet namespace.
 -- Preserve a public compatibility function for any still-deployed callers.
 ALTER FUNCTION wallet.wallet_transfer_atomic(text, public.transaction_type_enum, bigint, uuid, uuid, jsonb)
