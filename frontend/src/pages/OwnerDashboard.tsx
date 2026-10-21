@@ -11,6 +11,7 @@ import {
   GameInfo,
 } from '../../../shared/src/types';
 import { CreateUserModal } from '../components/common/CreateUserModal';
+import { ApiHealthPanel } from '../components/owner/ApiHealthPanel';
 import { AllocatePoolModal } from '../components/common/AllocatePoolModal';
 import {
   Crown,
@@ -150,6 +151,8 @@ export const OwnerDashboard: React.FC = () => {
           <span>{actionSuccess}</span>
         </div>
       )}
+
+      <ApiHealthPanel />
 
       {/* Quick Action Buttons */}
       <div className="grid grid-cols-2 gap-2">
