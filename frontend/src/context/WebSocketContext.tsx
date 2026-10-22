@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { ApiClient } from '../api/client';
 import {
   AndarBaharRound,
   AndarBaharHistoryItem,
@@ -306,11 +307,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const controller = new AbortController();
           const timeoutId = window.setTimeout(() => controller.abort(), key === 'aviator' ? 7000 : 5000);
           try {
+            // Game-state endpoints are authenticated. Read the current token on
+            // every poll so login/logout changes are reflected without remounting.
+            const token = ApiClient.getToken();
+            if (!token) return { key, data: null, error: 'AUTH_REQUIRED' };
+
             const response = await fetch(apiBase + path, {
-              headers: { Accept: 'application/json' },
+              headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
               signal: controller.signal,
             });
-            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}` };
+            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}`;
             const data = await response.json();
             return { key, data, error: null };
           } catch (error) {
