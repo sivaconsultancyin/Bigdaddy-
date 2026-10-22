@@ -1,1 +1,30 @@
-project_id = "bigdaddy-casino"
+project_id = "nzvpuoeibqrpcltrszvr"
+
+[api]
+schemas = ["public", "graphql_public", "platform", "wallet", "aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[functions.health]
+# Public, read-only connectivity probe. No secrets or user data are returned.
+verify_jwt = false
+
+[functions.auth-login]
+# BigDaddy login creates the existing application's HS256 JWT; the function validates inputs itself.
+verify_jwt = false
+
+[functions.auth-me]
+# The function manually verifies the existing BigDaddy JWT with BIGDADDY_JWT_SECRET.
+verify_jwt = false
+
+[functions.wallet-my-wallet]
+# Authenticates the existing BigDaddy JWT and revalidates the user/role in the database.
+verify_jwt = false
+
+[functions.api]
+# The function validates the existing BigDaddy HS256 JWT itself.
+verify_jwt = false
+
+[functions.aviator-engine]
+# The handler enforces a separate high-entropy scheduler secret in x-aviator-engine-secret.
+verify_jwt = false
