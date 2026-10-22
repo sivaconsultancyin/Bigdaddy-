@@ -539,7 +539,7 @@ async function handle(req: Request) {
       .eq("game_code","aviator").order("round_number", { ascending: false }).limit(25);
     if (error) return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
     const row = (rounds ?? []).find(r => r.status === "RUNNING" || r.status === "WAITING") ?? (rounds ?? [])[0] ?? null;
-    const history = (rounds ?? []).filter(r => r.status === "SETTLED").map(r => ({
+    const history = (rounds ?? []).filter(r => r.status === "CRASHED" || r.status === "SETTLED").map(r => ({
       roundNumber: Number(r.round_number), crashMultiplier: Number(r.crash_multiplier ?? 0), endedAt: r.ended_at,
       serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
     }));
@@ -564,7 +564,7 @@ async function handle(req: Request) {
   if (req.method === "GET" && path === "/games/aviator/history") {
     const { data, error } = await db.schema("aviator").from("game_rounds")
       .select("round_number,crash_multiplier,ended_at,server_seed_hash,revealed_server_seed")
-      .eq("game_code","aviator").eq("status","SETTLED").order("round_number",{ascending:false}).limit(20);
+      .eq("game_code","aviator").in("status",["CRASHED","SETTLED"]).order("round_number",{ascending:false}).limit(20);
     if (error) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
     return response({ history: (data ?? []).map(r => ({ roundNumber:Number(r.round_number), crashMultiplier:r.crash_multiplier == null ? null : Number(r.crash_multiplier), endedAt:r.ended_at, serverSeedHash:r.server_seed_hash, revealedServerSeed:r.revealed_server_seed })) }, 200, origin);
   }
