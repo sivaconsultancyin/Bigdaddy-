@@ -319,7 +319,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               },
               signal: controller.signal,
             });
-            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}`;
+            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}` };
             const data = await response.json();
             return { key, data, error: null };
           } catch (error) {
