@@ -61,7 +61,7 @@ The frontend calls auth, wallet, token-request, games, audit, and game-action pa
 | `PUT /auth/payment-details` | Edge handler exists |
 | `GET /games/roulette/state`, `POST /games/roulette/bet`, `POST /games/roulette/spin` | Edge handler exists through authoritative-game state/bet routes |
 | `GET /games/dice/state`, `POST /games/dice/bet` | Edge handler exists through authoritative-game state/bet routes |
-| `POST /games/dice/roll` | Only supports the authoritative bet payload shape (`bets` array); the UI's alternate slider/target payload needs a separate persistent implementation before claiming parity |
+| `POST /games/dice/roll` | Number-bet payload uses the authoritative handler. Slider/target payload is explicitly rejected with `503 DICE_SLIDER_MODE_NOT_MIGRATED` until persistent atomic odds/liability/settlement exists |
 | `POST /games/dice/verify` | Implemented in Edge Function as stateless HMAC/SHA-256 verification |
 | `GET /games/andar-bahar/state`, `POST /games/andar-bahar/bet` | Edge handler exists through authoritative-game state/bet routes |
 | `GET /games/dragon-tiger/state`, `POST /games/dragon-tiger/bet` | Edge handler exists through authoritative-game state/bet routes |
@@ -74,11 +74,12 @@ The frontend calls auth, wallet, token-request, games, audit, and game-action pa
 - [x] Point production frontend requests to the Supabase Edge Function base.
 - [x] Add the stateless Dice verification endpoint to the Supabase `api` function.
 - [x] Add a persistent owner-only monitoring-failures endpoint and best-effort Edge API 5xx persistence.
-- [ ] Implement Dice slider/target mode with persistent atomic odds/liability/settlement. Until then, Edge API v14 explicitly returns `503 DICE_SLIDER_MODE_NOT_MIGRATED` instead of misinterpreting slider payloads as number bets.
+- [ ] Implement Dice slider/target mode with persistent atomic odds/liability/settlement. Until then, Edge API v14+ explicitly returns `503 DICE_SLIDER_MODE_NOT_MIGRATED` instead of misinterpreting slider payloads as number bets.
 - [ ] Design and implement Teen Patti with persistent tables/RPCs, idempotency, turn ownership, and atomic settlement before enabling its UI. The API now returns `503 TEEN_PATTI_MIGRATION_NOT_READY`.
 - [ ] Run production smoke tests for login, role checks, wallet, requests, game state/bets, and Aviator settlement.
-- [ ] Verify Render frontend deploy and remove any dashboard-level production API override that points back to the Render backend.
-- [ ] Only then consider retiring the old Render backend service.
+- [ ] Create and verify a separate Render Static Site for the frontend. The current `server.ts` serves both frontend `dist/` and Express APIs, so the existing Node service cannot be stopped until the static site is live.
+- [ ] Remove any dashboard-level production API override that points back to the Render backend and verify the deployed frontend still calls Supabase.
+- [ ] Retire the old Render Node service only after static-site routing/domain and API smoke tests pass.
 
 Never put the Supabase service-role key or JWT signing secret in frontend code.
 
