@@ -96,8 +96,11 @@ A safe live HTTP smoke pass was run against the deployed api Edge Function using
 | GET /wallet/my-wallet without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
 | GET /requests/list without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
 | POST /auth/create-user without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
+| POST /auth/login with JSON null body (version 12) | PASS — HTTP 400 INVALID_JSON; no unhandled exception |
+| POST /auth/register-referral with JSON null body (version 12) | PASS — HTTP 400 INVALID_JSON; no unhandled exception |
+| POST /games/dice/verify with JSON null body (version 12) | PASS — HTTP 400 INVALID_JSON; no unhandled exception |
 
-Earlier live logs from Edge API version 10 showed HTTP 200 for authenticated /auth/me, /auth/users, /wallet/my-wallet, /wallet/summary, /wallet/ledger, and /requests/list. The current deployed API is version 11. Valid-credential login and authorized write flows were not executed in production because no approved test credentials/token were available and those flows can write audit/user/wallet/request data. Historical version-10 logs showed 503s for login and user creation with a null-username exception; do not consider those success paths certified until the valid-login test below passes.
+Earlier live logs from Edge API version 10 showed HTTP 200 for authenticated /auth/me, /auth/users, /wallet/my-wallet, /wallet/summary, /wallet/ledger, and /requests/list. The current deployed API is version 12. Version-11 logs showed repeated 503s on login, referral registration, and user creation when the request body was JSON null. Version 12 now rejects null/non-object JSON bodies with HTTP 400 across all 12 JSON-parsing handlers; live tests of null bodies on login, referral registration, and Dice verification returned 400 without the prior exception. Valid-credential login and authorized write flows were not executed in production because no approved test credentials/token were available and those flows can write audit/user/wallet/request data. Do not consider successful login or user creation certified until the valid-login test below passes.
 
 ### Repeatable smoke runner
 
