@@ -29,6 +29,7 @@ interface CrashParticle {
 
 export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isCrashResult = status === 'CRASHED' || status === 'SETTLED';
 
   // References to preserve state across render frames
   const starsRef = useRef<Star[]>([]);
@@ -61,7 +62,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
     }
 
     // Trigger crash animation particles on status switch to CRASHED
-    if (status === 'CRASHED' && lastStatusRef.current !== 'CRASHED') {
+    if (isCrashResult && lastStatusRef.current !== 'CRASHED' && lastStatusRef.current !== 'SETTLED') {
       const origin = planePosRef.current;
       const particles: CrashParticle[] = [];
       const colors = ['#ef4444', '#dc2626', '#f97316', '#fbbf24', '#ffffff', '#7f1d1d'];
@@ -109,7 +110,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       // When multiplier goes high, stars streak leftwards rapidly giving sensation of supersonic speed
       const speedMultiplier = status === 'RUNNING' 
         ? Math.min(1 + (multiplier - 1.0) * 1.8, 12)
-        : status === 'CRASHED'
+        : isCrashResult
         ? 0.5
         : 0.8;
 
@@ -169,7 +170,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(0, startY);
-      ctx.lineTo(status === 'RUNNING' || status === 'CRASHED' ? Math.max(planePosRef.current.x, 32) : 48, startY);
+      ctx.lineTo(status === 'RUNNING' || isCrashResult ? Math.max(planePosRef.current.x, 32) : 48, startY);
       ctx.stroke();
 
       // Runway guideline from 0 boundary
@@ -177,11 +178,11 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(0, startY);
-      ctx.lineTo(status === 'RUNNING' || status === 'CRASHED' ? Math.max(planePosRef.current.x, 32) : 48, startY);
+      ctx.lineTo(status === 'RUNNING' || isCrashResult ? Math.max(planePosRef.current.x, 32) : 48, startY);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      if (status === 'RUNNING' || status === 'CRASHED') {
+      if (status === 'RUNNING' || isCrashResult) {
         // Normalized progress smoothly maps multiplier (1.00x -> 10.00x+) into full trajectory
         const norm = Math.min(Math.max((multiplier - 1.0) / 9.0, 0), 1.0);
         
@@ -207,7 +208,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
         // 4. Draw Trajectory Glow Curve & Area (originates directly from boundary 0)
         const fillGrad = ctx.createLinearGradient(0, currentY, 0, height);
-        if (status === 'CRASHED') {
+        if (isCrashResult) {
           fillGrad.addColorStop(0, 'rgba(239, 68, 68, 0.22)');
           fillGrad.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
         } else {
@@ -230,9 +231,9 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
         ctx.beginPath();
         ctx.moveTo(0, startY);
         ctx.quadraticCurveTo(controlX, controlY, currentX, currentY);
-        ctx.strokeStyle = status === 'CRASHED' ? '#ef4444' : '#f43f5e';
+        ctx.strokeStyle = isCrashResult ? '#ef4444' : '#f43f5e';
         ctx.lineWidth = 3;
-        ctx.shadowColor = status === 'CRASHED' ? 'rgba(239, 68, 68, 0.9)' : 'rgba(244, 63, 94, 0.85)';
+        ctx.shadowColor = isCrashResult ? 'rgba(239, 68, 68, 0.9)' : 'rgba(244, 63, 94, 0.85)';
         ctx.shadowBlur = 10;
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -300,7 +301,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
           ctx.fill();
 
           ctx.restore();
-        } else if (status === 'CRASHED') {
+        } else if (isCrashResult) {
           // Crash Animation: Render Falling Debris & Flying Away Explosion
           crashAnimationProgressRef.current += 1;
 
@@ -435,7 +436,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
           </div>
         )}
 
-        {status === 'CRASHED' && (
+        {isCrashResult && (
           <div className="text-center">
             <div className="text-rose-500 font-extrabold text-[10px] uppercase tracking-widest leading-none mb-0.5 animate-bounce">
               FLEW AWAY!
