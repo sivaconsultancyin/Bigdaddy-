@@ -86,6 +86,13 @@ async function main() {
     body: { username: "x", password: "x" },
   }, d => d.error === "INVALID_USERNAME_OR_PASSWORD");
 
+  await check("login rejects null JSON body safely", "POST", "/auth/login", 400, { body: null }, d =>
+    d.error === "INVALID_JSON");
+  await check("referral registration rejects null JSON body safely", "POST", "/auth/register-referral", 400, { body: null }, d =>
+    d.error === "INVALID_JSON");
+  await check("dice verification rejects null JSON body safely", "POST", "/games/dice/verify", 400, { body: null }, d =>
+    d.error === "INVALID_JSON");
+
   for (const [name, method, path, body] of [
     ["auth/me rejects missing token", "GET", "/auth/me"],
     ["wallet rejects missing token", "GET", "/wallet/my-wallet"],
