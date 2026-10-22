@@ -219,6 +219,18 @@ async function handle(req: Request) {
   const gameStateMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/state$/);
   if (req.method === "GET" && gameStateMatch) {
     const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
+    // Disabled games are intentionally not serving live rounds. Return a stable
+    // non-error response before querying their game-specific tables so stale
+    // clients do not generate repeated 503s or operational-alert noise.
+    const { data: gameConfig, error: gameConfigError } = await db.schema("platform").from("games")
+      .select("status").eq("code", code).maybeSingle();
+    if (gameConfigError) return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
+    if (!gameConfig || gameConfig.status !== "ACTIVE") {
+      return response({
+        gameCode: code, status: "COMING_SOON", gameStateUnavailable: true,
+        round: null, history: [], bets: [], allBets: [],
+      }, 200, origin);
+    }
     const { data: rounds, error: roundError } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
     if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
