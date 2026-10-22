@@ -443,6 +443,38 @@ async function handle(req: Request) {
     return response({ message: "TRANSFER_COMPLETED", transactionId, balances: (balances ?? []).map(b => ({ id: b.id, balance: String(b.balance) })) }, 200, origin);
   }
 
+  const activationMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
+  if (req.method === "POST" && activationMatch) {
+    if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
+    const code = activationMatch[1] === "dragon-tiger" ? "dragon_tiger"
+      : activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
+    // Only Aviator has a verified production round/settlement engine. Never
+    // advertise another game as active until its scheduler and settlement path exist.
+    if (code !== "aviator") return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
+    const { data: game, error: gameError } = await db.schema("platform").from("games")
+      .select("id,pool_wallet_id").eq("code", code).maybeSingle();
+    if (gameError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
+    if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
+    const { data: pool, error: poolError } = await db.schema("wallet").from("wallets")
+      .select("id,balance").eq("id", game.pool_wallet_id).maybeSingle();
+    if (poolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
+    const poolBalance = String(pool?.balance ?? "0");
+    if (!pool || !/^[0-9]+$/.test(poolBalance) || BigInt(poolBalance) <= 0n) {
+      return response({ error: "ALLOCATE_GAME_POOL_TOKENS_FIRST" }, 400, origin);
+    }
+    const { error: updateError } = await db.schema("platform").from("games")
+      .update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", code);
+    if (updateError) return response({ error: "GAME_ACTIVATION_FAILED" }, 503, origin);
+    try {
+      await audit(db, actor.id, "GAME_ACTIVATED", "GAME", game.id, { gameCode: code, poolBalance });
+    } catch {
+      // Activation is already persisted. Keep the API response explicit rather
+      // than reporting failure and encouraging an unsafe repeated allocation.
+      console.error("Game activation audit write failed.");
+    }
+    return response({ status: "ACTIVE", gameCode: code, poolBalance }, 200, origin);
+  }
+
   if (req.method === "GET" && path === "/games/list") {
     const { data, error } = await db.schema("platform").from("games")
       .select("id,code,name,status,min_bet,max_bet,config").order("name");
