@@ -165,7 +165,7 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onBackToLobby }) => {
         </div>
 
         <div className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5 px-0.5">
-          {recentHistory.slice(-6).map((h, i) => (
+          {recentHistory.slice(0, 6).map((h, i) => (
             <span
               key={i}
               className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md border shrink-0 leading-none ${getMultiplierBadgeColor(h.crashMultiplier)}`}
