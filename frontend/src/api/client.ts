@@ -1,6 +1,9 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://bigdaddy-backend.onrender.com/api' : '/api');
+// Production frontend is served by Render, while API requests go to Supabase Edge Functions.
+// Keep VITE_API_BASE_URL overridable for preview/staging environments.
+const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? SUPABASE_API_BASE : '/api');
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
 export class ApiRequestError extends Error {
@@ -37,10 +40,8 @@ export class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // Never leave the login button spinning forever if the API or database stalls.
+    // Avoid leaving UI actions loading indefinitely if the API or database stalls.
     const controller = new AbortController();
-    // Render Free services may need more than 15 seconds to wake from sleep.
-    // Allow time for cold start while backend/database limits remain enforced.
     const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -59,7 +60,7 @@ export class ApiClient {
       return data as T;
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new Error('The server did not respond within 45 seconds. Please try again; if this continues, the server/database connection needs attention.');
+        throw new Error('The server did not respond within 45 seconds. Please try again; if this continues, the API/database connection needs attention.');
       }
       if (error instanceof TypeError) {
         throw new Error('Could not reach the server. Check the connection and try again.');
