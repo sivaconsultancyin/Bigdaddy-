@@ -81,3 +81,33 @@ The frontend calls auth, wallet, token-request, games, audit, and game-action pa
 - [ ] Only then consider retiring the old Render backend service.
 
 Never put the Supabase service-role key or JWT signing secret in frontend code.
+
+## Production smoke-test evidence (2026-10-22)
+
+A safe live HTTP smoke pass was run against the deployed api Edge Function using the database pg_net HTTP client. No wallet transfers, user creation, token-request writes, or bets were executed.
+
+| Check | Result |
+|---|---|
+| GET /health | PASS — HTTP 200; databaseConnected=true |
+| GET /config | PASS — HTTP 200; apiBackend=supabase |
+| POST /auth/login with malformed input | PASS — HTTP 400 validation response |
+| POST /auth/login with a syntactically valid but nonexistent username | PASS — HTTP 401 invalid credentials |
+| GET /auth/me without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
+| GET /wallet/my-wallet without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
+| GET /requests/list without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
+| POST /auth/create-user without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
+
+Earlier live logs from Edge API version 10 showed HTTP 200 for authenticated /auth/me, /auth/users, /wallet/my-wallet, /wallet/summary, /wallet/ledger, and /requests/list. The current deployed API is version 11. Valid-credential login and authorized write flows were not executed in production because no approved test credentials/token were available and those flows can write audit/user/wallet/request data. Historical version-10 logs showed 503s for login and user creation with a null-username exception; do not consider those success paths certified until the valid-login test below passes.
+
+### Repeatable smoke runner
+
+Run from the repository root in a trusted environment. Do not commit credentials or tokens.
+
+```sh
+SUPABASE_PUBLISHABLE_KEY='your-public-publishable-key' \
+BIGDADDY_SMOKE_USERNAME='approved-test-account' \
+BIGDADDY_SMOKE_PASSWORD='test-account-password' \
+node scripts/supabase-edge-smoke.mjs
+```
+
+If an approved short-lived BigDaddy token is available, set BIGDADDY_SMOKE_TOKEN instead of the username/password pair to test read-only profile, wallet, ledger, and request-list endpoints. A valid login writes the normal USER_LOGIN audit event. The runner never creates users or token requests and never transfers tokens or places bets.
