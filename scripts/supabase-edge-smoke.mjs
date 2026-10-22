@@ -97,7 +97,7 @@ async function main() {
       d.error === "AUTH_REQUIRED");
   }
 
-  let token = EXISTING_TOKEN;
+  let token = USERNAME && PASSWORD ? null : EXISTING_TOKEN;
   if (USERNAME && PASSWORD) {
     const login = await check("valid account login", "POST", "/auth/login", 200, {
       body: { username: USERNAME, password: PASSWORD },
