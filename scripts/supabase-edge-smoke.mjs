@@ -95,9 +95,12 @@ async function main() {
 
   for (const [name, method, path, body] of [
     ["auth/me rejects missing token", "GET", "/auth/me"],
+    ["user list rejects missing token", "GET", "/auth/users"],
     ["wallet rejects missing token", "GET", "/wallet/my-wallet"],
     ["wallet ledger rejects missing token", "GET", "/wallet/ledger"],
-    ["token requests reject missing token", "GET", "/requests/list"],
+    ["token request list rejects missing token", "GET", "/requests/list"],
+    ["token request creation rejects missing token", "POST", "/requests/create", {}],
+    ["token request approval rejects missing token", "POST", "/requests/00000000-0000-0000-0000-000000000000/approve", {}],
     ["user creation rejects missing token", "POST", "/auth/create-user", {}],
   ]) {
     await check(name, method, path, 401, body === undefined ? {} : { body }, d =>
