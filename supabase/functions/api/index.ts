@@ -236,6 +236,26 @@ async function handle(req: Request) {
   if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
   const actor = auth.actor;
 
+  // The old slider mode needs a dedicated atomic settlement contract. Fail closed
+  // rather than treating its betAmount as an ordinary number bet.
+  if (req.method === "POST" && path === "/games/dice/roll") {
+    const candidate = await req.clone().json().catch(() => null);
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate) &&
+        ((candidate as Record<string, unknown>).mode === "slider" ||
+         (candidate as Record<string, unknown>).betAmount !== undefined ||
+         (candidate as Record<string, unknown>).target !== undefined ||
+         (candidate as Record<string, unknown>).condition !== undefined)) {
+      return response({ error: "DICE_SLIDER_MODE_NOT_MIGRATED", message: "Slider/target bets are disabled until atomic odds, liability reservation, and settlement are implemented." }, 503, origin);
+    }
+  }
+
+  // Teen Patti's former implementation was process-memory based and is not safe
+  // for financial play. Keep these routes explicitly unavailable until persistent
+  // rounds, turn ownership, idempotency, and atomic wallet settlement exist.
+  if (/^\/games\/teen-patti\/(state|boot|action)$/.test(path)) {
+    return response({ error: "TEEN_PATTI_MIGRATION_NOT_READY" }, 503, origin);
+  }
+
   // Persistent diagnostics endpoint. Only OWNER may read operational failure details.
   if (req.method === "GET" && path === "/monitoring/failures") {
     if (actor.role !== "OWNER") return response({ error: "OWNER_DIAGNOSTICS_AUTH_REQUIRED" }, 403, origin);
@@ -646,13 +666,44 @@ async function handle(req: Request) {
   return response({ error: "NOT_FOUND" }, 404, origin);
 }
 
-Deno.serve(async (req: Request) => {
+async function recordEdgeFailure(req: Request, statusCode: number, durationMs: number) {
   try {
-    return await handle(req);
+    const db = client();
+    const path = new URL(req.url).pathname.slice(0, 180);
+    const component = /wallet|transfer|ledger/i.test(path) ? "Wallet API"
+      : /auth|login|register/i.test(path) ? "Authentication"
+      : /games|aviator|bet|cashout|round|settle/i.test(path) ? "Game / Settlement"
+      : "Backend API / Database";
+    const { error } = await db.schema("platform").from("system_health_events").insert({
+      id: crypto.randomUUID(),
+      occurred_at: new Date().toISOString(),
+      request_id: (req.headers.get("x-request-id") || crypto.randomUUID()).slice(0, 80),
+      method: req.method.slice(0, 12),
+      path,
+      status_code: statusCode,
+      duration_ms: Math.max(0, Math.round(durationMs)),
+      component,
+      reason_code: statusCode === 500 ? "EDGE_API_INTERNAL_ERROR" : "EDGE_API_UNAVAILABLE",
+      reason: "Supabase Edge API returned an HTTP 5xx response; request payloads and credentials are not recorded.",
+      recovery: "Inspect the matching Edge Function log and database connectivity; verify wallet/game idempotency before retrying any financial action.",
+    });
+    if (error) console.error("Could not persist Edge API health event:", error.code ?? "unknown");
+  } catch (error) {
+    console.error("Could not persist Edge API health event:", error instanceof Error ? error.message : "unknown");
+  }
+}
+
+Deno.serve(async (req: Request) => {
+  const startedAt = Date.now();
+  try {
+    const result = await handle(req);
+    if (result.status >= 500) await recordEdgeFailure(req, result.status, Date.now() - startedAt);
+    return result;
   } catch (error) {
     console.error("Supabase API request failed:", error instanceof Error ? error.message : "unknown");
     const message = error instanceof Error ? error.message : "";
     const status = message === "SERVER_CONFIGURATION_ERROR" ? 500 : 503;
+    await recordEdgeFailure(req, status, Date.now() - startedAt);
     return response({ error: status === 500 ? "SERVER_CONFIGURATION_ERROR" : "API_SERVICE_UNAVAILABLE" }, status, req.headers.get("origin"));
   }
 });
