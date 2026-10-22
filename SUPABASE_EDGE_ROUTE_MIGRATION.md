@@ -90,6 +90,9 @@ A safe live HTTP smoke pass was run against the deployed api Edge Function using
 |---|---|
 | GET /health | PASS — HTTP 200; databaseConnected=true |
 | GET /config | PASS — HTTP 200; apiBackend=supabase |
+| GET /monitoring/failures without token (Edge API v14) | PASS — HTTP 401 `AUTH_REQUIRED` |
+| GET /monitoring/failures with invalid BigDaddy token (Edge API v14) | PASS — HTTP 401 `INVALID_TOKEN` |
+| Aviator scheduler | PASS — `cron.job` active every minute; latest recorded runs succeeded and Edge engine returned HTTP 200 with 153–165 ticks per run |
 | POST /auth/login with malformed input | PASS — HTTP 400 validation response |
 | POST /auth/login with a syntactically valid but nonexistent username | PASS — HTTP 401 invalid credentials |
 | GET /auth/me without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
