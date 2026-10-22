@@ -187,6 +187,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const simIntervalRef = useRef<any>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
+  // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
+  // hammering empty round tables for games that are still COMING_SOON.
+  const activeGameKeysRef = useRef<Set<string>>(new Set(['aviator']));
+  const lastGameListRefreshAtRef = useRef(0);
+  const gameListRefreshInFlightRef = useRef(false);
   const lastSuccessfulRoundAtRef = useRef<number | null>(null);
   const disposedRef = useRef(false);
   const lastHealthCheckAtRef = useRef(0);
@@ -244,15 +249,56 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }).finally(() => window.clearTimeout(healthTimeout));
         }
         const pollOtherGames = now - otherGamesPollAtRef.current >= 1500;
-        if (pollOtherGames) otherGamesPollAtRef.current = Date.now();
+        if (pollOtherGames) {
+          otherGamesPollAtRef.current = now;
+          // Refresh the active-game inventory in the background; never block Aviator
+          // state polling while the inventory endpoint is slow or unavailable.
+          if (now - lastGameListRefreshAtRef.current >= 30000 && !gameListRefreshInFlightRef.current) {
+            lastGameListRefreshAtRef.current = now;
+            const token = window.localStorage.getItem('bigdaddy_auth_token');
+            if (token) {
+              gameListRefreshInFlightRef.current = true;
+              const listController = new AbortController();
+              const listTimeout = window.setTimeout(() => listController.abort(), 5000);
+              void fetch(apiBase + '/games/list', {
+                headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+                signal: listController.signal,
+              }).then(async (response) => {
+                if (!response.ok) return;
+                const payload = await response.json().catch(() => null);
+                if (!Array.isArray(payload?.games)) return;
+                const keyByCode: Record<string, string> = {
+                  aviator: 'aviator',
+                  roulette: 'roulette',
+                  dice: 'dice',
+                  dragon_tiger: 'dragonTiger',
+                  andar_bahar: 'andarBahar',
+                };
+                const active = new Set<string>();
+                for (const game of payload.games) {
+                  if (game?.status === 'ACTIVE' && typeof game.code === 'string' && keyByCode[game.code]) {
+                    active.add(keyByCode[game.code]);
+                  }
+                }
+                activeGameKeysRef.current = active;
+              }).catch(() => {
+                // Keep the last known inventory on transient failures.
+              }).finally(() => {
+                window.clearTimeout(listTimeout);
+                gameListRefreshInFlightRef.current = false;
+              });
+            }
+          }
+        }
+        const activeGameKeys = activeGameKeysRef.current;
         const gamePaths = [
           ['aviator', '/games/aviator/state'],
           ...(pollOtherGames ? [
-            ['roulette', '/games/roulette/state'],
-            ['dice', '/games/dice/state'],
-            ['dragonTiger', '/games/dragon-tiger/state'],
-            ['andarBahar', '/games/andar-bahar/state'],
-          ] as const : []),
+            ...(activeGameKeys.has('roulette') ? [['roulette', '/games/roulette/state'] as const] : []),
+            ...(activeGameKeys.has('dice') ? [['dice', '/games/dice/state'] as const] : []),
+            ...(activeGameKeys.has('dragonTiger') ? [['dragonTiger', '/games/dragon-tiger/state'] as const] : []),
+            ...(activeGameKeys.has('andarBahar') ? [['andarBahar', '/games/andar-bahar/state'] as const] : []),
+          ] : []),
         ] as const;
         // Bound every poll so one stalled game endpoint cannot permanently block
         // all live-state updates (or leave the global connection badge Offline).
