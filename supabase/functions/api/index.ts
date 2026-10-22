@@ -236,6 +236,28 @@ async function handle(req: Request) {
   if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
   const actor = auth.actor;
 
+  // Persistent diagnostics endpoint. Only OWNER may read operational failure details.
+  if (req.method === "GET" && path === "/monitoring/failures") {
+    if (actor.role !== "OWNER") return response({ error: "OWNER_DIAGNOSTICS_AUTH_REQUIRED" }, 403, origin);
+    const rawLimit = Number(url.searchParams.get("limit") ?? "100");
+    const limit = Number.isFinite(rawLimit) ? Math.min(250, Math.max(1, Math.floor(rawLimit))) : 100;
+    const { data: events, error } = await db.schema("platform").from("system_health_events")
+      .select("id,occurred_at,request_id,method,path,status_code,duration_ms,component,reason_code,reason,recovery")
+      .order("occurred_at", { ascending: false }).limit(limit);
+    if (error) return response({ error: "MONITORING_SERVICE_UNAVAILABLE" }, 503, origin);
+    return response({
+      events: (events ?? []).map((event) => ({
+        id: event.id, occurredAt: event.occurred_at, requestId: event.request_id,
+        method: event.method, path: event.path, statusCode: event.status_code,
+        durationMs: event.duration_ms, component: event.component,
+        reasonCode: event.reason_code, reason: event.reason, recovery: event.recovery,
+      })),
+      persistence: "database", capturedInMemoryLimit: 0,
+      note: "Events are read from the persistent Supabase platform.system_health_events table.",
+      timestamp: new Date().toISOString(),
+    }, 200, origin);
+  }
+
   if (req.method === "GET" && path === "/auth/me") {
     const { data: user, error } = await db.schema("platform").from("users")
       .select("id,username,email,parent_id,referred_by_user_id").eq("id", actor.id).maybeSingle();
