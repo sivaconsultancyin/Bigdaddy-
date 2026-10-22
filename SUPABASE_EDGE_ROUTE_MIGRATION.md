@@ -93,6 +93,9 @@ A safe live HTTP smoke pass was run against the deployed api Edge Function using
 | POST /auth/login with malformed input | PASS — HTTP 400 validation response |
 | POST /auth/login with a syntactically valid but nonexistent username | PASS — HTTP 401 invalid credentials |
 | GET /auth/me without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
+| GET /auth/users without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
+| POST /requests/create without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED; no request created |
+| POST /requests/:id/approve without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED; no request resolved |
 | GET /wallet/my-wallet without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
 | GET /requests/list without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
 | POST /auth/create-user without a BigDaddy token | PASS — HTTP 401 AUTH_REQUIRED |
