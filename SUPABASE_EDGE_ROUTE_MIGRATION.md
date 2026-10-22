@@ -1,6 +1,6 @@
 # BigDaddy API Route Inventory and Supabase Edge Migration
 
-Last reviewed: 2026-10-22
+Last reviewed: 2026-10-22 (Edge API v14)
 
 ## Target architecture
 
@@ -18,7 +18,7 @@ Routes mounted in `server.ts` in production:
 | GET | `/api/health` | Implemented as `GET /health` |
 | GET | `/api/ready` | Implemented as `GET /ready` |
 | GET | `/api/config` | Implemented as `GET /config` |
-| GET | `/api/monitoring/failures` | **Not migrated**; current monitor uses in-process health-failure data |
+| GET | `/api/monitoring/failures` | Implemented as `GET /monitoring/failures`; reads `platform.system_health_events`, OWNER-only; Edge API 5xx failures are persisted best-effort |
 | POST | `/api/auth/login` | Implemented as `POST /auth/login` |
 | POST | `/api/auth/register-referral` | Implemented as `POST /auth/register-referral` |
 | GET | `/api/auth/me` | Implemented as `GET /auth/me` |
@@ -65,17 +65,17 @@ The frontend calls auth, wallet, token-request, games, audit, and game-action pa
 | `POST /games/dice/verify` | Implemented in Edge Function as stateless HMAC/SHA-256 verification |
 | `GET /games/andar-bahar/state`, `POST /games/andar-bahar/bet` | Edge handler exists through authoritative-game state/bet routes |
 | `GET /games/dragon-tiger/state`, `POST /games/dragon-tiger/bet` | Edge handler exists through authoritative-game state/bet routes |
-| `GET /games/teen-patti/state`, `POST /games/teen-patti/boot`, `POST /games/teen-patti/action` | Not migrated; the existing implementation is in-memory and not mounted by the production Express server. Do not port it as-is for a financial game; it needs persistent, atomic settlement first |
-| `GET /monitoring/failures` | Not migrated; requires a persistent health-events store or a separate observability design |
+| `GET /games/teen-patti/state`, `POST /games/teen-patti/boot`, `POST /games/teen-patti/action` | Explicitly fail closed with `503 TEEN_PATTI_MIGRATION_NOT_READY`; do not port the old in-memory implementation. Persistent rounds, turn ownership, idempotency, and atomic wallet settlement are still required |
+| `GET /monitoring/failures` | Implemented in Edge API v13+ using persistent `platform.system_health_events`; Edge API v14 also persists HTTP 5xx events best-effort |
 
 ## Safety and rollout checklist
 
 - [x] Inventory the production Express routes and frontend API calls.
 - [x] Point production frontend requests to the Supabase Edge Function base.
 - [x] Add the stateless Dice verification endpoint to the Supabase `api` function.
-- [ ] Add a persistent monitoring-failures endpoint.
-- [ ] Implement and test the Dice slider/target mode using persistent atomic wallet settlement, or remove that mode from the frontend until supported.
-- [ ] Design and implement Teen Patti with persistent tables/RPCs, idempotency, and atomic settlement before enabling its UI.
+- [x] Add a persistent owner-only monitoring-failures endpoint and best-effort Edge API 5xx persistence.
+- [ ] Implement Dice slider/target mode with persistent atomic odds/liability/settlement. Until then, Edge API v14 explicitly returns `503 DICE_SLIDER_MODE_NOT_MIGRATED` instead of misinterpreting slider payloads as number bets.
+- [ ] Design and implement Teen Patti with persistent tables/RPCs, idempotency, turn ownership, and atomic settlement before enabling its UI. The API now returns `503 TEEN_PATTI_MIGRATION_NOT_READY`.
 - [ ] Run production smoke tests for login, role checks, wallet, requests, game state/bets, and Aviator settlement.
 - [ ] Verify Render frontend deploy and remove any dashboard-level production API override that points back to the Render backend.
 - [ ] Only then consider retiring the old Render backend service.
@@ -103,7 +103,7 @@ A safe live HTTP smoke pass was run against the deployed api Edge Function using
 | POST /auth/register-referral with JSON null body (version 12) | PASS — HTTP 400 INVALID_JSON; no unhandled exception |
 | POST /games/dice/verify with JSON null body (version 12) | PASS — HTTP 400 INVALID_JSON; no unhandled exception |
 
-Earlier live logs from Edge API version 10 showed HTTP 200 for authenticated /auth/me, /auth/users, /wallet/my-wallet, /wallet/summary, /wallet/ledger, and /requests/list. The current deployed API is version 12. Version-11 logs showed repeated 503s on login, referral registration, and user creation when the request body was JSON null. Version 12 now rejects null/non-object JSON bodies with HTTP 400 across all 12 JSON-parsing handlers; live tests of null bodies on login, referral registration, and Dice verification returned 400 without the prior exception. Valid-credential login and authorized write flows were not executed in production because no approved test credentials/token were available and those flows can write audit/user/wallet/request data. Do not consider successful login or user creation certified until the valid-login test below passes.
+Earlier live logs from Edge API version 10 showed HTTP 200 for authenticated /auth/me, /auth/users, /wallet/my-wallet, /wallet/summary, /wallet/ledger, and /requests/list. The current deployed API is version 14. Version-11 logs showed repeated 503s on login, referral registration, and user creation when the request body was JSON null. Version 12 rejects null/non-object JSON bodies with HTTP 400 across JSON-parsing handlers; live tests of null bodies on login, referral registration, and Dice verification returned 400 without the prior exception. Edge API v13 added the persistent owner-only monitoring endpoint; v14 adds best-effort persistence for HTTP 5xx responses and explicit fail-closed responses for the unsupported Dice slider and Teen Patti routes. Valid-credential login and authorized write flows were not executed in production because no approved test credentials/token were available and those flows can write audit/user/wallet/request data. Do not consider successful login or user creation certified until the valid-login test below passes.
 
 ### Repeatable smoke runner
 
