@@ -1,7 +1,7 @@
 services:
   - type: web
     runtime: static
-    name: bigdaddy-frontend
+    name: bigdaddy-frontend-static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     autoDeployTrigger: checksPass
