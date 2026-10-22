@@ -1,6 +1,6 @@
 # BigDaddy API Route Inventory and Supabase Edge Migration
 
-Last reviewed: 2026-10-22 (Edge API v14)
+Last reviewed: 2026-10-22 (Edge API v15)
 
 ## Target architecture
 
@@ -89,9 +89,11 @@ A safe live HTTP smoke pass was run against the deployed api Edge Function using
 | Check | Result |
 |---|---|
 | GET /health | PASS — HTTP 200; databaseConnected=true |
-| GET /config | PASS — HTTP 200; apiBackend=supabase |
+| GET /config (Edge API v15) | PASS — HTTP 200; `apiBackend=supabase`; only `aviator` returned because it is the only supported game marked `ACTIVE` in the database |
 | GET /monitoring/failures without token (Edge API v14) | PASS — HTTP 401 `AUTH_REQUIRED` |
 | GET /monitoring/failures with invalid BigDaddy token (Edge API v14) | PASS — HTTP 401 `INVALID_TOKEN` |
+| GET /games/dice/state | EXPECTED BLOCKER — HTTP 503 `GAME_NOT_CONFIGURED`; database shows Dice as `COMING_SOON` and zero authoritative rounds |
+| Persistence of that HTTP 5xx | PASS — a corresponding row was written to `platform.system_health_events` with path, status 503, request ID and generic recovery guidance |
 | Aviator scheduler | PASS — `cron.job` active every minute; latest recorded runs succeeded and Edge engine returned HTTP 200 with 153–165 ticks per run |
 | POST /auth/login with malformed input | PASS — HTTP 400 validation response |
 | POST /auth/login with a syntactically valid but nonexistent username | PASS — HTTP 401 invalid credentials |
@@ -106,7 +108,7 @@ A safe live HTTP smoke pass was run against the deployed api Edge Function using
 | POST /auth/register-referral with JSON null body (version 12) | PASS — HTTP 400 INVALID_JSON; no unhandled exception |
 | POST /games/dice/verify with JSON null body (version 12) | PASS — HTTP 400 INVALID_JSON; no unhandled exception |
 
-Earlier live logs from Edge API version 10 showed HTTP 200 for authenticated /auth/me, /auth/users, /wallet/my-wallet, /wallet/summary, /wallet/ledger, and /requests/list. The current deployed API is version 14. Version-11 logs showed repeated 503s on login, referral registration, and user creation when the request body was JSON null. Version 12 rejects null/non-object JSON bodies with HTTP 400 across JSON-parsing handlers; live tests of null bodies on login, referral registration, and Dice verification returned 400 without the prior exception. Edge API v13 added the persistent owner-only monitoring endpoint; v14 adds best-effort persistence for HTTP 5xx responses and explicit fail-closed responses for the unsupported Dice slider and Teen Patti routes. Valid-credential login and authorized write flows were not executed in production because no approved test credentials/token were available and those flows can write audit/user/wallet/request data. Do not consider successful login or user creation certified until the valid-login test below passes.
+Earlier live logs from Edge API version 10 showed HTTP 200 for authenticated /auth/me, /auth/users, /wallet/my-wallet, /wallet/summary, /wallet/ledger, and /requests/list. The current deployed API is version 14. Version-11 logs showed repeated 503s on login, referral registration, and user creation when the request body was JSON null. Version 12 rejects null/non-object JSON bodies with HTTP 400 across JSON-parsing handlers; live tests of null bodies on login, referral registration, and Dice verification returned 400 without the prior exception. Edge API v13 added the persistent owner-only monitoring endpoint; v14 added best-effort persistence for HTTP 5xx responses and explicit fail-closed responses for the unsupported Dice slider and Teen Patti routes. v15 derives `/config.games` from database-active supported games; live HTTP smoke returned only `aviator`, matching the current database status. Valid-credential login and authorized write flows were not executed in production because no approved test credentials/token were available and those flows can write audit/user/wallet/request data. Do not consider successful login or user creation certified until the valid-login test below passes.
 
 ### Repeatable smoke runner
 
