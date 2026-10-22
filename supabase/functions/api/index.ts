@@ -105,10 +105,19 @@ async function handle(req: Request) {
   }
   if (req.method === "GET" && path === "/ready") return response({ ready: true, database: "supabase-https" }, 200, origin);
   if (req.method === "GET" && path === "/config") {
-    return response({
-      mode: "production", currency: "tokens", apiBackend: "supabase",
-      games: ["aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"],
-    }, 200, origin);
+    try {
+      const configDb = client();
+      const { data: activeGames, error } = await configDb.schema("platform").from("games")
+        .select("code").eq("status", "ACTIVE").order("code");
+      if (error) return response({ error: "CONFIG_UNAVAILABLE" }, 503, origin);
+      const supported = new Set(["aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"]);
+      return response({
+        mode: "production", currency: "tokens", apiBackend: "supabase",
+        games: (activeGames ?? []).map((game) => game.code).filter((code) => supported.has(code)),
+      }, 200, origin);
+    } catch {
+      return response({ error: "CONFIG_UNAVAILABLE" }, 503, origin);
+    }
   }
   // Stateless provably-fair Dice verification; does not require a user session or database write.
   if (req.method === "POST" && path === "/games/dice/verify") {
