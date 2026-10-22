@@ -3,7 +3,9 @@ import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types
 // Production frontend is served by Render, while API requests go to Supabase Edge Functions.
 // Keep VITE_API_BASE_URL overridable for preview/staging environments.
 const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
-const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? SUPABASE_API_BASE : '/api');
+const API_BASE = import.meta.env.PROD
+  ? SUPABASE_API_BASE
+  : (import.meta.env.VITE_API_BASE_URL || '/api');
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
 export class ApiRequestError extends Error {
