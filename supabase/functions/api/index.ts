@@ -219,6 +219,10 @@ async function handle(req: Request) {
   const gameStateMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/state$/);
   if (req.method === "GET" && gameStateMatch) {
     const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
+    // Secondary-game state can include usernames and bet details. Authenticate
+    // before returning either live state or the empty COMING_SOON response.
+    const stateAuth = await actorFrom(req, db);
+    if (!stateAuth.actor) return response({ error: stateAuth.error ?? "AUTH_REQUIRED" }, stateAuth.status ?? 401, origin);
     // Disabled games are intentionally not serving live rounds. Return a stable
     // non-error response before querying their game-specific tables so stale
     // clients do not generate repeated 503s or operational-alert noise.
