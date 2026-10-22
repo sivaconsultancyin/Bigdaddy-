@@ -313,6 +313,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (!token) return { key, data: null, error: 'AUTH_REQUIRED' };
 
             const response = await fetch(apiBase + path, {
+              cache: 'no-store',
               headers: {
                 Accept: 'application/json',
                 Authorization: `Bearer ${token}`,
@@ -364,7 +365,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               if (round.status !== 'RUNNING') setMultiplier(Number(round.multiplier ?? round.crashMultiplier ?? 1));
               refreshWalletForResult('aviator', round);
             }
-            if (Array.isArray(data.history)) setRecentHistory(data.history.map((item: any) => ({ roundNumber: Number(item.roundNumber), crashMultiplier: Number(item.crashMultiplier) })));
+            if (Array.isArray(data.history)) {
+              // History is durable: merge by round number so a transient empty/stale
+              // payload cannot erase a crash already shown to the player.
+              setRecentHistory((previous) => {
+                const byRound = new Map(previous.map((item) => [item.roundNumber, item]));
+                for (const item of data.history) {
+                  const roundNumber = Number(item?.roundNumber);
+                  const crashMultiplier = Number(item?.crashMultiplier);
+                  if (Number.isFinite(roundNumber) && roundNumber > 0 && Number.isFinite(crashMultiplier) && crashMultiplier > 0) {
+                    byRound.set(roundNumber, { roundNumber, crashMultiplier });
+                  }
+                }
+                return [...byRound.values()]
+                  .sort((left, right) => right.roundNumber - left.roundNumber)
+                  .slice(0, 20);
+              });
+            }
             setLastEvent({ event: 'production:crash_state', data });
           } else if (key === 'roulette') {
             if (data.round) {
