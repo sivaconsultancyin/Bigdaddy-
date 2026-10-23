@@ -35,14 +35,12 @@ const CHIP_VALUES = [10, 50, 100, 500, 1000, 5000];
 
 export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobby }) => {
   const { user, wallet, refreshUser } = useAuth();
-  const {
-    isConnected,
-    rouletteRound,
-    rouletteHistory,
-    addRouletteHistoryItem,
-    rouletteLiveBets,
-    lastEvent,
-  } = useWebSocket();
+  const { rouletteRound: websocketRound, rouletteHistory: websocketHistory } = useWebSocket();
+  const [authoritativeRound, setAuthoritativeRound] = useState<any | null>(null);
+  const [authoritativeHistory, setAuthoritativeHistory] = useState<any[]>([]);
+  // Once the Supabase round has loaded, no in-memory WebSocket round/history is used.
+  const rouletteRound = authoritativeRound ?? websocketRound;
+  const rouletteHistory = authoritativeRound ? authoritativeHistory : websocketHistory;
 
   const [selectedChip, setSelectedChip] = useState<number>(50);
   // Staged bets in user's betting UI
@@ -73,10 +71,10 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
 
   // Initialize lastSettledNumber from history on mount
   useEffect(() => {
-    if (lastSettledNumber === null && rouletteHistory.length > 0) {
+    if (authoritativeRound && lastSettledNumber === null && rouletteHistory.length > 0) {
       setLastSettledNumber(rouletteHistory[0].number);
     }
-  }, [rouletteHistory, lastSettledNumber]);
+  }, [authoritativeRound, rouletteHistory, lastSettledNumber]);
 
   const handleTestSpin = () => {
     setErrorMessage('Preview spins are disabled. The winning number comes only from the authoritative server round.');
@@ -124,6 +122,18 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
         if (!mounted) return;
         if (data?.poolBalance) setPoolBalance(String(data.poolBalance));
         const ready = data?.status === 'ACTIVE' && Boolean(data?.round) && data?.gameStateUnavailable !== true;
+        if (ready) {
+          setAuthoritativeRound(data.round);
+          setAuthoritativeHistory(Array.isArray(data.history) ? data.history.map((item: any) => ({
+            number: item.result?.number,
+            color: item.result?.color,
+            roundNumber: item.roundNumber,
+            timestamp: item.timestamp,
+          })) : []);
+        } else {
+          setAuthoritativeRound(null);
+          setAuthoritativeHistory([]);
+        }
         setGameAvailability(ready ? 'active' : 'unavailable');
       } catch {
         if (mounted) setGameAvailability('unavailable');
@@ -131,7 +141,7 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
     };
 
     void refreshAvailability();
-    const interval = window.setInterval(() => void refreshAvailability(), 5000);
+    const interval = window.setInterval(() => void refreshAvailability(), 1000);
     return () => {
       mounted = false;
       window.clearInterval(interval);
@@ -172,47 +182,8 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
     }
   }, [rouletteRound.id, rouletteRound.status, refreshUser]);
 
-  // Listen for roulette:round_result event to evaluate user win and play sound
-  useEffect(() => {
-    if (lastEvent && lastEvent.event === 'roulette:round_result') {
-      const data = lastEvent.data;
-      setRoundResultData(data);
-      if (data.poolBalance) {
-        setPoolBalance(data.poolBalance);
-      }
-      if (data.winningNumber !== undefined && data.winningNumber !== null) {
-        setLastSettledNumber(data.winningNumber);
-      }
-      setIsTestSpinning(false);
-      setTestSpinNumber(null);
-
-      // Check if current user had locked bets in this round
-      if (lockedBets.length > 0 && data.winningNumber !== undefined) {
-        let totalWin = 0;
-        let totalBet = 0;
-
-        for (const b of lockedBets) {
-          totalBet += b.amount;
-          const won = checkBetWinLocal(b, data.winningNumber);
-          if (won) {
-            const mult = getMultiplierLocal(b.type);
-            totalWin += b.amount * mult;
-          }
-        }
-
-        if (totalWin > 0) {
-          setMyWinResult({ totalPayout: totalWin, netProfit: totalWin - totalBet });
-          rouletteAudio.playWinFanfare();
-        } else {
-          setMyWinResult({ totalPayout: 0, netProfit: -totalBet });
-        }
-      }
-
-      if (refreshUser) {
-        setTimeout(() => refreshUser(), 600);
-      }
-    }
-  }, [lastEvent, lockedBets, refreshUser]);
+  // Round outcomes and settlement are read from the Supabase state poll above.
+  // WebSocket preview events are intentionally not allowed to settle or score bets.
 
   const toggleSound = () => {
     const next = !soundEnabled;

@@ -267,6 +267,15 @@ async function handle(req: Request) {
         round: null, history: [], bets: [], allBets: [],
       }, 200, origin);
     }
+    // Roulette's durable lifecycle is advanced only by this server-side RPC.
+    // It creates persisted rounds and settles expired rounds in one database transaction.
+    if (code === "roulette") {
+      const { error: lifecycleError } = await db.schema("roulette").rpc("advance_round");
+      if (lifecycleError) {
+        console.error("Roulette lifecycle advance failed:", lifecycleError.code ?? "unknown");
+        return response({ error: "ROULETTE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     const { data: rounds, error: roundError } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
     if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
@@ -279,7 +288,7 @@ async function handle(req: Request) {
       totalBetsCount: Number(row.state?.totalBetsCount ?? 0), totalBetAmount: String(row.state?.totalBetAmount ?? "0"),
       serverSeedHash: row.server_seed_hash, revealedServerSeed: row.status === "SETTLED" ? row.server_seed : null,
     };
-    if (code === "roulette") { current.spinEndsAt = current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
+    if (code === "roulette") { current.spinEndsAt = row.status === "RUNNING" && row.state?.spinStartedAt ? new Date(row.state.spinStartedAt).getTime() + 1500 : current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
     if (code === "dice") { current.rolledNumber = result?.number ?? null; current.numberBetsAmount = {}; }
     if (code === "dragon_tiger") { current.dragonCard = result?.dragonCard ?? null; current.tigerCard = result?.tigerCard ?? null; current.winner = result?.winner ?? null; current.dragonBetAmount = "0"; current.tigerBetAmount = "0"; current.tieBetAmount = "0"; }
     if (code === "andar_bahar") { current.jokerCard = result?.jokerCard ?? null; current.dealCards = result?.dealCards ?? []; current.winningSide = result?.winner ?? null; current.winningCard = result?.dealCards?.[Math.max(0,(result?.dealCards?.length ?? 1)-1)]?.card ?? null; current.totalCardsDealt = result?.totalCardsDealt ?? 0; current.firstSide = "bahar"; current.andarBetAmount = "0"; current.baharBetAmount = "0"; }
@@ -746,6 +755,14 @@ async function handle(req: Request) {
     return response({ logs: data ?? [] }, 200, origin);
   }
 
+
+  // Roulette spin is server-managed; clients cannot submit or choose a winning result.
+  if (req.method === "POST" && path === "/games/roulette/spin") {
+    if (actor.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
+    const { data, error } = await db.schema("roulette").rpc("advance_round");
+    if (error || !data) return response({ error: "ROULETTE_RUNTIME_UNAVAILABLE" }, 503, origin);
+    return response(data, 200, origin);
+  }
 
   const gameBetMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/(bet|spin|roll)$/);
   if (req.method === "POST" && gameBetMatch) {
