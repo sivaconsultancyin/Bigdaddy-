@@ -325,7 +325,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             });
             if (!response.ok) return { key, data: null, error: `HTTP_${response.status}` };
             const data = await response.json();
-            return { key, data, error: null };
+            return { key, data, error: null, receivedAt: Date.now() };
           } catch (error) {
             return { key, data: null, error: error instanceof Error ? (error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR') : 'NETWORK_ERROR' };
           } finally {
@@ -334,9 +334,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }));
         const aviatorResult = results.find(({ key }) => key === 'aviator');
         // Align local animation to the API clock so a device clock skew cannot move the displayed crash point.
-        const responseReceivedAt = Date.now();
         const serverTimeMs = aviatorResult?.data?.serverTime ? Date.parse(aviatorResult.data.serverTime) : NaN;
-        const serverClockOffsetMs = Number.isFinite(serverTimeMs) ? serverTimeMs - responseReceivedAt : 0;
+        const serverClockOffsetMs = Number.isFinite(serverTimeMs) && Number.isFinite(aviatorResult?.receivedAt)
+          ? serverTimeMs - Number(aviatorResult?.receivedAt)
+          : 0;
         const validAviatorState = Boolean(aviatorResult?.data && typeof aviatorResult.data === 'object' &&
           (aviatorResult.data.round || Array.isArray(aviatorResult.data.history)));
         if (validAviatorState) {
