@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { getApiBaseUrl } from '../api/client';
 import {
   AndarBaharRound,
   AndarBaharHistoryItem,
@@ -207,7 +208,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (simIntervalRef.current) return;
     let inFlight = false;
     disposedRef.current = false;
-    const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
+    const apiBase = getApiBaseUrl();
     const refreshWalletForResult = (key: string, round: any) => {
       if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
       const resultKey = `${round.id}:${round.status}`;
