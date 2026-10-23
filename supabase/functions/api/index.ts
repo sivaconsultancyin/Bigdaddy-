@@ -270,6 +270,45 @@ async function handle(req: Request) {
   }
 
 
+  // Public game-state reads are intentionally available without a BigDaddy session.
+  // The bet/cashout routes below remain behind actorFrom() and require a valid JWT.
+  if (req.method === "GET" && path === "/games/aviator/state") {
+    const { data: rounds, error } = await db.schema("aviator").from("game_rounds")
+      .select("id,game_code,round_number,status,crash_multiplier,started_at,ended_at,server_seed_hash,revealed_server_seed")
+      .eq("game_code","aviator").order("round_number", { ascending: false }).limit(25);
+    if (error) return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
+    const row = (rounds ?? []).find(r => r.status === "RUNNING" || r.status === "WAITING") ?? (rounds ?? [])[0] ?? null;
+    const history = (rounds ?? []).filter(r => r.status === "SETTLED").map(r => ({
+      roundNumber: Number(r.round_number), crashMultiplier: Number(r.crash_multiplier ?? 0), endedAt: r.ended_at,
+      serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
+    }));
+    if (!row) return response({ round: null, bets: [], history }, 200, origin);
+    const elapsedSeconds = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
+    const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
+    const crashed = ["CRASHED","SETTLED"].includes(row.status);
+    const multiplier = row.status === "RUNNING" ? Math.min(liveMultiplier, Number(row.crash_multiplier ?? liveMultiplier)) : crashed ? Number(row.crash_multiplier ?? 1) : 1;
+    const { data: betRows, error: betError } = await db.schema("aviator").from("game_bets")
+      .select("id,round_id,bet_amount,auto_cashout,status,payout_amount,cashed_out_at,user_id")
+      .eq("round_id",row.id).order("created_at",{ascending:false}).limit(100);
+    if (betError) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
+    const ids = [...new Set((betRows ?? []).map(b => b.user_id))];
+    const { data: userRows } = ids.length ? await db.schema("platform").from("users").select("id,username").in("id",ids) : { data: [] };
+    const names = new Map((userRows ?? []).map(u => [u.id,u.username]));
+    const bets = (betRows ?? []).map(b => ({ id:b.id, roundId:b.round_id, betAmount:String(b.bet_amount), autoCashout:b.auto_cashout, status:b.status, payoutAmount:String(b.payout_amount ?? 0), cashedOutAt:b.cashed_out_at, username:names.get(b.user_id) ?? "Player" }));
+    const current = { id:row.id, roundNumber:Number(row.round_number), status:row.status, startedAt:row.started_at, endedAt:row.ended_at, multiplier, crashMultiplier:crashed ? row.crash_multiplier : null, serverSeedHash:row.server_seed_hash, revealedServerSeed:row.revealed_server_seed };
+    return response({ round: current, bets, history }, 200, origin);
+  }
+
+
+  if (req.method === "GET" && path === "/games/aviator/history") {
+    const { data, error } = await db.schema("aviator").from("game_rounds")
+      .select("round_number,crash_multiplier,ended_at,server_seed_hash,revealed_server_seed")
+      .eq("game_code","aviator").eq("status","SETTLED").order("round_number",{ascending:false}).limit(20);
+    if (error) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
+    return response({ history: (data ?? []).map(r => ({ roundNumber:Number(r.round_number), crashMultiplier:r.crash_multiplier == null ? null : Number(r.crash_multiplier), endedAt:r.ended_at, serverSeedHash:r.server_seed_hash, revealedServerSeed:r.revealed_server_seed })) }, 200, origin);
+  }
+
+
   const auth = await actorFrom(req, db);
   if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
   const actor = auth.actor;
@@ -502,42 +541,6 @@ async function handle(req: Request) {
     const { error } = await db.schema("platform").from("games").update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", gameCode);
     if (error) return response({ error: "GAME_ACTIVATION_FAILED" }, 400, origin);
     return response({ status: "ACTIVE", gameCode, poolBalance: String(wallet.balance), reservedBalance: String(wallet.reserved_balance) }, 200, origin);
-  }
-
-  if (req.method === "GET" && path === "/games/aviator/state") {
-    const { data: rounds, error } = await db.schema("aviator").from("game_rounds")
-      .select("id,game_code,round_number,status,crash_multiplier,started_at,ended_at,server_seed_hash,revealed_server_seed")
-      .eq("game_code","aviator").order("round_number", { ascending: false }).limit(25);
-    if (error) return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
-    const row = (rounds ?? []).find(r => r.status === "RUNNING" || r.status === "WAITING") ?? (rounds ?? [])[0] ?? null;
-    const history = (rounds ?? []).filter(r => r.status === "SETTLED").map(r => ({
-      roundNumber: Number(r.round_number), crashMultiplier: Number(r.crash_multiplier ?? 0), endedAt: r.ended_at,
-      serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
-    }));
-    if (!row) return response({ round: null, bets: [], history }, 200, origin);
-    const elapsedSeconds = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
-    const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
-    const crashed = ["CRASHED","SETTLED"].includes(row.status);
-    const multiplier = row.status === "RUNNING" ? Math.min(liveMultiplier, Number(row.crash_multiplier ?? liveMultiplier)) : crashed ? Number(row.crash_multiplier ?? 1) : 1;
-    const { data: betRows, error: betError } = await db.schema("aviator").from("game_bets")
-      .select("id,round_id,bet_amount,auto_cashout,status,payout_amount,cashed_out_at,user_id")
-      .eq("round_id",row.id).order("created_at",{ascending:false}).limit(100);
-    if (betError) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
-    const ids = [...new Set((betRows ?? []).map(b => b.user_id))];
-    const { data: userRows } = ids.length ? await db.schema("platform").from("users").select("id,username").in("id",ids) : { data: [] };
-    const names = new Map((userRows ?? []).map(u => [u.id,u.username]));
-    const bets = (betRows ?? []).map(b => ({ id:b.id, roundId:b.round_id, betAmount:String(b.bet_amount), autoCashout:b.auto_cashout, status:b.status, payoutAmount:String(b.payout_amount ?? 0), cashedOutAt:b.cashed_out_at, username:names.get(b.user_id) ?? "Player" }));
-    const current = { id:row.id, roundNumber:Number(row.round_number), status:row.status, startedAt:row.started_at, endedAt:row.ended_at, multiplier, crashMultiplier:crashed ? row.crash_multiplier : null, serverSeedHash:row.server_seed_hash, revealedServerSeed:row.revealed_server_seed };
-    return response({ round: current, bets, history }, 200, origin);
-  }
-
-
-  if (req.method === "GET" && path === "/games/aviator/history") {
-    const { data, error } = await db.schema("aviator").from("game_rounds")
-      .select("round_number,crash_multiplier,ended_at,server_seed_hash,revealed_server_seed")
-      .eq("game_code","aviator").eq("status","SETTLED").order("round_number",{ascending:false}).limit(20);
-    if (error) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
-    return response({ history: (data ?? []).map(r => ({ roundNumber:Number(r.round_number), crashMultiplier:r.crash_multiplier == null ? null : Number(r.crash_multiplier), endedAt:r.ended_at, serverSeedHash:r.server_seed_hash, revealedServerSeed:r.revealed_server_seed })) }, 200, origin);
   }
 
   if (req.method === "POST" && path === "/games/aviator/bet") {
