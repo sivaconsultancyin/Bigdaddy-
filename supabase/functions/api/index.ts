@@ -62,7 +62,7 @@ async function actorFrom(req: Request, db: SupabaseClient): Promise<{ actor?: Ac
   // role_assignments.user_id to users.id lets PostgREST embed the role rows.
   // Keep the exactly-one-role invariant and stale-token check unchanged.
   const { data: user, error: userError } = await db.schema("platform").from("users")
-    .select("id,username,parent_id,is_active,role_assignments!inner(role)")
+    .select("id,username,parent_id,is_active,role_assignments!role_assignments_user_id_fkey!inner(role)")
     .eq("id", claims.id).maybeSingle();
   if (userError) return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
   if (!user || !user.is_active) return { error: "USER_NOT_FOUND_OR_DISABLED", status: 401 };
