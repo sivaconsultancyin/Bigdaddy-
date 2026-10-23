@@ -302,6 +302,7 @@ async function handle(req: Request) {
       if (/USER_NOT_FOUND_OR_DISABLED/i.test(message)) return response({ error: "USER_NOT_FOUND_OR_DISABLED" }, 401, origin);
       if (/TOKEN_ROLE_STALE/i.test(message)) return response({ error: "TOKEN_ROLE_STALE" }, 401, origin);
       if (/PLAYER_ONLY/i.test(message)) return response({ error: "PLAYER_ONLY" }, 403, origin);
+      if (/AUTH_SERVICE_UNAVAILABLE|BET_CREATED_BUT_READBACK_FAILED/i.test(message)) return response({ error: "AUTH_SERVICE_UNAVAILABLE" }, 503, origin);
       if (/NO_OPEN_ROUND|BETTING_CLOSED/i.test(message)) return response({ error: "NO_OPEN_ROUND" }, 409, origin);
       if (/IDEMPOTENCY_KEY_REUSE/i.test(message)) return response({ error: "IDEMPOTENCY_KEY_REUSE" }, 409, origin);
       return response({ error: "BET_REJECTED" }, 400, origin);
