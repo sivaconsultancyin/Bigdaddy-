@@ -202,11 +202,12 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
               type="button"
               onClick={handleCashout}
               disabled={loading}
-              className="w-full h-9 rounded-lg font-black text-[11px] uppercase tracking-wide bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 text-zinc-950 shadow-md shadow-amber-500/30 transition-all flex flex-col items-center justify-center leading-tight active:scale-95 animate-pulse px-1"
+              aria-live="polite"
+              className={`w-full h-9 rounded-lg font-black text-[11px] uppercase tracking-wide bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 text-zinc-950 shadow-md shadow-amber-500/30 transition-all flex flex-col items-center justify-center leading-tight active:scale-95 px-1 ${loading ? 'opacity-80 cursor-wait' : 'animate-pulse'}`}
             >
-              <span className="font-black text-[11px]">CASHOUT</span>
+              <span className="font-black text-[11px]">{loading ? 'CASHING OUT…' : 'CASHOUT'}</span>
               <span className="text-[9px] font-mono font-black truncate">
-                {currentPayout} ({currentMultiplier.toFixed(2)}x)
+                {loading ? 'CONFIRMING WITH SERVER' : `${currentPayout} (${currentMultiplier.toFixed(2)}x)`}
               </span>
             </button>
           )}
