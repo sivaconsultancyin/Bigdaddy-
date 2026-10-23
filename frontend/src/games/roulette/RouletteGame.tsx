@@ -59,6 +59,7 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
   const [showFairnessModal, setShowFairnessModal] = useState<boolean>(false);
   const [showCommunityDrawer, setShowCommunityDrawer] = useState<boolean>(false);
   const [poolBalance, setPoolBalance] = useState<string>('2000000');
+  const [gameAvailability, setGameAvailability] = useState<'checking' | 'active' | 'unavailable'>('checking');
 
   // Live timer ticker for smooth seconds countdown
   const [timeLeftSec, setTimeLeftSec] = useState<number>(14);
@@ -112,15 +113,29 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
     }
   };
 
-  // Poll state once on mount to ensure fresh state if WS was already connected
+  // The production API is authoritative for availability. Never show the
+  // legacy in-memory WebSocket preview as a playable game when Supabase has no
+  // active persistent Roulette round.
   useEffect(() => {
-    ApiClient.getRouletteState()
-      .then((data: any) => {
-        if (data.poolBalance) {
-          setPoolBalance(data.poolBalance);
-        }
-      })
-      .catch(() => {});
+    let mounted = true;
+    const refreshAvailability = async () => {
+      try {
+        const data: any = await ApiClient.getRouletteState();
+        if (!mounted) return;
+        if (data?.poolBalance) setPoolBalance(String(data.poolBalance));
+        const ready = data?.status === 'ACTIVE' && Boolean(data?.round) && data?.gameStateUnavailable !== true;
+        setGameAvailability(ready ? 'active' : 'unavailable');
+      } catch {
+        if (mounted) setGameAvailability('unavailable');
+      }
+    };
+
+    void refreshAvailability();
+    const interval = window.setInterval(() => void refreshAvailability(), 5000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
   // Update timer countdown every 200ms based on round phase endsAt timestamp
@@ -466,6 +481,31 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
         ? 'red'
         : 'black'
       : null;
+
+  if (gameAvailability !== 'active') {
+    return (
+      <div className="min-h-[60vh] w-full flex items-center justify-center px-4 py-8 text-zinc-100">
+        <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 text-center shadow-xl">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300">
+            <ShieldCheck size={26} />
+          </div>
+          <h2 className="text-xl font-bold text-white">Roulette is not available yet</h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-300">
+            {gameAvailability === 'checking'
+              ? 'Checking the authoritative Supabase game state…'
+              : 'Roulette is temporarily disabled until persistent rounds and settlement are ready. No bets can be placed from this screen.'}
+          </p>
+          <button
+            type="button"
+            onClick={onBackToLobby}
+            className="mt-5 rounded-lg border border-zinc-600 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+          >
+            Back to games
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full px-2 py-1.5 space-y-1.5 text-zinc-100 pb-12 select-none">
