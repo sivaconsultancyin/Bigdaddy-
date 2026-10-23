@@ -267,6 +267,51 @@ async function handle(req: Request) {
   }
 
 
+  // Fast path for Aviator bets: validate the signed token locally, then let one
+  // SECURITY DEFINER RPC re-check active-user/role state, create the bet atomically,
+  // and return the persisted bet row. This avoids separate user, role, and readback
+  // PostgREST requests without trusting the token for current authorization state.
+  if (req.method === "POST" && path === "/games/aviator/bet") {
+    const authorization = req.headers.get("authorization") ?? "";
+    if (!authorization.startsWith("Bearer ")) return response({ error: "AUTH_REQUIRED" }, 401, origin);
+    const claims = await verifyBigDaddyToken(authorization.slice(7).trim());
+    if (!claims) return response({ error: "INVALID_TOKEN" }, 401, origin);
+    if (claims.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
+
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
+    const amount = positiveAmount(body.amount);
+    const autoCashout = body.autoCashoutMultiplier == null ? null : Number(body.autoCashoutMultiplier);
+    if (!amount || (autoCashout !== null && (!Number.isFinite(autoCashout) || autoCashout < 1.01 || autoCashout > 50))) {
+      return response({ error: "INVALID_BET" }, 400, origin);
+    }
+    const key = req.headers.get("idempotency-key")?.trim() ?? "";
+    if (key.length < 8 || key.length > 119 || !/^[A-Za-z0-9_-]+$/.test(key)) return response({ error: "INVALID_IDEMPOTENCY_KEY" }, 400, origin);
+
+    const { data, error } = await db.schema("aviator").rpc("place_crash_bet_authenticated_atomic", {
+      p_user_id: claims.id,
+      p_claimed_role: claims.role,
+      p_amount: amount,
+      p_idempotency_key: key,
+      p_auto_cashout: autoCashout,
+    });
+    if (error) {
+      const message = error.message ?? "";
+      if (/INSUFFICIENT_FUNDS/i.test(message)) return response({ error: "INSUFFICIENT_FUNDS" }, 400, origin);
+      if (/USER_NOT_FOUND_OR_DISABLED/i.test(message)) return response({ error: "USER_NOT_FOUND_OR_DISABLED" }, 401, origin);
+      if (/TOKEN_ROLE_STALE/i.test(message)) return response({ error: "TOKEN_ROLE_STALE" }, 401, origin);
+      if (/PLAYER_ONLY/i.test(message)) return response({ error: "PLAYER_ONLY" }, 403, origin);
+      if (/AUTH_SERVICE_UNAVAILABLE|BET_CREATED_BUT_READBACK_FAILED/i.test(message)) return response({ error: "AUTH_SERVICE_UNAVAILABLE" }, 503, origin);
+      if (/NO_OPEN_ROUND|BETTING_CLOSED/i.test(message)) return response({ error: "NO_OPEN_ROUND" }, 409, origin);
+      if (/IDEMPOTENCY_KEY_REUSE/i.test(message)) return response({ error: "IDEMPOTENCY_KEY_REUSE" }, 409, origin);
+      return response({ error: "BET_REJECTED" }, 400, origin);
+    }
+    if (data?.error === "NO_OPEN_ROUND") return response({ error: "NO_OPEN_ROUND" }, 409, origin);
+    if (!data?.bet) return response({ error: "BET_REJECTED" }, 400, origin);
+    return response(data, 201, origin);
+  }
+
   const auth = await actorFrom(req, db);
   if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
   const actor = auth.actor;
@@ -567,31 +612,6 @@ async function handle(req: Request) {
       .eq("game_code","aviator").in("status",["CRASHED","SETTLED"]).order("round_number",{ascending:false}).limit(20);
     if (error) return response({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
     return response({ history: (data ?? []).map(r => ({ roundNumber:Number(r.round_number), crashMultiplier:r.crash_multiplier == null ? null : Number(r.crash_multiplier), endedAt:r.ended_at, serverSeedHash:r.server_seed_hash, revealedServerSeed:r.revealed_server_seed })) }, 200, origin);
-  }
-
-  if (req.method === "POST" && path === "/games/aviator/bet") {
-    if (actor.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
-    let body: Record<string, unknown>;
-    try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
-    if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
-    const amount = positiveAmount(body.amount);
-    const autoCashout = body.autoCashoutMultiplier == null ? null : Number(body.autoCashoutMultiplier);
-    if (!amount || (autoCashout !== null && (!Number.isFinite(autoCashout) || autoCashout < 1.01 || autoCashout > 50))) {
-      return response({ error: "INVALID_BET" }, 400, origin);
-    }
-    const key = req.headers.get("idempotency-key")?.trim() ?? "";
-    if (key.length < 8 || key.length > 119 || !/^[A-Za-z0-9_-]+$/.test(key)) return response({ error: "INVALID_IDEMPOTENCY_KEY" }, 400, origin);
-    const { data: round, error: roundError } = await db.schema("aviator").from("game_rounds").select("id,status")
-      .eq("status", "WAITING").order("round_number", { ascending: false }).limit(1).maybeSingle();
-    if (roundError || !round) return response({ error: "NO_OPEN_ROUND" }, 409, origin);
-    const { data: betId, error } = await db.schema("aviator").rpc("place_crash_bet_atomic", {
-      p_user_id: actor.id, p_round_id: round.id, p_amount: amount, p_idempotency_key: key, p_auto_cashout: autoCashout,
-    });
-    if (error || !betId) return response({ error: /INSUFFICIENT_FUNDS/i.test(error?.message ?? "") ? "INSUFFICIENT_FUNDS" : "BET_REJECTED" }, 400, origin);
-    const { data: bet, error: betError } = await db.schema("aviator").from("game_bets")
-      .select("id,round_id,bet_amount,auto_cashout,status").eq("id",betId).maybeSingle();
-    if (betError || !bet) return response({ error: "BET_CREATED_BUT_READBACK_FAILED", betId }, 503, origin);
-    return response({ bet: { id:bet.id, roundId:bet.round_id, betAmount:String(bet.bet_amount), autoCashout:bet.auto_cashout, status:bet.status } }, 201, origin);
   }
 
   if (req.method === "POST" && path === "/games/aviator/cashout") {
