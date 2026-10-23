@@ -6,20 +6,39 @@ type Role = "OWNER" | "SUPER_ADMIN" | "ADMIN" | "PLAYER";
 type Actor = BigDaddyClaims & { parentId: string | null };
 const roles: Role[] = ["OWNER", "SUPER_ADMIN", "ADMIN", "PLAYER"];
 
-function response(body: Record<string, unknown>, status = 200, origin?: string | null) {
-  const headers: Record<string, string> = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
-  const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (allowed.length > 0) {
-    // Do not leave the default wildcard in place when an allowlist is configured.
+// Capacitor's Android WebView normally uses https://localhost as its origin.
+// Include the common Capacitor origins even when the browser frontend is allowlisted
+// to a Render domain. CORS is not authentication; protected routes still require a JWT.
+function corsHeadersForOrigin(origin?: string | null): Record<string, string> {
+  const configured = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const nativeOrigins = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
+  const allowed = new Set([...configured, ...nativeOrigins]);
+  const headers: Record<string, string> = { ...corsHeaders };
+  if (configured.length > 0) {
+    // Never retain wildcard access when an explicit allowlist is configured.
     delete headers["Access-Control-Allow-Origin"];
     delete headers["Vary"];
-    if (origin && allowed.includes(origin)) {
+    if (origin && allowed.has(origin)) {
       headers["Access-Control-Allow-Origin"] = origin;
       headers["Vary"] = "Origin";
     }
   } else {
+    // Preserve the existing no-allowlist behavior for deployments that intentionally
+    // allow browser clients from arbitrary origins.
     headers["Access-Control-Allow-Origin"] = "*";
   }
+  headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
+  headers["Access-Control-Allow-Headers"] = "authorization, x-client-info, apikey, content-type, idempotency-key";
+  headers["Access-Control-Max-Age"] = "86400";
+  return headers;
+}
+
+function response(body: Record<string, unknown>, status = 200, origin?: string | null) {
+  const headers: Record<string, string> = {
+    ...corsHeadersForOrigin(origin),
+    "Content-Type": "application/json; charset=utf-8",
+  };
   return new Response(JSON.stringify(body), { status, headers });
 }
 function fail(error: string, status = 400) { return { body: { error }, status }; }
@@ -92,7 +111,7 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
 
 async function handle(req: Request) {
   const origin = req.headers.get("origin");
-  if (req.method === "OPTIONS") return new Response("ok", { headers: { ...corsHeaders, ...(origin ? { "Access-Control-Allow-Origin": origin } : {}) } });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeadersForOrigin(origin) });
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/functions\/v1\/api(?=\/|$)/, "").replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/";
   if (req.method === "GET" && path === "/health") {
