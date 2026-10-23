@@ -492,7 +492,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     frameId = window.requestAnimationFrame(animate);
     return () => window.cancelAnimationFrame(frameId);
-  }, [roundState.status, roundState.startTime, roundState.id]);
+  }, [roundState.status, roundState.startTime, roundState.id, roundState.crashMultiplier]);
 
   return (
     <WebSocketContext.Provider
