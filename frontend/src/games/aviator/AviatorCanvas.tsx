@@ -29,6 +29,9 @@ interface CrashParticle {
 
 export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Keep the latest multiplier without restarting the animation loop on every tick.
+  const multiplierRef = useRef(multiplier);
+  multiplierRef.current = multiplier;
 
   // References to preserve state across render frames
   const starsRef = useRef<Star[]>([]);
@@ -108,7 +111,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       // 2. Stars Moving Animation (Speed scales up as flight multiplier increases)
       // When multiplier goes high, stars streak leftwards rapidly giving sensation of supersonic speed
       const speedMultiplier = status === 'RUNNING' 
-        ? Math.min(1 + (multiplier - 1.0) * 1.8, 12)
+        ? Math.min(1 + (multiplierRef.current - 1.0) * 1.8, 12)
         : status === 'CRASHED'
         ? 0.5
         : 0.8;
@@ -183,7 +186,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
       if (status === 'RUNNING' || status === 'CRASHED') {
         // Normalized progress smoothly maps multiplier (1.00x -> 10.00x+) into full trajectory
-        const norm = Math.min(Math.max((multiplier - 1.0) / 9.0, 0), 1.0);
+        const norm = Math.min(Math.max((multiplierRef.current - 1.0) / 9.0, 0), 1.0);
         
         // Aerodynamic flight path: smoothly takes off forward from boundary x=0 and curves into upper right
         const progressX = Math.min(Math.pow(norm, 0.72), 1.0);
@@ -246,7 +249,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
           // Jet Exhaust Flame
           const flameFlicker = (Math.sin(particleOffset * 2.5) + 1) * 3;
-          const flameLength = 12 + flameFlicker + (multiplier > 3 ? 8 : 0);
+          const flameLength = 12 + flameFlicker + (multiplierRef.current > 3 ? 8 : 0);
           const flameGrad = ctx.createLinearGradient(0, 0, -flameLength, 0);
           flameGrad.addColorStop(0, '#ffffff');
           flameGrad.addColorStop(0.3, '#fbbf24');
@@ -414,7 +417,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [status, multiplier]);
+  }, [status]);
 
   return (
     <div className="relative w-full aspect-[16/8.4] max-h-[180px] min-h-[145px] bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 shadow-md flex items-center justify-center">
