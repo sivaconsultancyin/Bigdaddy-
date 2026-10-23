@@ -27,6 +27,8 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pendingBetRequest = useRef<{ amount: string; key: string } | null>(null);
+  // Synchronous guard prevents rapid double-taps before React re-renders.
+  const cashoutInFlight = useRef(false);
 
   const handlePlaceBet = async () => {
     setError(null);
@@ -54,7 +56,8 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
   };
 
   const handleCashout = async () => {
-    if (!activeBet) return;
+    if (!activeBet || cashoutInFlight.current) return;
+    cashoutInFlight.current = true;
     setError(null);
     setLoading(true);
 
@@ -91,6 +94,7 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
     } catch (err: any) {
       setError(err.message || 'Cashout failed');
     } finally {
+      cashoutInFlight.current = false;
       setLoading(false);
     }
   };
@@ -204,7 +208,7 @@ export const AviatorBetPanel: React.FC<AviatorBetPanelProps> = ({
               disabled={loading}
               className="w-full h-9 rounded-lg font-black text-[11px] uppercase tracking-wide bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 text-zinc-950 shadow-md shadow-amber-500/30 transition-all flex flex-col items-center justify-center leading-tight active:scale-95 animate-pulse px-1"
             >
-              <span className="font-black text-[11px]">CASHOUT</span>
+              <span className="font-black text-[11px]">{loading ? 'CASHING OUT…' : 'CASHOUT'}</span>
               <span className="text-[9px] font-mono font-black truncate">
                 {currentPayout} ({currentMultiplier.toFixed(2)}x)
               </span>
