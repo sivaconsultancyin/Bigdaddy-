@@ -77,13 +77,20 @@ async function actorFrom(req: Request, db: SupabaseClient): Promise<{ actor?: Ac
   if (!header.startsWith("Bearer ")) return { error: "AUTH_REQUIRED", status: 401 };
   const claims = await verifyBigDaddyToken(header.slice(7).trim());
   if (!claims) return { error: "INVALID_TOKEN", status: 401 };
-  const { data: user, error: userError } = await db.schema("platform").from("users")
-    .select("id,username,parent_id,is_active").eq("id", claims.id).maybeSingle();
-  if (userError) return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  // These two independent authorization reads can run concurrently. Keep both checks:
+  // the active-user check and the single authoritative role assignment are security-critical.
+  const [userResult, roleResult] = await Promise.all([
+    db.schema("platform").from("users")
+      .select("id,username,parent_id,is_active").eq("id", claims.id).maybeSingle(),
+    db.schema("platform").from("role_assignments")
+      .select("role").eq("user_id", claims.id).limit(2),
+  ]);
+  const { data: user, error: userError } = userResult;
+  const { data: roleRows, error: roleError } = roleResult;
+  if (userError || roleError || !roleRows || roleRows.length !== 1) {
+    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  }
   if (!user || !user.is_active) return { error: "USER_NOT_FOUND_OR_DISABLED", status: 401 };
-  const { data: roleRows, error: roleError } = await db.schema("platform").from("role_assignments")
-    .select("role").eq("user_id", claims.id).limit(2);
-  if (roleError || !roleRows || roleRows.length !== 1) return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
   if (roleRows[0].role !== claims.role) return { error: "TOKEN_ROLE_STALE", status: 401 };
   return { actor: { ...claims, username: user.username, parentId: user.parent_id ?? null } };
 }
