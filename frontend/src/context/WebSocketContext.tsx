@@ -453,8 +453,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const animate = () => {
       const elapsedSeconds = Math.max(0, (Date.now() - roundState.startTime!) / 1000);
       const nextMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
+      // The server's crash_multiplier is authoritative even while RUNNING.
+      // Cap local animation at it so the plane/number cannot visually pass the
+      // true crash point before the next one-second state poll reports CRASHED.
+      const authoritativeCrash = Number(roundState.crashMultiplier);
+      const cappedMultiplier = Number.isFinite(authoritativeCrash) && authoritativeCrash > 0
+        ? Math.min(nextMultiplier, authoritativeCrash)
+        : nextMultiplier;
       // Never move the displayed number backwards during a running round.
-      lastRendered = Math.max(lastRendered, nextMultiplier);
+      lastRendered = Math.max(lastRendered, cappedMultiplier);
       setMultiplier(lastRendered);
       frameId = window.requestAnimationFrame(animate);
     };
