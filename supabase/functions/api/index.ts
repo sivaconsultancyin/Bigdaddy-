@@ -684,7 +684,7 @@ async function handle(req: Request) {
       roundNumber: Number(r.round_number), crashMultiplier: Number(r.crash_multiplier ?? 0), endedAt: r.ended_at,
       serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
     }));
-    if (!row) return response({ round: null, bets: [], history }, 200, origin);
+    if (!row) return response({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
     const elapsedSeconds = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
     const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
     const crashed = ["CRASHED","SETTLED"].includes(row.status);
@@ -699,7 +699,7 @@ async function handle(req: Request) {
       endedAt:row.ended_at, multiplier, crashMultiplier:crashed ? row.crash_multiplier : null,
       serverSeedHash:row.server_seed_hash, revealedServerSeed:row.revealed_server_seed,
     };
-    return response({ round: current, bets, history }, 200, origin);
+    return response({ round: current, bets, history, serverTime: new Date().toISOString() }, 200, origin);
   }
 
   if (req.method === "GET" && path === "/games/aviator/history") {
