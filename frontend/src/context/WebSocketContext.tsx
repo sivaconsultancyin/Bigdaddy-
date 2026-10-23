@@ -186,6 +186,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const simIntervalRef = useRef<any>(null);
+  const realtimeSocketRef = useRef<WebSocket | null>(null);
+  const realtimeHeartbeatRef = useRef<any>(null);
+  const realtimeReconnectRef = useRef<any>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
@@ -457,7 +460,64 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
     void poll();
-    simIntervalRef.current = setInterval(() => { void poll(); }, 1000);
+    // Supabase Realtime is a low-latency notification channel only. The API remains
+    // authoritative; every notification triggers a fresh authenticated state read.
+    // If the public anon key is not configured or Realtime disconnects, polling remains active.
+    const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+    const connectRealtime = () => {
+      if (disposedRef.current || !supabaseAnonKey || realtimeSocketRef.current) return;
+      let socket: WebSocket;
+      try {
+        const realtimeUrl = new URL('wss://nzvpuoeibqrpcltrszvr.supabase.co/realtime/v1/websocket');
+        realtimeUrl.searchParams.set('apikey', supabaseAnonKey);
+        realtimeUrl.searchParams.set('vsn', '1.0.0');
+        socket = new WebSocket(realtimeUrl.toString());
+      } catch {
+        return;
+      }
+      realtimeSocketRef.current = socket;
+      socket.onopen = () => {
+        if (disposedRef.current) { socket.close(); return; }
+        socket.send(JSON.stringify({
+          topic: 'realtime:aviator:rounds',
+          event: 'phx_join',
+          payload: {
+            config: { broadcast: { ack: false, self: false }, presence: { key: '' }, postgres_changes: [] },
+            access_token: supabaseAnonKey,
+          },
+          ref: '1',
+        }));
+        realtimeHeartbeatRef.current = window.setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(Date.now()) }));
+          }
+        }, 25000);
+      };
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data));
+          const eventName = message?.event ?? message?.payload?.event;
+          if (message?.topic === 'realtime:aviator:rounds' &&
+              (eventName === 'broadcast' || eventName === 'round_state_changed' ||
+               message?.payload?.event === 'round_state_changed')) {
+            void poll();
+          }
+        } catch {
+          // Ignore malformed frames; the authenticated state poll is the source of truth.
+        }
+      };
+      socket.onclose = () => {
+        if (realtimeSocketRef.current === socket) realtimeSocketRef.current = null;
+        if (realtimeHeartbeatRef.current) window.clearInterval(realtimeHeartbeatRef.current);
+        realtimeHeartbeatRef.current = null;
+        if (!disposedRef.current) realtimeReconnectRef.current = window.setTimeout(connectRealtime, 3000);
+      };
+      socket.onerror = () => socket.close();
+    };
+    connectRealtime();
+    // Realtime delivers round transitions quickly; a slower poll is retained as a
+    // resilience path and recovers missed events after network/browser suspension.
+    simIntervalRef.current = setInterval(() => { void poll(); }, supabaseAnonKey ? 5000 : 1000);
   };
 
   useEffect(() => {
@@ -465,6 +525,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       disposedRef.current = true;
       if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+      if (realtimeReconnectRef.current) window.clearTimeout(realtimeReconnectRef.current);
+      if (realtimeHeartbeatRef.current) window.clearInterval(realtimeHeartbeatRef.current);
+      realtimeSocketRef.current?.close();
+      realtimeSocketRef.current = null;
     };
   }, []);
 
