@@ -16,6 +16,64 @@ export class ApiRequestError extends Error {
 }
 
 export class ApiClient {
+  // Keep a key stable while an operation is uncertain (timeout/network failure).
+  // Store only a digest of the operation in localStorage so retries survive reloads
+  // without exposing transfer notes/recipient details in storage key names.
+  private static pendingIdempotencyKeys = new Map<string, string>();
+  private static pendingIdempotencyPromises = new Map<string, Promise<string>>();
+  private static pendingIdempotencyStorageKeys = new Map<string, string>();
+
+  private static async pendingKey(operation: string, prefix: string): Promise<string> {
+    const existing = this.pendingIdempotencyKeys.get(operation);
+    if (existing) return existing;
+    const inFlight = this.pendingIdempotencyPromises.get(operation);
+    if (inFlight) return inFlight;
+
+    const pending = (async () => {
+      let storageKey: string | null = null;
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(operation));
+        const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+        storageKey = `bigdaddy_pending_idempotency_${fingerprint}`;
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          this.pendingIdempotencyKeys.set(operation, stored);
+          this.pendingIdempotencyStorageKeys.set(operation, storageKey);
+          return stored;
+        }
+      } catch {
+        // Continue with an in-memory key when browser storage is unavailable.
+      }
+
+      const key = `${prefix}_${crypto.randomUUID()}`;
+      this.pendingIdempotencyKeys.set(operation, key);
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, key);
+          this.pendingIdempotencyStorageKeys.set(operation, storageKey);
+        } catch {
+          // In-memory reuse still protects retries in the current page session.
+        }
+      }
+      return key;
+    })();
+    this.pendingIdempotencyPromises.set(operation, pending);
+    try {
+      return await pending;
+    } finally {
+      this.pendingIdempotencyPromises.delete(operation);
+    }
+  }
+
+  private static clearPendingKey(operation: string) {
+    this.pendingIdempotencyKeys.delete(operation);
+    const storageKey = this.pendingIdempotencyStorageKeys.get(operation);
+    this.pendingIdempotencyStorageKeys.delete(operation);
+    if (storageKey) {
+      try { localStorage.removeItem(storageKey); } catch { /* Storage may be unavailable. */ }
+    }
+  }
+
   public static getToken(): string | null {
     return localStorage.getItem('bigdaddy_auth_token');
   }
@@ -134,11 +192,22 @@ export class ApiClient {
     return this.request('/wallet/ledger');
   }
 
-  public static transferTokens(payload: { recipientId: string; amount: string; note?: string }) {
-    return this.request('/wallet/transfer', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+  public static async transferTokens(payload: { recipientId: string; amount: string; note?: string }) {
+    const operation = `wallet-transfer:${JSON.stringify(payload)}`;
+    const idempotencyKey = await this.pendingKey(operation, 'TRANSFER');
+    try {
+      const result = await this.request('/wallet/transfer', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(payload),
+      });
+      this.clearPendingKey(operation);
+      return result;
+    } catch (error) {
+      // The server may have committed before the response was lost; retry with
+      // the same key so the database returns the original transaction.
+      throw error;
+    }
   }
 
   // Token Requests
@@ -190,19 +259,27 @@ export class ApiClient {
 
   public static async allocatePool(payload: { gameId?: string; gameCode?: string; amount: string }) {
     const gameCode = payload.gameCode || 'aviator';
-    const allocation = await this.request<{ transactionId: string; poolBalance: string; gameCode: string }>('/wallet/game-pool', {
-      method: 'POST',
-      headers: { 'Idempotency-Key': `POOL_ALLOCATION_${gameCode}_${crypto.randomUUID()}` },
-      body: JSON.stringify({ amount: payload.amount, gameCode }),
-    });
+    const operation = `pool-allocation:${gameCode}:${String(payload.amount).trim()}`;
+    const idempotencyKey = await this.pendingKey(operation, `POOL_ALLOCATION_${gameCode}`);
+    try {
+      const allocation = await this.request<{ transactionId: string; poolBalance: string; gameCode: string }>('/wallet/game-pool', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ amount: payload.amount, gameCode }),
+      });
 
-    // Activate only after the Treasury-to-pool transfer succeeds.
-    const activation = await this.request<{ status: string; poolBalance: string; gameCode?: string }>(`/games/${encodeURIComponent(gameCode)}/activate`, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    });
+      // Activation is a second request. If it fails after the transfer commits,
+      // keep the allocation key so retrying does not transfer the funds twice.
+      const activation = await this.request<{ status: string; poolBalance: string; gameCode?: string }>(`/games/${encodeURIComponent(gameCode)}/activate`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
 
-    return { ...allocation, ...activation };
+      this.clearPendingKey(operation);
+      return { ...allocation, ...activation };
+    } catch (error) {
+      throw error;
+    }
   }
 
   // Audit

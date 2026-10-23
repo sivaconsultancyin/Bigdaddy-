@@ -32,7 +32,7 @@ Deno.serve(async (req: Request) => {
       .schema("platform")
       .from("users")
       .select("id,username,email,password_hash,parent_id,referred_by_user_id,is_active")
-      .ilike("username", username.trim())
+      .ilike("username", username.trim().replace(/[\\%_]/g, "\\$&"))
       .limit(2);
     if (userError) {
       console.error("Login user lookup failed:", userError.code ?? "unknown");
