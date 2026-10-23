@@ -581,12 +581,13 @@ async function handle(req: Request) {
     }
     const key = req.headers.get("idempotency-key")?.trim() ?? "";
     if (key.length < 8 || key.length > 119 || !/^[A-Za-z0-9_-]+$/.test(key)) return response({ error: "INVALID_IDEMPOTENCY_KEY" }, 400, origin);
-    const { data: round, error: roundError } = await db.schema("aviator").from("game_rounds").select("id,status")
-      .eq("status", "WAITING").order("round_number", { ascending: false }).limit(1).maybeSingle();
-    if (roundError || !round) return response({ error: "NO_OPEN_ROUND" }, 409, origin);
-    const { data: betId, error } = await db.schema("aviator").rpc("place_crash_bet_atomic", {
-      p_user_id: actor.id, p_round_id: round.id, p_amount: amount, p_idempotency_key: key, p_auto_cashout: autoCashout,
+    // Resolve the current WAITING round inside the database RPC. This removes a
+    // separate network round-trip while the atomic bet RPC still locks and validates
+    // the round before moving funds.
+    const { data: betId, error } = await db.schema("aviator").rpc("place_crash_bet_current_round_atomic", {
+      p_user_id: actor.id, p_amount: amount, p_idempotency_key: key, p_auto_cashout: autoCashout,
     });
+    if (!error && !betId) return response({ error: "NO_OPEN_ROUND" }, 409, origin);
     if (error || !betId) return response({ error: /INSUFFICIENT_FUNDS/i.test(error?.message ?? "") ? "INSUFFICIENT_FUNDS" : "BET_REJECTED" }, 400, origin);
     const { data: bet, error: betError } = await db.schema("aviator").from("game_bets")
       .select("id,round_id,bet_amount,auto_cashout,status").eq("id",betId).maybeSingle();
