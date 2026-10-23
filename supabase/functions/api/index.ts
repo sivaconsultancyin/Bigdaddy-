@@ -267,6 +267,15 @@ async function handle(req: Request) {
         round: null, history: [], bets: [], allBets: [],
       }, 200, origin);
     }
+    // Roulette's durable lifecycle is advanced only by this server-side RPC.
+    // It creates persisted rounds and settles expired rounds in one database transaction.
+    if (code === "roulette") {
+      const { error: lifecycleError } = await db.schema("roulette").rpc("advance_round");
+      if (lifecycleError) {
+        console.error("Roulette lifecycle advance failed:", lifecycleError.code ?? "unknown");
+        return response({ error: "ROULETTE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     const { data: rounds, error: roundError } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
     if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
@@ -746,6 +755,14 @@ async function handle(req: Request) {
     return response({ logs: data ?? [] }, 200, origin);
   }
 
+
+  // Roulette spin is server-managed; clients cannot submit or choose a winning result.
+  if (req.method === "POST" && path === "/games/roulette/spin") {
+    if (actor.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
+    const { data, error } = await db.schema("roulette").rpc("advance_round");
+    if (error || !data) return response({ error: "ROULETTE_RUNTIME_UNAVAILABLE" }, 503, origin);
+    return response(data, 200, origin);
+  }
 
   const gameBetMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/(bet|spin|roll)$/);
   if (req.method === "POST" && gameBetMatch) {
