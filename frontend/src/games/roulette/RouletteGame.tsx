@@ -38,7 +38,6 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
   const { rouletteRound: websocketRound, rouletteHistory: websocketHistory } = useWebSocket();
   const [authoritativeRound, setAuthoritativeRound] = useState<any | null>(null);
   const [authoritativeHistory, setAuthoritativeHistory] = useState<any[]>([]);
-  const [authoritativeBets, setAuthoritativeBets] = useState<any[]>([]);
   // Once the Supabase round has loaded, no in-memory WebSocket round/history is used.
   const rouletteRound = authoritativeRound ?? websocketRound;
   const rouletteHistory = authoritativeRound ? authoritativeHistory : websocketHistory;
@@ -72,10 +71,10 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
 
   // Initialize lastSettledNumber from history on mount
   useEffect(() => {
-    if (lastSettledNumber === null && rouletteHistory.length > 0) {
+    if (authoritativeRound && lastSettledNumber === null && rouletteHistory.length > 0) {
       setLastSettledNumber(rouletteHistory[0].number);
     }
-  }, [rouletteHistory, lastSettledNumber]);
+  }, [authoritativeRound, rouletteHistory, lastSettledNumber]);
 
   const handleTestSpin = () => {
     setErrorMessage('Preview spins are disabled. The winning number comes only from the authoritative server round.');
@@ -131,11 +130,9 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
             roundNumber: item.roundNumber,
             timestamp: item.timestamp,
           })) : []);
-          setAuthoritativeBets(Array.isArray(data.bets) ? data.bets : []);
         } else {
           setAuthoritativeRound(null);
           setAuthoritativeHistory([]);
-          setAuthoritativeBets([]);
         }
         setGameAvailability(ready ? 'active' : 'unavailable');
       } catch {
@@ -144,7 +141,7 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
     };
 
     void refreshAvailability();
-    const interval = window.setInterval(() => void refreshAvailability(), 5000);
+    const interval = window.setInterval(() => void refreshAvailability(), 1000);
     return () => {
       mounted = false;
       window.clearInterval(interval);
