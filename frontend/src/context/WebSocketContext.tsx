@@ -457,7 +457,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
     void poll();
-    simIntervalRef.current = setInterval(() => { void poll(); }, 1000);
+    simIntervalRef.current = setInterval(() => { void poll(); }, 250);
   };
 
   useEffect(() => {
