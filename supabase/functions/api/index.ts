@@ -58,16 +58,30 @@ async function actorFrom(req: Request, db: SupabaseClient): Promise<{ actor?: Ac
   if (!header.startsWith("Bearer ")) return { error: "AUTH_REQUIRED", status: 401 };
   const claims = await verifyBigDaddyToken(header.slice(7).trim());
   if (!claims) return { error: "INVALID_TOKEN", status: 401 };
-  // Resolve account status and role in one PostgREST round-trip. The FK from
-  // role_assignments.user_id to users.id lets PostgREST embed the role rows.
-  // Keep the exactly-one-role invariant and stale-token check unchanged.
+  // Keep account and role reads separate here. The embedded PostgREST relationship
+  // has caused AUTH_SERVICE_UNAVAILABLE on every authenticated route in production.
+  // Both queries remain server-side and we still require exactly one current role.
   const { data: user, error: userError } = await db.schema("platform").from("users")
-    .select("id,username,parent_id,is_active,role_assignments!role_assignments_user_id_fkey!inner(role)")
+    .select("id,username,parent_id,is_active")
     .eq("id", claims.id).maybeSingle();
-  if (userError) return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  if (userError) {
+    console.error("Auth actor user lookup failed:", userError.code ?? "unknown");
+    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  }
   if (!user || !user.is_active) return { error: "USER_NOT_FOUND_OR_DISABLED", status: 401 };
-  const roleRows = user.role_assignments;
-  if (!Array.isArray(roleRows) || roleRows.length !== 1) return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+
+  const { data: roleRows, error: roleError } = await db.schema("platform").from("role_assignments")
+    .select("role")
+    .eq("user_id", user.id)
+    .limit(2);
+  if (roleError) {
+    console.error("Auth actor role lookup failed:", roleError.code ?? "unknown");
+    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  }
+  if (!roleRows || roleRows.length !== 1) {
+    console.error("Auth actor role invariant failed: expected exactly one role assignment.");
+    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  }
   if (roleRows[0]?.role !== claims.role) return { error: "TOKEN_ROLE_STALE", status: 401 };
   return { actor: { ...claims, username: user.username, parentId: user.parent_id ?? null } };
 }
