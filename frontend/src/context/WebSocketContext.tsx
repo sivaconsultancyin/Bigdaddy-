@@ -313,7 +313,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             // Game-state endpoints are authenticated. Read the current token on
             // every poll so login/logout changes are reflected without remounting.
             const token = ApiClient.getToken();
-            if (!token) return { key, data: null, error: 'AUTH_REQUIRED' };
+            if (!token) return { key, data: null, error: 'AUTH_REQUIRED', receivedAt: null };
 
             const response = await fetch(apiBase + path, {
               cache: 'no-store',
@@ -323,11 +323,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               },
               signal: controller.signal,
             });
-            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}` };
+            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}`, receivedAt: null };
             const data = await response.json();
             return { key, data, error: null, receivedAt: Date.now() };
           } catch (error) {
-            return { key, data: null, error: error instanceof Error ? (error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR') : 'NETWORK_ERROR' };
+            return { key, data: null, error: error instanceof Error ? (error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR') : 'NETWORK_ERROR', receivedAt: null };
           } finally {
             window.clearTimeout(timeoutId);
           }
