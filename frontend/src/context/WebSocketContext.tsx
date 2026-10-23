@@ -476,6 +476,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return;
       }
       realtimeSocketRef.current = socket;
+      const joinRef = 'aviator-rounds-join';
+      let joined = false;
       socket.onopen = () => {
         if (disposedRef.current) { socket.close(); return; }
         socket.send(JSON.stringify({
@@ -483,9 +485,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           event: 'phx_join',
           payload: {
             config: { broadcast: { ack: false, self: false }, presence: { key: '' }, postgres_changes: [] },
-            access_token: supabaseAnonKey,
           },
-          ref: '1',
+          ref: joinRef,
         }));
         realtimeHeartbeatRef.current = window.setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) {
@@ -496,10 +497,25 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(String(event.data));
-          const eventName = message?.event ?? message?.payload?.event;
-          if (message?.topic === 'realtime:aviator:rounds' &&
-              (eventName === 'broadcast' || eventName === 'round_state_changed' ||
-               message?.payload?.event === 'round_state_changed')) {
+          if (message?.topic === 'realtime:aviator:rounds' && message?.event === 'phx_reply' &&
+              String(message?.ref) === joinRef) {
+            joined = message?.payload?.status === 'ok';
+            if (joined) {
+              // Recover the latest authoritative state immediately after joining.
+              void poll();
+            } else {
+              console.warn('[Realtime] Aviator channel join failed:', message?.payload?.response ?? message?.payload);
+            }
+            return;
+          }
+
+          if (!joined || message?.topic !== 'realtime:aviator:rounds' || message?.event !== 'broadcast') return;
+
+          // Supabase broadcast frames wrap the application event as
+          // payload.event + payload.payload; accept the direct payload shape too.
+          const broadcast = message?.payload;
+          const broadcastEvent = broadcast?.event ?? message?.event;
+          if (broadcastEvent === 'round_state_changed') {
             void poll();
           }
         } catch {
