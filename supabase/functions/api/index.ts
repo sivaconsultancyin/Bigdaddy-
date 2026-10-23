@@ -330,6 +330,40 @@ async function handle(req: Request) {
     return response(data, 201, origin);
   }
 
+  // Cashout uses a single authenticated database RPC. JWT signature validation
+  // stays in the Edge Function; account/role checks and financial settlement run
+  // together in Postgres to remove one serial PostgREST round-trip from the hot path.
+  if (req.method === "POST" && path === "/games/aviator/cashout") {
+    const header = req.headers.get("authorization") ?? "";
+    if (!header.startsWith("Bearer ")) return response({ error: "AUTH_REQUIRED" }, 401, origin);
+    const claims = await verifyBigDaddyToken(header.slice(7).trim());
+    if (!claims) return response({ error: "INVALID_TOKEN" }, 401, origin);
+    if (claims.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
+
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
+    const betId = String(body.betId ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(betId)) return response({ error: "INVALID_BET_ID" }, 400, origin);
+    const key = req.headers.get("idempotency-key")?.trim() || `CASHOUT_${betId.replace(/-/g, "")}`;
+    if (key.length < 8 || key.length > 96 || !/^[A-Za-z0-9_-]+$/.test(key)) {
+      return response({ error: "INVALID_CASHOUT_IDEMPOTENCY_KEY" }, 400, origin);
+    }
+
+    const { data, error } = await db.schema("aviator").rpc("cashout_crash_bet_authenticated_atomic", {
+      p_user_id: claims.id, p_claimed_role: claims.role, p_bet_id: betId, p_idempotency_key: key,
+    });
+    if (error || !data) {
+      const message = error?.message ?? "";
+      if (/USER_NOT_FOUND_OR_DISABLED/i.test(message)) return response({ error: "USER_NOT_FOUND_OR_DISABLED" }, 401, origin);
+      if (/TOKEN_ROLE_STALE/i.test(message)) return response({ error: "TOKEN_ROLE_STALE" }, 401, origin);
+      if (/PLAYER_ONLY/i.test(message)) return response({ error: "PLAYER_ONLY" }, 403, origin);
+      if (/AUTH_SERVICE_UNAVAILABLE/i.test(message)) return response({ error: "AUTH_SERVICE_UNAVAILABLE" }, 503, origin);
+      return response({ error: /ALREADY|CASHOUT|SETTLED|ROUND/i.test(message) ? "BET_ALREADY_CASHED_OUT_OR_UNAVAILABLE" : "CASHOUT_REJECTED" }, 409, origin);
+    }
+    return response({ result: data }, 200, origin);
+  }
+
   const auth = await actorFrom(req, db);
   if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
   const actor = auth.actor;
@@ -636,20 +670,7 @@ async function handle(req: Request) {
     return response({ history: (data ?? []).map(r => ({ roundNumber:Number(r.round_number), crashMultiplier:r.crash_multiplier == null ? null : Number(r.crash_multiplier), endedAt:r.ended_at, serverSeedHash:r.server_seed_hash, revealedServerSeed:r.revealed_server_seed })) }, 200, origin);
   }
 
-  if (req.method === "POST" && path === "/games/aviator/cashout") {
-    if (actor.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
-    let body: Record<string, unknown>;
-    try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
-    if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
-    const betId = String(body.betId ?? "");
-    if (!/^[0-9a-f-]{36}$/i.test(betId)) return response({ error: "INVALID_BET_ID" }, 400, origin);
-    const key = req.headers.get("idempotency-key")?.trim() || `CASHOUT_${betId.replace(/-/g,"")}`;
-    const { data, error } = await db.schema("aviator").rpc("cashout_crash_bet_atomic", {
-      p_user_id: actor.id, p_bet_id: betId, p_idempotency_key: key,
-    });
-    if (error || !data) return response({ error: /ALREADY|CASHOUT/i.test(error?.message ?? "") ? "BET_ALREADY_CASHED_OUT_OR_UNAVAILABLE" : "CASHOUT_REJECTED" }, 409, origin);
-    return response({ result: data }, 200, origin);
-  }
+
 
   if (req.method === "GET" && path === "/requests/list") {
     const { data, error } = await db.schema("platform").from("token_requests")
