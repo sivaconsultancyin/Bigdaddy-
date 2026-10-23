@@ -364,16 +364,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 startTime: round.startedAt ? new Date(round.startedAt).getTime() - serverClockOffsetMs : undefined,
                 crashMultiplier: round.crashMultiplier ?? undefined,
               });
-              // While running, the display is animated locally at frame rate. Keep
-              // server-provided values for non-running states so crash/result freezes
-              // immediately when the authoritative API reports it.
-              if (round.status !== 'RUNNING') {
-                // Freeze terminal rounds at the committed crash point, never a derived live value.
-                const terminalMultiplier = ['CRASHED', 'SETTLED'].includes(round.status)
-                  ? round.crashMultiplier ?? round.multiplier ?? 1
-                  : round.multiplier ?? 1;
-                setMultiplier(Number(terminalMultiplier));
-              }
+              // The API computes the live multiplier and caps it at the committed
+              // crash point. Never extrapolate on the client: doing so can show 1.50x
+              // even when the authoritative round crashed at 1.14x.
+              const authoritativeMultiplier = ['CRASHED', 'SETTLED'].includes(round.status)
+                ? round.crashMultiplier ?? round.multiplier ?? 1
+                : round.multiplier ?? 1;
+              setMultiplier(Number(authoritativeMultiplier));
               refreshWalletForResult('aviator', round);
             }
             if (Array.isArray(data.history)) {
@@ -480,31 +477,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, []);
 
-  // Smooth the visible multiplier between 500ms API polls. This is display-only:
-  // backend state remains authoritative for bets, cashouts, crashes and settlement.
-  // The curve matches production.engine.ts and is evaluated every animation frame.
-  useEffect(() => {
-    if (roundState.status !== 'RUNNING' || !roundState.startTime) return;
-    let frameId = 0;
-    let lastRendered = 1;
-    const animate = () => {
-      const elapsedSeconds = Math.max(0, (Date.now() - roundState.startTime!) / 1000);
-      const nextMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
-      // The server's crash_multiplier is authoritative even while RUNNING.
-      // Cap local animation so it cannot visually pass the true crash point
-      // before the next state poll reports CRASHED.
-      const authoritativeCrash = Number(roundState.crashMultiplier);
-      const cappedMultiplier = Number.isFinite(authoritativeCrash) && authoritativeCrash > 0
-        ? Math.min(nextMultiplier, authoritativeCrash)
-        : nextMultiplier;
-      // Never move the displayed number backwards during a running round.
-      lastRendered = Math.max(lastRendered, cappedMultiplier);
-      setMultiplier(lastRendered);
-      frameId = window.requestAnimationFrame(animate);
-    };
-    frameId = window.requestAnimationFrame(animate);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [roundState.status, roundState.startTime, roundState.id, roundState.crashMultiplier]);
+  // The displayed multiplier comes directly from the authoritative API response.
 
   return (
     <WebSocketContext.Provider
