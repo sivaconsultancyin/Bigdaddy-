@@ -333,6 +333,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         }));
         const aviatorResult = results.find(({ key }) => key === 'aviator');
+        // Align local animation to the API clock so a device clock skew cannot move the displayed crash point.
+        const responseReceivedAt = Date.now();
+        const serverTimeMs = aviatorResult?.data?.serverTime ? Date.parse(aviatorResult.data.serverTime) : NaN;
+        const serverClockOffsetMs = Number.isFinite(serverTimeMs) ? serverTimeMs - responseReceivedAt : 0;
         const validAviatorState = Boolean(aviatorResult?.data && typeof aviatorResult.data === 'object' &&
           (aviatorResult.data.round || Array.isArray(aviatorResult.data.history)));
         if (validAviatorState) {
@@ -359,13 +363,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 id: round.id,
                 roundNumber: round.roundNumber,
                 status: round.status,
-                startTime: round.startedAt ? new Date(round.startedAt).getTime() : undefined,
+                startTime: round.startedAt ? new Date(round.startedAt).getTime() - serverClockOffsetMs : undefined,
                 crashMultiplier: round.crashMultiplier ?? undefined,
               });
               // While running, the display is animated locally at frame rate. Keep
               // server-provided values for non-running states so crash/result freezes
               // immediately when the authoritative API reports it.
-              if (round.status !== 'RUNNING') setMultiplier(Number(round.multiplier ?? round.crashMultiplier ?? 1));
+              if (round.status !== 'RUNNING') {
+                // Freeze terminal rounds at the committed crash point, never a derived live value.
+                const terminalMultiplier = ['CRASHED', 'SETTLED'].includes(round.status)
+                  ? round.crashMultiplier ?? round.multiplier ?? 1
+                  : round.multiplier ?? 1;
+                setMultiplier(Number(terminalMultiplier));
+              }
               refreshWalletForResult('aviator', round);
             }
             if (Array.isArray(data.history)) {
