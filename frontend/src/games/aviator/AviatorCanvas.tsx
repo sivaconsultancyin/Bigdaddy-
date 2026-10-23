@@ -39,6 +39,8 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
   const crashAnimationProgressRef = useRef<number>(0);
   const lastStatusRef = useRef<string>(status);
   const planePosRef = useRef<{ x: number; y: number; angle: number }>({ x: 14, y: 275, angle: -0.1 });
+  // Lock the exact last rendered flight position when the round crashes.
+  const crashPosRef = useRef<{ x: number; y: number; angle: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -65,7 +67,10 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
     // Trigger crash animation particles on status switch to CRASHED
     if (status === 'CRASHED' && lastStatusRef.current !== 'CRASHED') {
-      const origin = planePosRef.current;
+      // Freeze the plane at its last RUNNING frame so a final multiplier update
+      // cannot move the crash point forward or backward after the crash event.
+      crashPosRef.current = { ...planePosRef.current };
+      const origin = crashPosRef.current;
       const particles: CrashParticle[] = [];
       const colors = ['#ef4444', '#dc2626', '#f97316', '#fbbf24', '#ffffff', '#7f1d1d'];
       for (let i = 0; i < 40; i++) {
@@ -87,6 +92,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       crashParticlesRef.current = particles;
       crashAnimationProgressRef.current = 0;
     } else if (status === 'WAITING') {
+      crashPosRef.current = null;
       crashParticlesRef.current = [];
       crashAnimationProgressRef.current = 0;
     }
@@ -194,8 +200,14 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
         // Plane starts with tail at the boundary (14px) and travels to maxEndX
         const initialPlaneX = 14;
-        const currentX = initialPlaneX + (maxEndX - initialPlaneX) * progressX;
-        const currentY = startY - (startY - maxEndY) * progressY;
+        const calculatedX = initialPlaneX + (maxEndX - initialPlaneX) * progressX;
+        const calculatedY = startY - (startY - maxEndY) * progressY;
+        const currentX = status === 'CRASHED' && crashPosRef.current
+          ? crashPosRef.current.x
+          : calculatedX;
+        const currentY = status === 'CRASHED' && crashPosRef.current
+          ? crashPosRef.current.y
+          : calculatedY;
 
         // Smooth control points for natural upward aerodynamic arc starting from boundary
         const controlX = currentX * 0.48;
@@ -206,7 +218,9 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
         const tangentDy = 2 * (1 - progressY) * (controlY - startY) + 2 * progressY * (currentY - controlY);
         const climbAngle = Math.min(Math.max(Math.atan2(tangentDy, tangentDx), -0.46), -0.06);
 
-        planePosRef.current = { x: currentX, y: currentY, angle: climbAngle };
+        if (status === 'RUNNING') {
+          planePosRef.current = { x: currentX, y: currentY, angle: climbAngle };
+        }
 
         // 4. Draw Trajectory Glow Curve & Area (originates directly from boundary 0)
         const fillGrad = ctx.createLinearGradient(0, currentY, 0, height);
