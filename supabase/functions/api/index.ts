@@ -295,7 +295,7 @@ async function handle(req: Request) {
     if (code === "dragon_tiger") { current.dragonBetAmount=String(totals.get("dragon")??0n); current.tigerBetAmount=String(totals.get("tiger")??0n); current.tieBetAmount=String((totals.get("tie")??0n)+(totals.get("suited_tie")??0n)); }
     if (code === "andar_bahar") { current.andarBetAmount=String(totals.get("andar")??0n); current.baharBetAmount=String(totals.get("bahar")??0n); }
     const history = rounds.filter(r => r.status === "SETTLED").map(r => ({ roundNumber:Number(r.round_number), result:r.result, timestamp:r.settled_at }));
-    return response({ round: current, history, bets: mappedBets, allBets: mappedBets }, 200, origin);
+    return response({ gameCode: code, status: gameConfig.status, round: current, history, bets: mappedBets, allBets: mappedBets }, 200, origin);
   }
 
 
