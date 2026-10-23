@@ -92,7 +92,22 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
 
 async function handle(req: Request) {
   const origin = req.headers.get("origin");
-  if (req.method === "OPTIONS") return new Response("ok", { headers: { ...corsHeaders, ...(origin ? { "Access-Control-Allow-Origin": origin } : {}) } });
+  if (req.method === "OPTIONS") {
+    const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const headers: Record<string, string> = { ...corsHeaders };
+    // Apply the same origin policy to preflight requests as to normal API responses.
+    delete headers["Access-Control-Allow-Origin"];
+    delete headers["Vary"];
+    if (allowed.length === 0) {
+      headers["Access-Control-Allow-Origin"] = "*";
+    } else if (origin && allowed.includes(origin)) {
+      headers["Access-Control-Allow-Origin"] = origin;
+      headers["Vary"] = "Origin";
+    } else {
+      return new Response(null, { status: 403, headers });
+    }
+    return new Response(null, { status: 204, headers });
+  }
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/functions\/v1\/api(?=\/|$)/, "").replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/";
   if (req.method === "GET" && path === "/health") {
@@ -172,7 +187,7 @@ async function handle(req: Request) {
     // Email login is accepted by validation above, so query the email column for it.
     const { data: users, error: userError } = username.includes("@")
       ? await userLookup.eq("email", username.toLowerCase()).limit(2)
-      : await userLookup.ilike("username", username).limit(2);
+      : await userLookup.ilike("username", username.replace(/[\\%_]/g, "\\      : await userLookup.ilike("username", username).limit(2);")).limit(2);
     if (userError) return response({ error: "AUTH_SERVICE_UNAVAILABLE" }, 503, origin);
     if (!users || users.length !== 1 || !users[0].is_active || !(await bcrypt.compare(password, users[0].password_hash))) {
       return response({ error: "INVALID_USERNAME_OR_PASSWORD" }, 401, origin);
