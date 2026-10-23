@@ -584,11 +584,13 @@ async function handle(req: Request) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
     const code = activationMatch[1] === "dragon-tiger" ? "dragon_tiger"
       : activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
-    // Only Aviator has a verified production round/settlement engine. Never
-    // advertise another game as active until its scheduler and settlement path exist.
-    if (code !== "aviator") return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
+    // Roulette now has a persisted PostgreSQL round lifecycle and atomic settlement.
+    // Keep games without a verified production engine blocked.
+    if (code !== "aviator" && code !== "roulette") {
+      return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
+    }
     const { data: game, error: gameError } = await db.schema("platform").from("games")
-      .select("id,pool_wallet_id").eq("code", code).maybeSingle();
+      .select("id,status,pool_wallet_id").eq("code", code).maybeSingle();
     if (gameError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
     const { data: pool, error: poolError } = await db.schema("wallet").from("wallets")
@@ -601,6 +603,21 @@ async function handle(req: Request) {
     const { error: updateError } = await db.schema("platform").from("games")
       .update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", code);
     if (updateError) return response({ error: "GAME_ACTIVATION_FAILED" }, 503, origin);
+    // Smoke-test Roulette's durable lifecycle before confirming activation. If the
+    // lifecycle RPC is missing or cannot create/read the first round, roll back a
+    // newly activated game instead of leaving the UI advertising a broken game.
+    if (code === "roulette") {
+      const { data: runtimeState, error: runtimeError } = await db.schema("roulette").rpc("advance_round");
+      if (runtimeError || !runtimeState || runtimeState.gameStateUnavailable || !runtimeState.round?.id) {
+        if (game.status !== "ACTIVE") {
+          await db.schema("platform").from("games").update({
+            status: "COMING_SOON", updated_at: new Date().toISOString(),
+          }).eq("code", code).eq("status", "ACTIVE");
+        }
+        console.error("Roulette activation runtime check failed:", runtimeError?.code ?? "unavailable");
+        return response({ error: "ROULETTE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     try {
       await audit(db, actor.id, "GAME_ACTIVATED", "GAME", game.id, { gameCode: code, poolBalance });
     } catch {
