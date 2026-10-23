@@ -544,7 +544,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     connectRealtime();
     // Realtime delivers round transitions quickly; a slower poll is retained as a
     // resilience path and recovers missed events after network/browser suspension.
-    simIntervalRef.current = setInterval(() => { void poll(); }, supabaseAnonKey ? 5000 : 1000);
+    simIntervalRef.current = setInterval(() => { void poll(); }, 500);
   };
 
   useEffect(() => {
