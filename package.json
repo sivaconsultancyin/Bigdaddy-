@@ -11,9 +11,13 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "APP_MODE=development NODE_ENV=test tsx test/run_tests.ts",
-    "start:aviator-worker": "tsx aviator-worker.ts"
+    "start:aviator-worker": "tsx aviator-worker.ts",
+    "apk:sync": "cap sync android",
+    "apk:open": "cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/bcryptjs": "^3.0.0",
@@ -38,10 +42,13 @@
     "react-dom": "^19.0.1",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
+    "typescript": "5.9.3",
     "vite": "^8.3.0",
     "ws": "^8.22.0",
     "zod": "^4.6.5",
     "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
   }
 }
