@@ -1,11 +1,19 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
+import { Capacitor } from '@capacitor/core';
 
 // Production frontend is served by Render, while API requests go to Supabase Edge Functions.
 // Keep VITE_API_BASE_URL overridable for preview/staging environments.
-const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
-const API_BASE = import.meta.env.PROD
-  ? SUPABASE_API_BASE
-  : (import.meta.env.VITE_API_BASE_URL || '/api');
+export const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
+
+// Native APKs must always call the deployed Supabase API directly, regardless of
+// the Vite mode used to produce the bundle. Browser development may still override
+// the endpoint; production browser builds use the same authoritative API.
+export function getApiBaseUrl(): string {
+  if (Capacitor.isNativePlatform() || import.meta.env.PROD) return SUPABASE_API_BASE;
+  return import.meta.env.VITE_API_BASE_URL || '/api';
+}
+
+const API_BASE = getApiBaseUrl();
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
 export class ApiRequestError extends Error {
