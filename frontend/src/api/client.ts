@@ -292,12 +292,18 @@ export class ApiClient {
     return this.request('/games/aviator/state');
   }
 
-  public static placeAviatorBet(payload: { amount: string; autoCashoutMultiplier?: number | null }, idempotencyKey: string = 'aviator-bet-' + crypto.randomUUID()) {
-    return this.request('/games/aviator/bet', {
+  public static async placeAviatorBet(payload: { amount: string; autoCashoutMultiplier?: number | null }, idempotencyKey?: string) {
+    // Reuse the same key if the server committed the bet but the response was lost.
+    // An explicitly supplied key remains supported for callers that manage the intent.
+    const operation = `aviator-bet:${JSON.stringify(payload)}`;
+    const key = idempotencyKey ?? await this.pendingKey(operation, 'AVIATOR_BET');
+    const result = await this.request('/games/aviator/bet', {
       method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey },
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(payload),
     });
+    if (!idempotencyKey) this.clearPendingKey(operation);
+    return result;
   }
 
   public static cashoutAviatorBet(payload: { betId: string }) {
