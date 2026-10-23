@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/frontend-only-apk
+      - feature/supabase-data-api-migration
 
 permissions:
   contents: read
