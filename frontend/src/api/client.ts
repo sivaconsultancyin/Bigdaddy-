@@ -17,21 +17,63 @@ export class ApiRequestError extends Error {
 
 export class ApiClient {
   // Keep a key stable while an operation is uncertain (timeout/network failure).
-  // Remove it only after the whole logical operation has succeeded.
+  // Store only a digest of the operation in localStorage so retries survive reloads
+  // without exposing transfer notes/recipient details in storage key names.
   private static pendingIdempotencyKeys = new Map<string, string>();
+  private static pendingIdempotencyPromises = new Map<string, Promise<string>>();
+  private static pendingIdempotencyStorageKeys = new Map<string, string>();
 
-  private static pendingKey(operation: string, prefix: string): string {
-    let key = this.pendingIdempotencyKeys.get(operation);
-    if (!key) {
-      key = `${prefix}_${crypto.randomUUID()}`;
+  private static async pendingKey(operation: string, prefix: string): Promise<string> {
+    const existing = this.pendingIdempotencyKeys.get(operation);
+    if (existing) return existing;
+    const inFlight = this.pendingIdempotencyPromises.get(operation);
+    if (inFlight) return inFlight;
+
+    const pending = (async () => {
+      let storageKey: string | null = null;
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(operation));
+        const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+        storageKey = `bigdaddy_pending_idempotency_${fingerprint}`;
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          this.pendingIdempotencyKeys.set(operation, stored);
+          this.pendingIdempotencyStorageKeys.set(operation, storageKey);
+          return stored;
+        }
+      } catch {
+        // Continue with an in-memory key when browser storage is unavailable.
+      }
+
+      const key = `${prefix}_${crypto.randomUUID()}`;
       this.pendingIdempotencyKeys.set(operation, key);
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, key);
+          this.pendingIdempotencyStorageKeys.set(operation, storageKey);
+        } catch {
+          // In-memory reuse still protects retries in the current page session.
+        }
+      }
+      return key;
+    })();
+    this.pendingIdempotencyPromises.set(operation, pending);
+    try {
+      return await pending;
+    } finally {
+      this.pendingIdempotencyPromises.delete(operation);
     }
-    return key;
   }
 
   private static clearPendingKey(operation: string) {
     this.pendingIdempotencyKeys.delete(operation);
+    const storageKey = this.pendingIdempotencyStorageKeys.get(operation);
+    this.pendingIdempotencyStorageKeys.delete(operation);
+    if (storageKey) {
+      try { localStorage.removeItem(storageKey); } catch { /* Storage may be unavailable. */ }
+    }
   }
+
   public static getToken(): string | null {
     return localStorage.getItem('bigdaddy_auth_token');
   }
@@ -152,7 +194,7 @@ export class ApiClient {
 
   public static async transferTokens(payload: { recipientId: string; amount: string; note?: string }) {
     const operation = `wallet-transfer:${JSON.stringify(payload)}`;
-    const idempotencyKey = this.pendingKey(operation, 'TRANSFER');
+    const idempotencyKey = await this.pendingKey(operation, 'TRANSFER');
     try {
       const result = await this.request('/wallet/transfer', {
         method: 'POST',
@@ -218,7 +260,7 @@ export class ApiClient {
   public static async allocatePool(payload: { gameId?: string; gameCode?: string; amount: string }) {
     const gameCode = payload.gameCode || 'aviator';
     const operation = `pool-allocation:${gameCode}:${String(payload.amount).trim()}`;
-    const idempotencyKey = this.pendingKey(operation, `POOL_ALLOCATION_${gameCode}`);
+    const idempotencyKey = await this.pendingKey(operation, `POOL_ALLOCATION_${gameCode}`);
     try {
       const allocation = await this.request<{ transactionId: string; poolBalance: string; gameCode: string }>('/wallet/game-pool', {
         method: 'POST',
