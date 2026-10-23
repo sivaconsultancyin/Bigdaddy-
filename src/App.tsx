@@ -10,7 +10,7 @@ import { AlertTriangle } from 'lucide-react';
 import { ApiStatusBanner } from '../frontend/src/components/common/ApiStatusBanner';
 
 const MainLayout: React.FC = () => {
-  const { user, loading, refreshWallet, configError, authError } = useAuth();
+  const { user, loading, refreshWallet, refreshUser, configError, authError } = useAuth();
   const [activeTab, setActiveTab] = useState<MobileTab>('dashboard');
   const [activeGameCode, setActiveGameCode] = useState<string | null>(null);
   const [isTokenRequestOpen, setIsTokenRequestOpen] = useState(false);
@@ -56,6 +56,32 @@ const MainLayout: React.FC = () => {
   }
 
   if (!user) {
+    // A 503/network failure does not mean the saved token is invalid. Avoid
+    // sending a returning user back to the login form while session verification
+    // is temporarily unavailable; let them retry with the same saved token.
+    const verificationUnavailable = Boolean(authError?.startsWith('Could not verify your session:'));
+    if (verificationUnavailable) {
+      return (
+        <div className="min-h-screen w-full bg-zinc-950 flex justify-center items-center p-4">
+          <div className="w-full max-w-[430px] bg-zinc-950 border border-amber-500/30 rounded-3xl p-6 text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h1 className="text-lg font-bold text-amber-200 mb-2">Session verification temporarily unavailable</h1>
+            <p role="alert" className="text-xs text-zinc-300 leading-relaxed break-words mb-4">
+              The server could not verify your saved session. Your login token has been kept; you do not need to sign in again.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refreshUser()}
+              className="w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-bold text-zinc-950 active:scale-[0.99]"
+            >
+              Retry session check
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen w-full bg-zinc-950 flex justify-center items-start">
         <div className="w-full max-w-[430px] min-h-screen bg-zinc-950 border-x border-zinc-800/60 shadow-[0_0_50px_rgba(0,0,0,0.85)] flex flex-col relative overflow-x-hidden">
