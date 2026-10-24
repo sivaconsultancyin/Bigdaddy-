@@ -106,6 +106,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     startTime?: number;
     crashMultiplier?: number;
   }>({ status: 'WAITING' });
+  const roundStateRef = useRef(roundState);
+  roundStateRef.current = roundState;
   const [recentHistory, setRecentHistory] = useState<Array<{ roundNumber: number; crashMultiplier: number }>>([]);
 
   // European Roulette initial state
@@ -222,7 +224,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
     const scheduleNextPoll = () => {
       if (stopped || disposedRef.current) return;
-      const running = roundState.status === 'RUNNING';
+      const running = roundStateRef.current.status === 'RUNNING';
       // Realtime handles lifecycle transitions. Poll less often for the live
       // multiplier and retain a quicker fallback when the socket is disconnected.
       const delay = realtimeConnected
