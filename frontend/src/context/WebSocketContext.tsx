@@ -89,8 +89,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const userRef = useRef(user);
   userRef.current = user;
   const [isConnected, setIsConnected] = useState(false);
-  useEffect(() => { isRealtimeConnectedRef.current = isConnected; }, [isConnected]);
-
   const [apiHealth, setApiHealth] = useState<'checking' | 'online' | 'degraded' | 'offline'>('checking');
   const [apiLastCheckedAt, setApiLastCheckedAt] = useState<number | null>(null);
   const [apiResponseTimeMs, setApiResponseTimeMs] = useState<number | null>(null);
@@ -102,7 +100,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [authoritativeMultiplier, setAuthoritativeMultiplier] = useState(1.0);
   const displayedMultiplierRef = useRef(1.0);
   const lastAviatorRequestStartRef = useRef<number | null>(null);
-  const lastAuthoritativeMultiplierRef = useRef<{ value: number; at: number } | null>(null);
+  const lastAuthoritativeMultiplierRef = useRef<{ value: number; at: number; roundId: string | null } | null>(null);
   const isRealtimeConnectedRef = useRef(false);
 
   const animatedRoundIdRef = useRef<string | undefined>(undefined);
@@ -400,10 +398,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const data = await response.json();
             if (key === 'aviator') {
               const nextMultiplier = Number(data?.round?.multiplier ?? data?.round?.crashMultiplier);
+              const nextRoundId = typeof data?.round?.id === 'string' ? data.round.id : null;
               const priorMultiplier = lastAuthoritativeMultiplierRef.current;
-              const multiplierUpdateGapMs = priorMultiplier?.at ? Math.round(Date.now() - priorMultiplier.at) : null;
-              if (Number.isFinite(nextMultiplier) && nextMultiplier > 0) lastAuthoritativeMultiplierRef.current = { value: nextMultiplier, at: Date.now() };
-              emitDiagnostic({ ...diagnostic, multiplier: Number.isFinite(nextMultiplier) ? nextMultiplier : null, previousMultiplier: priorMultiplier?.value ?? null, multiplierUpdateGapMs, roundStatus: data?.round?.status ?? null, roundId: data?.round?.id ?? null });
+              const validMultiplier = Number.isFinite(nextMultiplier) && nextMultiplier > 0;
+              const sameRound = Boolean(priorMultiplier && priorMultiplier.roundId === nextRoundId);
+              const multiplierChanged = validMultiplier && (!sameRound || priorMultiplier?.value !== nextMultiplier);
+              const multiplierUpdateGapMs = multiplierChanged && sameRound && priorMultiplier?.at
+                ? Math.round(Date.now() - priorMultiplier.at)
+                : null;
+              if (multiplierChanged) lastAuthoritativeMultiplierRef.current = { value: nextMultiplier, at: Date.now(), roundId: nextRoundId };
+              emitDiagnostic({ ...diagnostic, multiplier: validMultiplier ? nextMultiplier : null, previousMultiplier: priorMultiplier?.value ?? null, multiplierUpdateGapMs, roundStatus: data?.round?.status ?? null, roundId: nextRoundId });
             }
             return { key, data, error: null, receivedAt: Date.now() };
           } catch (error) {
@@ -597,6 +601,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       })
       .subscribe((status) => {
         if (stopped || disposedRef.current) return;
+        isRealtimeConnectedRef.current = status === 'SUBSCRIBED';
         if (status === 'SUBSCRIBED') {
           if (simIntervalRef.current !== null) {
             window.clearTimeout(simIntervalRef.current);
