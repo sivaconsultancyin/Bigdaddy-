@@ -270,7 +270,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             signal: healthController.signal,
           }).then(async (response) => {
             const health = await response.json().catch(() => null);
-            if (disposedRef.current) return;
+            if (stopped || disposedRef.current) return;
             // Any HTTP response proves the API process is reachable. Only mark it
             // Online when its database is connected and production mode is ready.
             const databaseConnected = health?.databaseConnected === true;
@@ -279,7 +279,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             setApiLastCheckedAt(Date.now());
             setApiResponseTimeMs(Math.round(performance.now() - healthStartedAt));
           }).catch(() => {
-            if (!disposedRef.current) {
+            if (!stopped && !disposedRef.current) {
               setApiHealth('offline');
               setApiLastCheckedAt(Date.now());
               setApiResponseTimeMs(null);
@@ -306,9 +306,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
                 signal: listController.signal,
               }).then(async (response) => {
-                if (!response.ok) return;
+                if (!response.ok || stopped || disposedRef.current) return;
                 const payload = await response.json().catch(() => null);
-                if (!Array.isArray(payload?.games)) return;
+                if (stopped || disposedRef.current || !Array.isArray(payload?.games)) return;
                 const keyByCode: Record<string, string> = {
                   aviator: 'aviator',
                   roulette: 'roulette',
