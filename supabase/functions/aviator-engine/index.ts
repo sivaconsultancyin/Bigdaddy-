@@ -17,6 +17,37 @@ function secretMatches(expected: string, supplied: string | null): boolean {
   return difference === 0;
 }
 
+function continueEngine(url: string, secret: string) {
+  const runtime = (globalThis as unknown as {
+    EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void };
+  }).EdgeRuntime;
+  if (!runtime?.waitUntil) {
+    console.error("Aviator engine continuation unavailable: EdgeRuntime.waitUntil missing");
+    return false;
+  }
+
+  runtime.waitUntil((async () => {
+    try {
+      const response = await fetch(`${url.replace(/\/$/, "")}/functions/v1/aviator-engine`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-aviator-engine-secret": secret,
+          "x-aviator-engine-continuation": "1",
+        },
+        body: "{}",
+      });
+      if (!response.ok) {
+        console.error("Aviator engine continuation rejected:", response.status);
+      }
+      await response.body?.cancel();
+    } catch (error) {
+      console.error("Aviator engine continuation request failed:", error instanceof Error ? error.message : "unknown");
+    }
+  })());
+  return true;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
 
@@ -35,12 +66,20 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // Keep this below the scheduled invocation's 60-second timeout.
+  // Keep each invocation below the Edge Function timeout. The next invocation is
+  // started before this one exits, so a minute-based cron is not needed.
   const started = Date.now();
-  const runForMs = 50_000;
+  const runForMs = 49_000;
+  const continueAfterMs = 47_500;
+  let continuationScheduled = false;
   const tickLatenciesMs: number[] = [];
   const actionCounts: Record<string, number> = {};
   let lastAction: unknown = null;
+
+  const ensureContinuation = () => {
+    if (continuationScheduled) return;
+    continuationScheduled = continueEngine(url, expected);
+  };
 
   while (Date.now() - started < runForMs) {
     const tickStarted = Date.now();
@@ -49,10 +88,12 @@ Deno.serve(async (req: Request) => {
       tickLatenciesMs.push(Date.now() - tickStarted);
       if (error) {
         console.error("Aviator engine RPC failed:", error.code ?? "unknown");
+        ensureContinuation();
         return json({
           error: "ENGINE_TICK_FAILED",
           ticksCompleted: tickLatenciesMs.length - 1,
           tickLatencyMs: summarizeLatencies(tickLatenciesMs.slice(0, -1)),
+          continuationScheduled,
         }, 503);
       }
       lastAction = data ?? { action: "no_result" };
@@ -63,14 +104,23 @@ Deno.serve(async (req: Request) => {
     } catch (error) {
       tickLatenciesMs.push(Date.now() - tickStarted);
       console.error("Aviator engine invocation failed:", error instanceof Error ? error.message : "unknown");
+      ensureContinuation();
       return json({
         error: "ENGINE_TICK_FAILED",
         ticksCompleted: tickLatenciesMs.length - 1,
         tickLatencyMs: summarizeLatencies(tickLatenciesMs.slice(0, -1)),
+        continuationScheduled,
       }, 503);
+    }
+
+    if (!continuationScheduled && Date.now() - started >= continueAfterMs) {
+      ensureContinuation();
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+
+  // Fallback in case an unusually slow tick prevented scheduling inside the loop.
+  ensureContinuation();
 
   const elapsedMs = Date.now() - started;
   return json({
@@ -78,6 +128,7 @@ Deno.serve(async (req: Request) => {
     ticksCompleted: tickLatenciesMs.length,
     elapsedMs,
     tickIntervalTargetMs: 100,
+    continuationScheduled,
     tickLatencyMs: summarizeLatencies(tickLatenciesMs),
     actionCounts,
     lastAction,
