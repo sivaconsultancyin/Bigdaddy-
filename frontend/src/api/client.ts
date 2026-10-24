@@ -1,10 +1,10 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 
-// Production frontend is a Render static site; all production API requests go to Supabase Edge Functions.
-// Keep VITE_API_BASE_URL overridable for preview/staging environments.
-const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
+// Production frontend sends all API traffic through the Render backend.
+// Render proxies requests to Supabase Edge Functions; it never connects to PostgreSQL.
+const RENDER_API_BASE = 'https://bigdaddy-backend.onrender.com/api';
 const API_BASE = import.meta.env.PROD
-  ? SUPABASE_API_BASE
+  ? RENDER_API_BASE
   : (import.meta.env.VITE_API_BASE_URL || '/api');
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
