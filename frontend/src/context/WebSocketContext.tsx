@@ -196,7 +196,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   }, []);
 
-  const simIntervalRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);\n  const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const simIntervalRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
