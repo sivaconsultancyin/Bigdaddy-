@@ -253,7 +253,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (userRef.current) refreshWallet();
     };
     const poll = async () => {
-      if (inFlight) return;
       inFlight = true;
       try {
         const now = Date.now();
