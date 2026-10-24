@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
         tickLatencyMs: summarizeLatencies(tickLatenciesMs.slice(0, -1)),
       }, 503);
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   const elapsedMs = Date.now() - started;
@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
     ok: true,
     ticksCompleted: tickLatenciesMs.length,
     elapsedMs,
-    tickIntervalTargetMs: 250,
+    tickIntervalTargetMs: 100,
     tickLatencyMs: summarizeLatencies(tickLatenciesMs),
     actionCounts,
     lastAction,
