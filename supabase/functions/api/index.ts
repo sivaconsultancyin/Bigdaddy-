@@ -8,20 +8,37 @@ const roles: Role[] = ["OWNER", "SUPER_ADMIN", "ADMIN", "PLAYER"];
 // Sample successful hot-path telemetry to avoid flooding Edge Function logs at 5 polls/sec.
 let aviatorStateRequestCount = 0;
 
-function response(body: Record<string, unknown>, status = 200, origin?: string | null) {
-  const headers: Record<string, string> = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0" };
-  const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (allowed.length > 0) {
-    // Do not leave the default wildcard in place when an allowlist is configured.
+function corsHeadersForOrigin(origin?: string | null): Record<string, string> {
+  const configured = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  // Capacitor Android WebView commonly uses https://localhost as its origin.
+  // CORS is not authentication; protected endpoints still require a valid BigDaddy token.
+  const nativeOrigins = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
+  const allowed = new Set([...configured, ...nativeOrigins]);
+  const headers: Record<string, string> = { ...corsHeaders };
+  if (configured.length > 0) {
     delete headers["Access-Control-Allow-Origin"];
     delete headers["Vary"];
-    if (origin && allowed.includes(origin)) {
+    if (origin && allowed.has(origin)) {
       headers["Access-Control-Allow-Origin"] = origin;
       headers["Vary"] = "Origin";
     }
   } else {
     headers["Access-Control-Allow-Origin"] = "*";
   }
+  headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
+  headers["Access-Control-Allow-Headers"] = "authorization, x-client-info, apikey, content-type, idempotency-key";
+  headers["Access-Control-Max-Age"] = "86400";
+  return headers;
+}
+function response(body: Record<string, unknown>, status = 200, origin?: string | null) {
+  const headers: Record<string, string> = {
+    ...corsHeadersForOrigin(origin),
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+  };
   return new Response(JSON.stringify(body), { status, headers });
 }
 function fail(error: string, status = 400) { return { body: { error }, status }; }
@@ -113,19 +130,13 @@ async function handle(req: Request) {
   const requestStartedAt = performance.now();
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
-    const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-    const headers: Record<string, string> = { ...corsHeaders };
-    // Apply the same origin policy to preflight requests as to normal API responses.
-    delete headers["Access-Control-Allow-Origin"];
-    delete headers["Vary"];
-    if (allowed.length === 0) {
-      headers["Access-Control-Allow-Origin"] = "*";
-    } else if (origin && allowed.includes(origin)) {
-      headers["Access-Control-Allow-Origin"] = origin;
-      headers["Vary"] = "Origin";
-    } else {
+    const headers = corsHeadersForOrigin(origin);
+    const configured = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const nativeOrigins = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
+    if (configured.length > 0 && origin && !new Set([...configured, ...nativeOrigins]).has(origin)) {
       return new Response(null, { status: 403, headers });
     }
+    if (configured.length > 0 && !origin) return new Response(null, { status: 403, headers });
     return new Response(null, { status: 204, headers });
   }
   const url = new URL(req.url);
