@@ -391,7 +391,17 @@ async function handle(req: Request) {
   }
 
   const auth = await actorFrom(req, db);
-  if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
+  if (!auth.actor) {
+    if (req.method === "GET" && path === "/games/aviator/state") {
+      console.error(JSON.stringify({
+        event: "aviator_state_api_timing",
+        httpStatus: auth.status ?? 401,
+        totalMs: Math.round(performance.now() - requestStartedAt),
+        errorCode: auth.error ?? "AUTH_REQUIRED",
+      }));
+    }
+    return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
+  }
   const actor = auth.actor;
 
   // The old slider mode needs a dedicated atomic settlement contract. Fail closed
