@@ -99,6 +99,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [multiplier, setMultiplier] = useState(1.0);
   const [authoritativeMultiplier, setAuthoritativeMultiplier] = useState(1.0);
   const displayedMultiplierRef = useRef(1.0);
+  const animatedRoundIdRef = useRef<string | undefined>(undefined);
   const [roundState, setRoundState] = useState<{
     id?: string;
     roundNumber?: number;
@@ -238,11 +239,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const scheduleNextPoll = () => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
-      // Realtime handles lifecycle transitions. Poll the authoritative live
-      // multiplier every 200ms while RUNNING, whether Realtime is connected or not.
-      const delay = realtimeConnected
-        ? (running ? 200 : 5000)
-        : (running ? 200 : 2500);
+      // Realtime is a fast path, not a substitute for polling. Poll every second
+      // outside RUNNING so WAITING -> RUNNING is detected even if a broadcast is lost.
+      // Keep the 200ms authoritative polling cadence while RUNNING.
+      const delay = running ? 200 : 1000;
       simIntervalRef.current = window.setTimeout(() => {
         simIntervalRef.current = null;
         void poll();
@@ -592,6 +592,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   authoritativeMultiplierRef.current = authoritativeMultiplier;
 
   useEffect(() => {
+    // A new round is a hard animation boundary. Never carry the previous round's
+    // displayed multiplier forward, even when the status remains RUNNING.
+    if (roundState.id !== animatedRoundIdRef.current) {
+      animatedRoundIdRef.current = roundState.id;
+      displayedMultiplierRef.current = 1.0;
+      setMultiplier(1.0);
+    }
+
     const terminal = roundState.status === 'CRASHED' || roundState.status === 'SETTLED' || roundState.status === 'WAITING';
     if (terminal) {
       displayedMultiplierRef.current = authoritativeMultiplierRef.current;
@@ -622,7 +630,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     frame = window.requestAnimationFrame(animate);
     return () => window.cancelAnimationFrame(frame);
-  }, [roundState.status]);
+  }, [roundState.id, roundState.status]);
 
   return (
     <WebSocketContext.Provider
