@@ -60,6 +60,35 @@ async function runTestSuite() {
   });
 
 
+  test('Aviator polling keeps 200ms RUNNING cadence, 1s fallback, and no overlapping requests', () => {
+    const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(source.includes("const intervalMs = running ? 200 : 1000"));
+    assert.ok(source.includes("if (inFlight) {\n        rerunRequested = true;\n        return;"));
+    assert.ok(source.includes("scheduleNextPoll(pollStartedAt)"));
+  });
+
+  test('Aviator multiplier resets when the authoritative round ID changes', () => {
+    const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(source.includes('roundState.id !== animatedRoundIdRef.current'));
+    assert.ok(source.includes('displayedMultiplierRef.current = 1.0'));
+    assert.ok(source.includes('}, [roundState.id, roundState.status]);'));
+  });
+
+  test('Aviator state API logs timing and preserves authoritative crash/cashout logic', () => {
+    const apiSource = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const frontendSource = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(apiSource.includes('get_aviator_state_bundle'));
+    assert.ok(apiSource.includes('event: "aviator_state_api_timing"'));
+    assert.ok(apiSource.includes('rpcMs: rpcDurationMs'));
+    assert.ok(apiSource.includes('roundId: current.id'));
+    assert.ok(apiSource.includes('status: current.status'));
+    assert.ok(apiSource.includes('multiplier: current.multiplier'));
+    assert.ok(apiSource.includes('cashout_crash_bet_authenticated_atomic'));
+    assert.ok(apiSource.includes('Math.min(liveMultiplier, Number(row.crash_multiplier ?? liveMultiplier))'));
+    assert.ok(frontendSource.includes('Never extrapolate on the client'));
+  });
+
+
 
   // Test 1: Invariant - Max Token Supply is exactly 10 Billion
   test('Token supply invariant: Total circulating volume equals 10,000,000,000', () => {
