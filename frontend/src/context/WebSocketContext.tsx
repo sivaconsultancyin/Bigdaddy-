@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { ApiClient } from '../api/client';
+import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
+
+const SUPABASE_REALTIME_URL = 'https://nzvpuoeibqrpcltrszvr.supabase.co';
+const SUPABASE_REALTIME_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_3StQxumtXcMHvM9i3bTldw_e1toL-FR';
+const supabaseRealtime = createClient(SUPABASE_REALTIME_URL, SUPABASE_REALTIME_KEY, {
+  realtime: { params: { eventsPerSecond: 10 } },
+});
 import {
   AndarBaharRound,
   AndarBaharHistoryItem,
@@ -187,7 +194,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   }, []);
 
-  const simIntervalRef = useRef<any>(null);
+  const simIntervalRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);\n  const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
@@ -201,16 +208,28 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const connect = () => {
     if (typeof window === 'undefined') return;
-    // Every game state update comes from the backend's durable, authoritative API.
-    // Do not connect to legacy WebSocket handlers backed by in-memory game engines.
+    // Broadcast delivers round lifecycle transitions; the authenticated API remains
+    // authoritative for the current multiplier, history, and user-specific state.
     startProductionPolling();
   };
 
   const startProductionPolling = () => {
     if (simIntervalRef.current) return;
     let inFlight = false;
+    let realtimeConnected = false;
+    let stopped = false;
     disposedRef.current = false;
     const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
+    const scheduleNextPoll = () => {
+      if (stopped || disposedRef.current) return;
+      const running = roundState.status === 'RUNNING';
+      // Realtime handles lifecycle transitions. Poll less often for the live
+      // multiplier and retain a quicker fallback when the socket is disconnected.
+      const delay = realtimeConnected
+        ? (running ? 1500 : 5000)
+        : (running ? 1000 : 2500);
+      simIntervalRef.current = window.setTimeout(() => { void poll(); }, delay);
+    };
     const refreshWalletForResult = (key: string, round: any) => {
       if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
       const resultKey = `${round.id}:${round.status}`;
@@ -464,18 +483,40 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsSimulatedFallback(false);
       } finally {
         inFlight = false;
+        scheduleNextPoll();
       }
     };
+
+    // The database broadcasts only safe public round lifecycle fields on this
+    // public topic. Never subscribe to or broadcast wallet, bet, or seed secrets.
+    const channel = supabaseRealtime
+      .channel('aviator:rounds', { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'round_state_changed' }, () => {
+        // Fetch the authoritative API snapshot after each lifecycle event. It
+        // includes computed multiplier/history and respects normal auth checks.
+        if (simIntervalRef.current) window.clearTimeout(simIntervalRef.current);
+        void poll();
+      })
+      .subscribe((status) => {
+        realtimeConnected = status === 'SUBSCRIBED';
+        if (realtimeConnected) {
+          if (simIntervalRef.current) window.clearTimeout(simIntervalRef.current);
+          void poll();
+        }
+      });
+    realtimeChannelRef.current = channel;
     void poll();
-    // Poll the authoritative Aviator/game-state API every 100ms; no Supabase Realtime socket is used.
-    simIntervalRef.current = setInterval(() => { void poll(); }, 100);
   };
 
   useEffect(() => {
     connect();
     return () => {
       disposedRef.current = true;
-      if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+      if (simIntervalRef.current) window.clearTimeout(simIntervalRef.current);
+      if (realtimeChannelRef.current) {
+        void supabaseRealtime.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
     };
   }, []);
 
