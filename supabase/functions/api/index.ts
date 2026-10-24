@@ -915,17 +915,30 @@ async function recordEdgeFailure(req: Request, statusCode: number, durationMs: n
   }
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(async (incomingReq: Request) => {
+  const receivedAtMs = Date.now();
+  const requestId = (incomingReq.headers.get("x-request-id") || new URL(incomingReq.url).searchParams.get("request_id") || crypto.randomUUID()).slice(0, 80);
+  const requestHeaders = new Headers(incomingReq.headers);
+  requestHeaders.set("x-request-id", requestId);
+  const req = new Request(incomingReq, { headers: requestHeaders });
   const startedAt = Date.now();
+  let result: Response;
   try {
-    const result = await handle(req);
+    result = await handle(req);
     if (result.status >= 500) await recordEdgeFailure(req, result.status, Date.now() - startedAt);
-    return result;
   } catch (error) {
     console.error("Supabase API request failed:", error instanceof Error ? error.message : "unknown");
     const message = error instanceof Error ? error.message : "";
     const status = message === "SERVER_CONFIGURATION_ERROR" ? 500 : 503;
     await recordEdgeFailure(req, status, Date.now() - startedAt);
-    return response({ error: status === 500 ? "SERVER_CONFIGURATION_ERROR" : "API_SERVICE_UNAVAILABLE" }, status, req.headers.get("origin"));
+    result = response({ error: status === 500 ? "SERVER_CONFIGURATION_ERROR" : "API_SERVICE_UNAVAILABLE" }, status, req.headers.get("origin"));
   }
+  const completedAtMs = Date.now();
+  const headers = new Headers(result.headers);
+  headers.set("X-Request-ID", requestId);
+  headers.set("X-Backend-Received-At", new Date(receivedAtMs).toISOString());
+  headers.set("X-Backend-Completed-At", new Date(completedAtMs).toISOString());
+  headers.set("X-Backend-Duration-Ms", String(Math.max(0, completedAtMs - startedAt)));
+  headers.set("Access-Control-Expose-Headers", [headers.get("Access-Control-Expose-Headers"), "X-Request-ID", "X-Backend-Received-At", "X-Backend-Completed-At", "X-Backend-Duration-Ms"].filter(Boolean).join(", "));
+  return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
 });

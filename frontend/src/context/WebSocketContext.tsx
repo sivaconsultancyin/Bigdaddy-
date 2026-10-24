@@ -89,6 +89,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const userRef = useRef(user);
   userRef.current = user;
   const [isConnected, setIsConnected] = useState(false);
+  useEffect(() => { isRealtimeConnectedRef.current = isConnected; }, [isConnected]);
+
   const [apiHealth, setApiHealth] = useState<'checking' | 'online' | 'degraded' | 'offline'>('checking');
   const [apiLastCheckedAt, setApiLastCheckedAt] = useState<number | null>(null);
   const [apiResponseTimeMs, setApiResponseTimeMs] = useState<number | null>(null);
@@ -99,6 +101,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [multiplier, setMultiplier] = useState(1.0);
   const [authoritativeMultiplier, setAuthoritativeMultiplier] = useState(1.0);
   const displayedMultiplierRef = useRef(1.0);
+  const lastAviatorRequestStartRef = useRef<number | null>(null);
+  const lastAuthoritativeMultiplierRef = useRef<{ value: number; at: number } | null>(null);
+  const isRealtimeConnectedRef = useRef(false);
+
   const animatedRoundIdRef = useRef<string | undefined>(undefined);
   const [roundState, setRoundState] = useState<{
     id?: string;
@@ -355,19 +361,55 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const controller = new AbortController();
           pollAbortControllersRef.current.add(controller);
           const timeoutId = window.setTimeout(() => controller.abort(), key === 'aviator' ? 7000 : 5000);
+          const requestId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `aviator-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const sentAt = new Date().toISOString();
+          const started = performance.now();
+          const previousStart = key === 'aviator' ? lastAviatorRequestStartRef.current : null;
+          if (key === 'aviator') lastAviatorRequestStartRef.current = started;
+          const emitDiagnostic = (detail: Record<string, unknown>) => {
+            try {
+              const event = { requestId, path, key, sentAt, ...detail };
+              const storageKey = 'bigdaddy_aviator_diagnostics_v1';
+              const prior = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
+              const entries = Array.isArray(prior) ? prior : [];
+              window.localStorage.setItem(storageKey, JSON.stringify([event, ...entries].slice(0, 40)));
+              window.dispatchEvent(new CustomEvent('bigdaddy:aviator-diagnostic', { detail: event }));
+            } catch { /* diagnostics must never break gameplay */ }
+          };
           try {
             const token = ApiClient.getToken();
-            if (!token) return { key, data: null, error: 'AUTH_REQUIRED', receivedAt: null };
-            const response = await fetch(apiBase + path, {
+            if (!token) {
+              emitDiagnostic({ outcome: 'error', error: 'AUTH_REQUIRED', httpStatus: null, latencyMs: Math.round(performance.now() - started), pollingGapMs: previousStart === null ? null : Math.round(started - previousStart), receivedAt: null });
+              return { key, data: null, error: 'AUTH_REQUIRED', receivedAt: null };
+            }
+            const response = await fetch(apiBase + path + (key === 'aviator' ? `?request_id=${encodeURIComponent(requestId)}` : ''), {
               cache: 'no-store',
               headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
               signal: controller.signal,
             });
-            if (!response.ok) return { key, data: null, error: `HTTP_${response.status}`, receivedAt: null };
+            const receivedAt = new Date().toISOString();
+            const latencyMs = Math.round(performance.now() - started);
+            const backendDuration = Number(response.headers.get('x-backend-duration-ms'));
+            const backendReceivedAt = response.headers.get('x-backend-received-at');
+            const backendCompletedAt = response.headers.get('x-backend-completed-at');
+            const diagnostic = { outcome: response.ok ? 'success' : 'error', httpStatus: response.status, receivedAt, latencyMs, pollingGapMs: previousStart === null ? null : Math.round(started - previousStart), backendDurationMs: Number.isFinite(backendDuration) && response.headers.has('x-backend-duration-ms') ? backendDuration : null, backendReceivedAt, backendCompletedAt, realtimeConnected: isRealtimeConnectedRef.current };
+            if (!response.ok) {
+              emitDiagnostic({ ...diagnostic, error: `HTTP_${response.status}` });
+              return { key, data: null, error: `HTTP_${response.status}`, receivedAt: null };
+            }
             const data = await response.json();
+            if (key === 'aviator') {
+              const nextMultiplier = Number(data?.round?.multiplier ?? data?.round?.crashMultiplier);
+              const priorMultiplier = lastAuthoritativeMultiplierRef.current;
+              const multiplierUpdateGapMs = priorMultiplier?.at ? Math.round(Date.now() - priorMultiplier.at) : null;
+              if (Number.isFinite(nextMultiplier) && nextMultiplier > 0) lastAuthoritativeMultiplierRef.current = { value: nextMultiplier, at: Date.now() };
+              emitDiagnostic({ ...diagnostic, multiplier: Number.isFinite(nextMultiplier) ? nextMultiplier : null, previousMultiplier: priorMultiplier?.value ?? null, multiplierUpdateGapMs, roundStatus: data?.round?.status ?? null, roundId: data?.round?.id ?? null });
+            }
             return { key, data, error: null, receivedAt: Date.now() };
           } catch (error) {
-            return { key, data: null, error: error instanceof Error ? (error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR') : 'NETWORK_ERROR', receivedAt: null };
+            const errorCode = error instanceof Error ? (error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR') : 'NETWORK_ERROR';
+            emitDiagnostic({ outcome: 'error', error: errorCode, httpStatus: null, receivedAt: new Date().toISOString(), latencyMs: Math.round(performance.now() - started), pollingGapMs: previousStart === null ? null : Math.round(started - previousStart), realtimeConnected: isRealtimeConnectedRef.current });
+            return { key, data: null, error: errorCode, receivedAt: null };
           } finally {
             window.clearTimeout(timeoutId);
             pollAbortControllersRef.current.delete(controller);
