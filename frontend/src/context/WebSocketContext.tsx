@@ -99,6 +99,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [multiplier, setMultiplier] = useState(1.0);
   const [authoritativeMultiplier, setAuthoritativeMultiplier] = useState(1.0);
   const displayedMultiplierRef = useRef(1.0);
+  const animatedRoundIdRef = useRef<string | undefined>(undefined);
   const [roundState, setRoundState] = useState<{
     id?: string;
     roundNumber?: number;
@@ -224,7 +225,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     pollingActiveRef.current = true;
     let inFlight = false;
     let rerunRequested = false;
-    let realtimeConnected = false;
     let stopped = false;
     // Secondary game requests run independently and never gate Aviator state updates.
     let secondaryFetchInFlight = false;
@@ -235,14 +235,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     disposedRef.current = false;
     const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
-    const scheduleNextPoll = () => {
+    const scheduleNextPoll = (pollStartedAt: number) => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
-      // Realtime handles lifecycle transitions. Poll the authoritative live
-      // multiplier every 200ms while RUNNING, whether Realtime is connected or not.
-      const delay = realtimeConnected
-        ? (running ? 200 : 5000)
-        : (running ? 200 : 2500);
+      // Realtime is a fast path, not a substitute for polling. Poll every second
+      // outside RUNNING so WAITING -> RUNNING is detected even if a broadcast is lost.
+      // Keep the 200ms authoritative polling cadence while RUNNING.
+      const intervalMs = running ? 200 : 1000;
+      // Measure from request start, not request completion, while never overlapping
+      // requests. If the API is slower than the target cadence, poll again immediately.
+      const delay = Math.max(0, intervalMs - (Date.now() - pollStartedAt));
       simIntervalRef.current = window.setTimeout(() => {
         simIntervalRef.current = null;
         void poll();
@@ -263,6 +265,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return;
       }
       inFlight = true;
+      const pollStartedAt = Date.now();
       try {
         const now = Date.now();
         // Health is checked independently from game state. A healthy process with a
@@ -528,7 +531,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }, 0);
           return;
         }
-        scheduleNextPoll();
+        scheduleNextPoll(pollStartedAt);
       }
     };
 
@@ -552,8 +555,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       })
       .subscribe((status) => {
         if (stopped || disposedRef.current) return;
-        realtimeConnected = status === 'SUBSCRIBED';
-        if (realtimeConnected) {
+        if (status === 'SUBSCRIBED') {
           if (simIntervalRef.current !== null) {
             window.clearTimeout(simIntervalRef.current);
             simIntervalRef.current = null;
@@ -592,6 +594,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   authoritativeMultiplierRef.current = authoritativeMultiplier;
 
   useEffect(() => {
+    // A new round is a hard animation boundary. Never carry the previous round's
+    // displayed multiplier forward, even when the status remains RUNNING.
+    if (roundState.id !== animatedRoundIdRef.current) {
+      animatedRoundIdRef.current = roundState.id;
+      displayedMultiplierRef.current = 1.0;
+      setMultiplier(1.0);
+    }
+
     const terminal = roundState.status === 'CRASHED' || roundState.status === 'SETTLED' || roundState.status === 'WAITING';
     if (terminal) {
       displayedMultiplierRef.current = authoritativeMultiplierRef.current;
@@ -622,7 +632,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     frame = window.requestAnimationFrame(animate);
     return () => window.cancelAnimationFrame(frame);
-  }, [roundState.status]);
+  }, [roundState.id, roundState.status]);
 
   return (
     <WebSocketContext.Provider

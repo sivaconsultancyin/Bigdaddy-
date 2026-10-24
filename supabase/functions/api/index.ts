@@ -5,6 +5,8 @@ import { corsHeaders, jsonResponse, signBigDaddyToken, verifyBigDaddyToken, type
 type Role = "OWNER" | "SUPER_ADMIN" | "ADMIN" | "PLAYER";
 type Actor = BigDaddyClaims & { parentId: string | null };
 const roles: Role[] = ["OWNER", "SUPER_ADMIN", "ADMIN", "PLAYER"];
+// Sample successful hot-path telemetry to avoid flooding Edge Function logs at 5 polls/sec.
+let aviatorStateRequestCount = 0;
 
 function response(body: Record<string, unknown>, status = 200, origin?: string | null) {
   const headers: Record<string, string> = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "Expires": "0" };
@@ -108,6 +110,7 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
 }
 
 async function handle(req: Request) {
+  const requestStartedAt = performance.now();
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
     const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -388,7 +391,17 @@ async function handle(req: Request) {
   }
 
   const auth = await actorFrom(req, db);
-  if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
+  if (!auth.actor) {
+    if (req.method === "GET" && path === "/games/aviator/state") {
+      console.error(JSON.stringify({
+        event: "aviator_state_api_timing",
+        httpStatus: auth.status ?? 401,
+        totalMs: Math.round(performance.now() - requestStartedAt),
+        errorCode: auth.error ?? "AUTH_REQUIRED",
+      }));
+    }
+    return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
+  }
   const actor = auth.actor;
 
   // The old slider mode needs a dedicated atomic settlement contract. Fail closed
@@ -671,11 +684,21 @@ async function handle(req: Request) {
   }
 
   if (req.method === "GET" && path === "/games/aviator/state") {
+    aviatorStateRequestCount += 1;
     // One PostgREST RPC returns the current round, recent history and current-round
     // bets with usernames. Do not fan this hot one-second polling endpoint out into
     // separate rounds, bets, and users requests.
+    const rpcStartedAt = performance.now();
     const { data, error } = await db.schema("aviator").rpc("get_aviator_state_bundle");
+    const rpcDurationMs = Math.round(performance.now() - rpcStartedAt);
     if (error || !data || typeof data !== "object") {
+      console.error(JSON.stringify({
+        event: "aviator_state_api_timing",
+        httpStatus: 503,
+        totalMs: Math.round(performance.now() - requestStartedAt),
+        rpcMs: rpcDurationMs,
+        errorCode: error?.code ?? "INVALID_STATE_BUNDLE",
+      }));
       return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
     }
     const rounds = Array.isArray(data.rounds) ? data.rounds : [];
@@ -684,7 +707,16 @@ async function handle(req: Request) {
       roundNumber: Number(r.round_number), crashMultiplier: Number(r.crash_multiplier ?? 0), endedAt: r.ended_at,
       serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
     }));
-    if (!row) return response({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
+    if (!row) {
+      const totalMs = Math.round(performance.now() - requestStartedAt);
+      if (totalMs >= 250 || aviatorStateRequestCount % 20 === 0) {
+        console.log(JSON.stringify({
+          event: "aviator_state_api_timing", httpStatus: 200, totalMs, rpcMs: rpcDurationMs,
+          roundId: null, status: null, multiplier: null,
+        }));
+      }
+      return response({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
+    }
     const elapsedSeconds = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
     const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
     const crashed = ["CRASHED","SETTLED"].includes(row.status);
@@ -699,6 +731,18 @@ async function handle(req: Request) {
       endedAt:row.ended_at, multiplier, crashMultiplier:crashed ? row.crash_multiplier : null,
       serverSeedHash:row.server_seed_hash, revealedServerSeed:row.revealed_server_seed,
     };
+    const totalMs = Math.round(performance.now() - requestStartedAt);
+    if (totalMs >= 250 || aviatorStateRequestCount % 20 === 0) {
+      console.log(JSON.stringify({
+        event: "aviator_state_api_timing",
+        httpStatus: 200,
+        totalMs,
+        rpcMs: rpcDurationMs,
+        roundId: current.id,
+        status: current.status,
+        multiplier: current.multiplier,
+      }));
+    }
     return response({ round: current, bets, history, serverTime: new Date().toISOString() }, 200, origin);
   }
 
