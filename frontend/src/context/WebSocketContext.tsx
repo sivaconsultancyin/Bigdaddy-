@@ -90,6 +90,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastRoundError, setLastRoundError] = useState<string | null>(null);
   const [isSimulatedFallback, setIsSimulatedFallback] = useState(false);
   const [multiplier, setMultiplier] = useState(1.0);
+  const [authoritativeMultiplier, setAuthoritativeMultiplier] = useState(1.0);
+  const displayedMultiplierRef = useRef(1.0);
   const [roundState, setRoundState] = useState<{
     id?: string;
     roundNumber?: number;
@@ -370,7 +372,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               const authoritativeMultiplier = ['CRASHED', 'SETTLED'].includes(round.status)
                 ? round.crashMultiplier ?? round.multiplier ?? 1
                 : round.multiplier ?? 1;
-              setMultiplier(Number(authoritativeMultiplier));
+              setAuthoritativeMultiplier(Number(authoritativeMultiplier));
               refreshWalletForResult('aviator', round);
             }
             if (Array.isArray(data.history)) {
@@ -477,7 +479,35 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, []);
 
-  // The displayed multiplier comes directly from the authoritative API response.
+  // Smoothly interpolate only toward values confirmed by the API. Never extrapolate
+  // beyond the latest authoritative multiplier, so the UI cannot pass the crash point.
+  useEffect(() => {
+    const terminal = roundState.status === 'CRASHED' || roundState.status === 'SETTLED' || roundState.status === 'WAITING';
+    if (terminal) {
+      displayedMultiplierRef.current = authoritativeMultiplier;
+      setMultiplier(authoritativeMultiplier);
+      return;
+    }
+
+    const startValue = displayedMultiplierRef.current;
+    const targetValue = Math.max(startValue, authoritativeMultiplier);
+    if (targetValue <= startValue) return;
+
+    let frame = 0;
+    let startTime: number | null = null;
+    const durationMs = 450;
+    const animate = (timestamp: number) => {
+      if (startTime === null) startTime = timestamp;
+      const progress = Math.min(1, (timestamp - startTime) / durationMs);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const nextValue = Math.min(targetValue, startValue + (targetValue - startValue) * eased);
+      displayedMultiplierRef.current = nextValue;
+      setMultiplier(nextValue);
+      if (progress < 1) frame = window.requestAnimationFrame(animate);
+    };
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [authoritativeMultiplier, roundState.status]);
 
   return (
     <WebSocketContext.Provider
