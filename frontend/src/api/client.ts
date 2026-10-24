@@ -1,7 +1,7 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 
-// Production frontend sends all API traffic through the Render backend.
-// Render proxies requests to Supabase Edge Functions; it never connects to PostgreSQL.
+// Production API requests go directly to the authoritative Render Node backend.
+// Game/API logic stays in the backend; PostgreSQL is used for persistence only.
 const RENDER_API_BASE = 'https://bigdaddy-backend.onrender.com/api';
 const API_BASE = import.meta.env.PROD
   ? RENDER_API_BASE
