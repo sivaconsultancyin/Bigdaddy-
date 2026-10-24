@@ -235,10 +235,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const scheduleNextPoll = () => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
-      // Realtime handles lifecycle transitions. Poll less often for the live
-      // multiplier and retain a quicker fallback when the socket is disconnected.
+      // Realtime handles lifecycle transitions. Poll the authoritative live
+      // multiplier every 200ms while connected; keep a slower disconnected fallback.
       const delay = realtimeConnected
-        ? (running ? 1500 : 5000)
+        ? (running ? 200 : 5000)
         : (running ? 1000 : 2500);
       simIntervalRef.current = window.setTimeout(() => {
         simIntervalRef.current = null;
