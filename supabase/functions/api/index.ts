@@ -526,7 +526,7 @@ async function handle(req: Request) {
     return response({ message: "TRANSFER_COMPLETED", transactionId, balances: (balances ?? []).map(b => ({ id: b.id, balance: String(b.balance) })) }, 200, origin);
   }
 
-  const activationMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
+  const activationMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
   if (req.method === "POST" && activationMatch) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
     const code = activationMatch[1] === "dragon-tiger" ? "dragon_tiger"
