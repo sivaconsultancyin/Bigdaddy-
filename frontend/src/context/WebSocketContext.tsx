@@ -236,7 +236,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
       // Realtime handles lifecycle transitions. Poll the authoritative live
-      // multiplier every 200ms while connected; poll the authoritative live multiplier every 200ms while connected or disconnected.
+      // multiplier every 200ms while RUNNING, whether Realtime is connected or not.
       const delay = realtimeConnected
         ? (running ? 200 : 5000)
         : (running ? 200 : 2500);
@@ -253,6 +253,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (userRef.current) refreshWallet();
     };
     const poll = async () => {
+      // Keep only one state request active at a time. Overlapping responses can
+      // arrive out of order and make the displayed multiplier appear to pause or jump.
+      if (inFlight) {
+        rerunRequested = true;
+        return;
+      }
       inFlight = true;
       try {
         const now = Date.now();
