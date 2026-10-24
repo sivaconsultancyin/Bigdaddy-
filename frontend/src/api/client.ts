@@ -1,10 +1,11 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 
-// Production frontend sends all API traffic through the Render backend.
-// Render proxies requests to Supabase Edge Functions; it never connects to PostgreSQL.
-const RENDER_API_BASE = 'https://bigdaddy-backend.onrender.com/api';
+// Production API is served directly by the Supabase Edge Function.
+// The function strips the /functions/v1/api prefix and routes /auth, /games, /wallet, etc.
+// Keep Render out of the runtime request path.
+const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
 const API_BASE = import.meta.env.PROD
-  ? RENDER_API_BASE
+  ? SUPABASE_API_BASE
   : (import.meta.env.VITE_API_BASE_URL || '/api');
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
