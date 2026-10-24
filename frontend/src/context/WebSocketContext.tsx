@@ -226,6 +226,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     let rerunRequested = false;
     let realtimeConnected = false;
     let stopped = false;
+    // Secondary game requests run independently and never gate Aviator state updates.
+    let secondaryFetchInFlight = false;
+    let pendingSecondaryResults: Array<{ key: string; data: any; error: string | null; receivedAt: number | null }> = [];
     stopPollingRef.current = () => {
       stopped = true;
       pollingActiveRef.current = false;
@@ -339,33 +342,22 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         }
         const activeGameKeys = activeGameKeysRef.current;
-        const gamePaths = [
-          ['aviator', '/games/aviator/state'],
-          ...(pollOtherGames ? [
-            ...(activeGameKeys.has('roulette') ? [['roulette', '/games/roulette/state'] as const] : []),
-            ...(activeGameKeys.has('dice') ? [['dice', '/games/dice/state'] as const] : []),
-            ...(activeGameKeys.has('dragonTiger') ? [['dragonTiger', '/games/dragon-tiger/state'] as const] : []),
-            ...(activeGameKeys.has('andarBahar') ? [['andarBahar', '/games/andar-bahar/state'] as const] : []),
-          ] : []),
-        ] as const;
-        // Bound every poll so one stalled game endpoint cannot permanently block
-        // all live-state updates (or leave the global connection badge Offline).
-        const results = await Promise.all(gamePaths.map(async ([key, path]) => {
+        const secondaryPaths = pollOtherGames ? [
+          ...(activeGameKeys.has('roulette') ? [['roulette', '/games/roulette/state'] as const] : []),
+          ...(activeGameKeys.has('dice') ? [['dice', '/games/dice/state'] as const] : []),
+          ...(activeGameKeys.has('dragonTiger') ? [['dragonTiger', '/games/dragon-tiger/state'] as const] : []),
+          ...(activeGameKeys.has('andarBahar') ? [['andarBahar', '/games/andar-bahar/state'] as const] : []),
+        ] : [];
+        const fetchGameState = async ([key, path]: readonly [string, string]) => {
           const controller = new AbortController();
           pollAbortControllersRef.current.add(controller);
           const timeoutId = window.setTimeout(() => controller.abort(), key === 'aviator' ? 7000 : 5000);
           try {
-            // Game-state endpoints are authenticated. Read the current token on
-            // every poll so login/logout changes are reflected without remounting.
             const token = ApiClient.getToken();
             if (!token) return { key, data: null, error: 'AUTH_REQUIRED', receivedAt: null };
-
             const response = await fetch(apiBase + path, {
               cache: 'no-store',
-              headers: {
-                Accept: 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
+              headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
               signal: controller.signal,
             });
             if (!response.ok) return { key, data: null, error: `HTTP_${response.status}`, receivedAt: null };
@@ -377,9 +369,24 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             window.clearTimeout(timeoutId);
             pollAbortControllersRef.current.delete(controller);
           }
-        }));
-        if (stopped || disposedRef.current) return;
-        const aviatorResult = results.find(({ key }) => key === 'aviator');
+        };
+
+        // Kick off secondary-game polling in the background. Its slow responses
+        // are buffered for the next processing pass and cannot delay Aviator.
+        if (secondaryPaths.length > 0 && !secondaryFetchInFlight) {
+          secondaryFetchInFlight = true;
+          void Promise.all(secondaryPaths.map((path) => fetchGameState(path))).then((secondaryResults) => {
+            if (!stopped && !disposedRef.current) pendingSecondaryResults = secondaryResults;
+          }).finally(() => {
+            secondaryFetchInFlight = false;
+          });
+        }
+
+        // Await only Aviator's authoritative state in the live multiplier loop.
+        const aviatorResult = await fetchGameState(['aviator', '/games/aviator/state']);
+        const results = [aviatorResult, ...pendingSecondaryResults];
+        pendingSecondaryResults = [];
+
         // Align local animation to the API clock so a device clock skew cannot move the displayed crash point.
         const serverTimeMs = aviatorResult?.data?.serverTime ? Date.parse(aviatorResult.data.serverTime) : NaN;
         const serverClockOffsetMs = Number.isFinite(serverTimeMs) && Number.isFinite(aviatorResult?.receivedAt)
