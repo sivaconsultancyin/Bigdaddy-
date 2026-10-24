@@ -594,7 +594,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     let frame = 0;
     let startTime: number | null = null;
-    const durationMs = 450;
+    // Keep interpolation shorter than the 200ms live polling cadence so each
+    // authoritative update can be rendered promptly instead of continually
+    // cancelling a longer animation before it reaches its target.
+    const durationMs = 180;
     const animate = (timestamp: number) => {
       if (startTime === null) startTime = timestamp;
       const progress = Math.min(1, (timestamp - startTime) / durationMs);
