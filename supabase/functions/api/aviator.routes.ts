@@ -4,6 +4,7 @@ type ResponseFactory = (body: Record<string, unknown>, status?: number, origin?:
 type TokenVerifier = (token: string) => Promise<any>;
 type AmountValidator = (value: unknown) => string | null;
 type ActorResolver = (req: Request, db: SupabaseClient) => Promise<{ actor?: any; error?: string; status?: number }>;
+type AuditWriter = (db: SupabaseClient, actorId: string, action: string, targetType: string, targetId: string, details: Record<string, unknown>) => Promise<void>;
 let aviatorStateRequestCount = 0;
 
 export async function handleAviatorApi(
@@ -15,6 +16,7 @@ export async function handleAviatorApi(
   verifyBigDaddyToken: TokenVerifier,
   positiveAmount: AmountValidator,
   actorFrom: ActorResolver,
+  audit: AuditWriter,
   requestStartedAt: number,
 ): Promise<Response | null> {
   if (!path.startsWith("/games/aviator/")) return null;
@@ -97,6 +99,33 @@ export async function handleAviatorApi(
       }
       return response({ result: data }, 200, origin);
     }
+
+  if (req.method === "POST" && path === "/games/aviator/activate") {
+    const auth = await actorFrom(req, db);
+    if (!auth.actor) return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
+    const actor = auth.actor;
+    if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
+    const { data: game, error: gameError } = await db.schema("platform").from("games")
+      .select("id,status,pool_wallet_id").eq("code", "aviator").maybeSingle();
+    if (gameError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
+    if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
+    const { data: pool, error: poolError } = await db.schema("wallet").from("wallets")
+      .select("id,balance").eq("id", game.pool_wallet_id).maybeSingle();
+    if (poolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
+    const poolBalance = String(pool?.balance ?? "0");
+    if (!pool || !/^[0-9]+$/.test(poolBalance) || BigInt(poolBalance) <= 0n) {
+      return response({ error: "ALLOCATE_GAME_POOL_TOKENS_FIRST" }, 400, origin);
+    }
+    const { error: updateError } = await db.schema("platform").from("games")
+      .update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", "aviator");
+    if (updateError) return response({ error: "GAME_ACTIVATION_FAILED" }, 503, origin);
+    try {
+      await audit(db, actor.id, "GAME_ACTIVATED", "GAME", game.id, { gameCode: "aviator", poolBalance });
+    } catch {
+      console.error("Game activation audit write failed.");
+    }
+    return response({ status: "ACTIVE", gameCode: "aviator", poolBalance }, 200, origin);
+  }
 
   if (req.method === "GET" && (path === "/games/aviator/state" || path === "/games/aviator/history")) {
     const auth = await actorFrom(req, db);
