@@ -76,15 +76,17 @@ async function runTestSuite() {
 
   test('Aviator state API logs timing and preserves authoritative crash/cashout logic', () => {
     const apiSource = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const aviatorSource = readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8');
+    const combinedApiSource = `${apiSource}\n${aviatorSource}`;
     const frontendSource = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
-    assert.ok(apiSource.includes('get_aviator_state_bundle'));
-    assert.ok(apiSource.includes('event: "aviator_state_api_timing"'));
-    assert.ok(apiSource.includes('rpcMs: rpcDurationMs'));
-    assert.ok(apiSource.includes('roundId: current.id'));
-    assert.ok(apiSource.includes('status: current.status'));
-    assert.ok(apiSource.includes('multiplier: current.multiplier'));
-    assert.ok(apiSource.includes('cashout_crash_bet_authenticated_atomic'));
-    assert.ok(apiSource.includes('Math.min(liveMultiplier, Number(row.crash_multiplier ?? liveMultiplier))'));
+    assert.ok(combinedApiSource.includes('get_aviator_state_bundle'));
+    assert.ok(combinedApiSource.includes('event: "aviator_state_api_timing"'));
+    assert.ok(combinedApiSource.includes('rpcMs: rpcDurationMs'));
+    assert.ok(combinedApiSource.includes('roundId: current.id'));
+    assert.ok(combinedApiSource.includes('status: current.status'));
+    assert.ok(combinedApiSource.includes('multiplier: current.multiplier'));
+    assert.ok(combinedApiSource.includes('cashout_crash_bet_authenticated_atomic'));
+    assert.ok(combinedApiSource.includes('Math.min(liveMultiplier, Number(row.crash_multiplier ?? liveMultiplier))'));
     assert.ok(frontendSource.includes('Never extrapolate on the client'));
   });
 
