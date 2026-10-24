@@ -207,6 +207,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const gameListRefreshInFlightRef = useRef(false);
   const lastSuccessfulRoundAtRef = useRef<number | null>(null);
   const disposedRef = useRef(false);
+  const pollingActiveRef = useRef(false);
+  const stopPollingRef = useRef<(() => void) | null>(null);
+  const pollAbortControllersRef = useRef<Set<AbortController>>(new Set());
   const lastHealthCheckAtRef = useRef(0);
 
   const connect = () => {
@@ -217,21 +220,30 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const startProductionPolling = () => {
-    if (simIntervalRef.current) return;
+    if (pollingActiveRef.current) return;
+    pollingActiveRef.current = true;
     let inFlight = false;
+    let rerunRequested = false;
     let realtimeConnected = false;
     let stopped = false;
+    stopPollingRef.current = () => {
+      stopped = true;
+      pollingActiveRef.current = false;
+    };
     disposedRef.current = false;
     const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
     const scheduleNextPoll = () => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
-      // Realtime handles lifecycle transitions. Poll less often for the live
-      // multiplier and retain a quicker fallback when the socket is disconnected.
+      // Realtime handles lifecycle transitions. Poll the authoritative live
+      // multiplier every 200ms while RUNNING, whether Realtime is connected or not.
       const delay = realtimeConnected
-        ? (running ? 1500 : 5000)
-        : (running ? 1000 : 2500);
-      simIntervalRef.current = window.setTimeout(() => { void poll(); }, delay);
+        ? (running ? 200 : 5000)
+        : (running ? 200 : 2500);
+      simIntervalRef.current = window.setTimeout(() => {
+        simIntervalRef.current = null;
+        void poll();
+      }, delay);
     };
     const refreshWalletForResult = (key: string, round: any) => {
       if (!round?.id || !['RESULT', 'SETTLED', 'CRASHED'].includes(round.status)) return;
@@ -241,7 +253,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (userRef.current) refreshWallet();
     };
     const poll = async () => {
-      if (inFlight) return;
+      // Keep only one state request active at a time. Overlapping responses can
+      // arrive out of order and make the displayed multiplier appear to pause or jump.
+      if (inFlight) {
+        rerunRequested = true;
+        return;
+      }
       inFlight = true;
       try {
         const now = Date.now();
@@ -251,13 +268,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           lastHealthCheckAtRef.current = now;
           const healthStartedAt = performance.now();
           const healthController = new AbortController();
+          pollAbortControllersRef.current.add(healthController);
           const healthTimeout = window.setTimeout(() => healthController.abort(), 8000);
           void fetch(apiBase.replace(/\/$/, '') + '/health', {
             headers: { Accept: 'application/json' },
             signal: healthController.signal,
           }).then(async (response) => {
             const health = await response.json().catch(() => null);
-            if (disposedRef.current) return;
+            if (stopped || disposedRef.current) return;
             // Any HTTP response proves the API process is reachable. Only mark it
             // Online when its database is connected and production mode is ready.
             const databaseConnected = health?.databaseConnected === true;
@@ -266,12 +284,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             setApiLastCheckedAt(Date.now());
             setApiResponseTimeMs(Math.round(performance.now() - healthStartedAt));
           }).catch(() => {
-            if (!disposedRef.current) {
+            if (!stopped && !disposedRef.current) {
               setApiHealth('offline');
               setApiLastCheckedAt(Date.now());
               setApiResponseTimeMs(null);
             }
-          }).finally(() => window.clearTimeout(healthTimeout));
+          }).finally(() => {
+            window.clearTimeout(healthTimeout);
+            pollAbortControllersRef.current.delete(healthController);
+          });
         }
         const pollOtherGames = now - otherGamesPollAtRef.current >= 1500;
         if (pollOtherGames) {
@@ -284,14 +305,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (token) {
               gameListRefreshInFlightRef.current = true;
               const listController = new AbortController();
+              pollAbortControllersRef.current.add(listController);
               const listTimeout = window.setTimeout(() => listController.abort(), 5000);
               void fetch(apiBase + '/games/list', {
                 headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
                 signal: listController.signal,
               }).then(async (response) => {
-                if (!response.ok) return;
+                if (!response.ok || stopped || disposedRef.current) return;
                 const payload = await response.json().catch(() => null);
-                if (!Array.isArray(payload?.games)) return;
+                if (stopped || disposedRef.current || !Array.isArray(payload?.games)) return;
                 const keyByCode: Record<string, string> = {
                   aviator: 'aviator',
                   roulette: 'roulette',
@@ -310,6 +332,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 // Keep the last known inventory on transient failures.
               }).finally(() => {
                 window.clearTimeout(listTimeout);
+                pollAbortControllersRef.current.delete(listController);
                 gameListRefreshInFlightRef.current = false;
               });
             }
@@ -329,6 +352,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // all live-state updates (or leave the global connection badge Offline).
         const results = await Promise.all(gamePaths.map(async ([key, path]) => {
           const controller = new AbortController();
+          pollAbortControllersRef.current.add(controller);
           const timeoutId = window.setTimeout(() => controller.abort(), key === 'aviator' ? 7000 : 5000);
           try {
             // Game-state endpoints are authenticated. Read the current token on
@@ -351,8 +375,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             return { key, data: null, error: error instanceof Error ? (error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR') : 'NETWORK_ERROR', receivedAt: null };
           } finally {
             window.clearTimeout(timeoutId);
+            pollAbortControllersRef.current.delete(controller);
           }
         }));
+        if (stopped || disposedRef.current) return;
         const aviatorResult = results.find(({ key }) => key === 'aviator');
         // Align local animation to the API clock so a device clock skew cannot move the displayed crash point.
         const serverTimeMs = aviatorResult?.data?.serverTime ? Date.parse(aviatorResult.data.serverTime) : NaN;
@@ -486,6 +512,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsSimulatedFallback(false);
       } finally {
         inFlight = false;
+        if (stopped || disposedRef.current) return;
+        if (rerunRequested) {
+          rerunRequested = false;
+          simIntervalRef.current = window.setTimeout(() => {
+            simIntervalRef.current = null;
+            void poll();
+          }, 0);
+          return;
+        }
         scheduleNextPoll();
       }
     };
@@ -495,16 +530,29 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const channel = supabaseRealtime
       .channel('aviator:rounds', { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'round_state_changed' }, () => {
-        // Fetch the authoritative API snapshot after each lifecycle event. It
-        // includes computed multiplier/history and respects normal auth checks.
-        if (simIntervalRef.current) window.clearTimeout(simIntervalRef.current);
+        if (stopped || disposedRef.current) return;
+        // Coalesce broadcasts while a request is running; fetch one fresh snapshot
+        // immediately after it completes instead of overlapping requests or losing the event.
+        if (simIntervalRef.current !== null) {
+          window.clearTimeout(simIntervalRef.current);
+          simIntervalRef.current = null;
+        }
+        if (inFlight) {
+          rerunRequested = true;
+          return;
+        }
         void poll();
       })
       .subscribe((status) => {
+        if (stopped || disposedRef.current) return;
         realtimeConnected = status === 'SUBSCRIBED';
         if (realtimeConnected) {
-          if (simIntervalRef.current) window.clearTimeout(simIntervalRef.current);
-          void poll();
+          if (simIntervalRef.current !== null) {
+            window.clearTimeout(simIntervalRef.current);
+            simIntervalRef.current = null;
+          }
+          if (inFlight) rerunRequested = true;
+          else void poll();
         }
       });
     realtimeChannelRef.current = channel;
@@ -515,7 +563,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     connect();
     return () => {
       disposedRef.current = true;
-      if (simIntervalRef.current) window.clearTimeout(simIntervalRef.current);
+      stopPollingRef.current?.();
+      stopPollingRef.current = null;
+      if (simIntervalRef.current !== null) {
+        window.clearTimeout(simIntervalRef.current);
+        simIntervalRef.current = null;
+      }
+      for (const controller of pollAbortControllersRef.current) controller.abort();
+      pollAbortControllersRef.current.clear();
       if (realtimeChannelRef.current) {
         void supabaseRealtime.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
@@ -539,7 +594,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     let frame = 0;
     let startTime: number | null = null;
-    const durationMs = 450;
+    // Keep interpolation shorter than the 200ms live polling cadence so each
+    // authoritative update can be rendered promptly instead of continually
+    // cancelling a longer animation before it reaches its target.
+    const durationMs = 180;
     const animate = (timestamp: number) => {
       if (startTime === null) startTime = timestamp;
       const progress = Math.min(1, (timestamp - startTime) / durationMs);
