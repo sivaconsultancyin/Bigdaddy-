@@ -52,6 +52,28 @@ export const ApiHealthPanel: React.FC = () => {
   const [failures, setFailures] = useState<FailureEvent[]>([]);
   const [failurePersistence, setFailurePersistence] = useState<'database' | 'memory-fallback' | 'unavailable'>('unavailable');
   const [failureNote, setFailureNote] = useState<string>('Loading failure history…');
+  type AviatorDiagnostic = {
+    requestId: string; path: string; sentAt?: string; receivedAt?: string; outcome?: string;
+    httpStatus?: number | null; latencyMs?: number | null; backendDurationMs?: number | null;
+    backendReceivedAt?: string | null; backendCompletedAt?: string | null; pollingGapMs?: number | null;
+    multiplier?: number | null; previousMultiplier?: number | null; multiplierUpdateGapMs?: number | null;
+    roundStatus?: string | null; roundId?: string | null; realtimeConnected?: boolean; error?: string;
+  };
+  const [aviatorDiagnostics, setAviatorDiagnostics] = useState<AviatorDiagnostic[]>(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem('bigdaddy_aviator_diagnostics_v1') || '[]');
+      return Array.isArray(stored) ? stored.filter((entry: AviatorDiagnostic) => entry?.path === '/games/aviator/state').slice(0, 40) : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    const onDiagnostic = (event: Event) => {
+      const detail = (event as CustomEvent<AviatorDiagnostic>).detail;
+      if (!detail || detail.path !== '/games/aviator/state') return;
+      setAviatorDiagnostics(previous => [detail, ...previous].slice(0, 40));
+    };
+    window.addEventListener('bigdaddy:aviator-diagnostic', onDiagnostic);
+    return () => window.removeEventListener('bigdaddy:aviator-diagnostic', onDiagnostic);
+  }, []);
 
   const loadFailures = useCallback(async () => {
     try {
@@ -115,6 +137,41 @@ export const ApiHealthPanel: React.FC = () => {
 
   return (
     <section className="bg-zinc-950 border border-cyan-500/25 rounded-2xl p-3.5 shadow-xl space-y-3">
+      <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-cyan-200">Aviator request diagnostics</h3>
+          <span className="text-[10px] text-zinc-400">Recent {aviatorDiagnostics.length}/40</span>
+        </div>
+        <p className="text-[10px] text-zinc-400">Live device diagnostics. Backend timing appears only when the deployed Edge Function exposes timing headers. No event can mean the game poll is inactive or this build is old.</p>
+        {aviatorDiagnostics.length === 0 ? (
+          <p className="text-[11px] text-amber-300">No Aviator diagnostic events yet. Open Aviator in this app session, then return here and refresh the panel.</p>
+        ) : (
+          <div className="space-y-2 max-h-[420px] overflow-y-auto">
+            {aviatorDiagnostics.map((d, i) => (
+              <article key={d.requestId + i} className="rounded-lg border border-zinc-800 bg-zinc-950 p-2 space-y-1">
+                <div className="flex flex-wrap justify-between gap-1">
+                  <span className={`text-[10px] font-bold ${d.outcome === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}>{d.outcome === 'success' ? 'Response received' : d.error || 'Request error'} {d.httpStatus ? `· HTTP ${d.httpStatus}` : ''}</span>
+                  <span className="text-[9px] text-zinc-500">{d.receivedAt ? new Date(d.receivedAt).toLocaleTimeString() : 'No response timestamp'}</span>
+                </div>
+                <p className="text-[9px] font-mono text-zinc-400 break-all">Request ID: {d.requestId}</p>
+                <div className="grid grid-cols-2 gap-1 text-[10px] text-zinc-300">
+                  <span>Frontend sent: {d.sentAt ? new Date(d.sentAt).toLocaleTimeString() : 'not recorded'}</span>
+                  <span>Frontend total: {d.latencyMs == null ? 'unavailable' : `${d.latencyMs} ms`}</span>
+                  <span>Backend received: {d.backendReceivedAt ? new Date(d.backendReceivedAt).toLocaleTimeString() : 'header unavailable'}</span>
+                  <span>Backend completed: {d.backendCompletedAt ? new Date(d.backendCompletedAt).toLocaleTimeString() : 'header unavailable'}</span>
+                  <span>Backend duration: {d.backendDurationMs == null ? 'unavailable' : `${d.backendDurationMs} ms`}</span>
+                  <span>Polling gap: {d.pollingGapMs == null ? 'first request' : `${d.pollingGapMs} ms`}</span>
+                  <span>Multiplier: {d.multiplier == null ? 'not returned' : `${d.multiplier.toFixed(2)}x`}</span>
+                  <span>Multiplier update gap: {d.multiplierUpdateGapMs == null ? 'not measured' : `${d.multiplierUpdateGapMs} ms`}</span>
+                  <span>Round: {d.roundStatus || 'unknown'}</span>
+                  <span>Realtime: {d.realtimeConnected == null ? 'unknown' : d.realtimeConnected ? 'connected' : 'disconnected'}</span>
+                </div>
+                {d.backendDurationMs == null && <p className="text-[10px] text-amber-300">Backend timing unavailable: old deployment, CORS/proxy stripping, or no Edge response.</p>}
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-cyan-400" />
