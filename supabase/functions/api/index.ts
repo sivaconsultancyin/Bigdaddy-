@@ -201,7 +201,7 @@ async function handle(req: Request) {
   let db: SupabaseClient;
   try { db = client(); } catch { return response({ error: "SERVER_CONFIGURATION_ERROR" }, 500, origin); }
 
-  const aviatorResponse = await handleAviatorApi(req, path, origin, db, response, verifyBigDaddyToken, positiveAmount, actorFrom, requestStartedAt);
+  const aviatorResponse = await handleAviatorApi(req, path, origin, db, response, verifyBigDaddyToken, positiveAmount, actorFrom, audit, requestStartedAt);
   if (aviatorResponse) return aviatorResponse;
 
   // Public login: same BigDaddy HS256 token contract as the existing backend.
