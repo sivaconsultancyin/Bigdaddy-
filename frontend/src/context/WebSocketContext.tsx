@@ -578,38 +578,44 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, []);
 
-  // Smoothly interpolate only toward values confirmed by the API. Never extrapolate
-  // beyond the latest authoritative multiplier, so the UI cannot pass the crash point.
+  // Keep the latest server-confirmed target in a ref. The animation loop is
+  // created once per RUNNING round and is not restarted for each API response.
+  // This prevents frame resets/stutter when multiplier updates arrive irregularly.
+  const authoritativeMultiplierRef = useRef(authoritativeMultiplier);
+  authoritativeMultiplierRef.current = authoritativeMultiplier;
+
   useEffect(() => {
     const terminal = roundState.status === 'CRASHED' || roundState.status === 'SETTLED' || roundState.status === 'WAITING';
     if (terminal) {
-      displayedMultiplierRef.current = authoritativeMultiplier;
-      setMultiplier(authoritativeMultiplier);
+      displayedMultiplierRef.current = authoritativeMultiplierRef.current;
+      setMultiplier(authoritativeMultiplierRef.current);
       return;
     }
 
-    const startValue = displayedMultiplierRef.current;
-    const targetValue = Math.max(startValue, authoritativeMultiplier);
-    if (targetValue <= startValue) return;
-
     let frame = 0;
-    let startTime: number | null = null;
-    // Keep interpolation shorter than the 200ms live polling cadence so each
-    // authoritative update can be rendered promptly instead of continually
-    // cancelling a longer animation before it reaches its target.
-    const durationMs = 180;
+    let previousTimestamp: number | null = null;
     const animate = (timestamp: number) => {
-      if (startTime === null) startTime = timestamp;
-      const progress = Math.min(1, (timestamp - startTime) / durationMs);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const nextValue = Math.min(targetValue, startValue + (targetValue - startValue) * eased);
-      displayedMultiplierRef.current = nextValue;
-      setMultiplier(nextValue);
-      if (progress < 1) frame = window.requestAnimationFrame(animate);
+      if (previousTimestamp === null) previousTimestamp = timestamp;
+      const deltaMs = Math.min(50, Math.max(0, timestamp - previousTimestamp));
+      previousTimestamp = timestamp;
+
+      const current = displayedMultiplierRef.current;
+      const target = Math.max(current, authoritativeMultiplierRef.current);
+      const difference = target - current;
+      // Frame-rate-independent easing toward the latest authoritative value.
+      // The value can approach the target but never exceed it or predict a crash.
+      const blend = 1 - Math.exp(-deltaMs / 65);
+      const nextValue = difference <= 0.0005 ? target : Math.min(target, current + difference * blend);
+      if (nextValue !== current) {
+        displayedMultiplierRef.current = nextValue;
+        setMultiplier(nextValue);
+      }
+      frame = window.requestAnimationFrame(animate);
     };
+
     frame = window.requestAnimationFrame(animate);
     return () => window.cancelAnimationFrame(frame);
-  }, [authoritativeMultiplier, roundState.status]);
+  }, [roundState.status]);
 
   return (
     <WebSocketContext.Provider
