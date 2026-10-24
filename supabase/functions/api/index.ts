@@ -110,6 +110,7 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
 }
 
 async function handle(req: Request) {
+  const requestStartedAt = performance.now();
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
     const allowed = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -673,7 +674,6 @@ async function handle(req: Request) {
   }
 
   if (req.method === "GET" && path === "/games/aviator/state") {
-    const requestStartedAt = performance.now();
     aviatorStateRequestCount += 1;
     // One PostgREST RPC returns the current round, recent history and current-round
     // bets with usernames. Do not fan this hot one-second polling endpoint out into
