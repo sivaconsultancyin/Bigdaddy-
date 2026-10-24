@@ -467,8 +467,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
     void poll();
-    // Poll the authoritative API every 500ms; no Supabase Realtime socket is used.
-    simIntervalRef.current = setInterval(() => { void poll(); }, 500);
+    // Poll the authoritative Aviator/game-state API every 100ms; no Supabase Realtime socket is used.
+    simIntervalRef.current = setInterval(() => { void poll(); }, 100);
   };
 
   useEffect(() => {
