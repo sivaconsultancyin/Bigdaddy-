@@ -196,7 +196,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   }, []);
 
-  const simIntervalRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const simIntervalRef = useRef<number | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
