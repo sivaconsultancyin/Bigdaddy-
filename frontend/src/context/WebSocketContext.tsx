@@ -555,7 +555,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       })
       .subscribe((status) => {
         if (stopped || disposedRef.current) return;
-        if (realtimeConnected) {
+        if (status === 'SUBSCRIBED') {
           if (simIntervalRef.current !== null) {
             window.clearTimeout(simIntervalRef.current);
             simIntervalRef.current = null;
