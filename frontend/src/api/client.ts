@@ -4,9 +4,19 @@ import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types
 // The function strips the /functions/v1/api prefix and routes /auth, /games, /wallet, etc.
 // Keep Render out of the runtime request path.
 const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
+const AVIATOR_API_BASE = import.meta.env.VITE_AVIATOR_API_BASE_URL
+  || 'https://yrleubhpiqejfvingqfj.supabase.co/functions/v1/aviator-api';
+const AVIATOR_API_KEY = import.meta.env.VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY || '';
 const API_BASE = import.meta.env.PROD
   ? SUPABASE_API_BASE
   : (import.meta.env.VITE_API_BASE_URL || '/api');
+
+function requestBase(endpoint: string): string {
+  // Keep login, users, wallet and every other game on shared BigDaddy.
+  // Only the isolated Aviator state/bet/cashout endpoints use the game backend.
+  if (/^\/games\/aviator\/(state|history|bet|cashout)$/.test(endpoint)) return AVIATOR_API_BASE;
+  return API_BASE;
+}
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
 export class ApiRequestError extends Error {
@@ -105,7 +115,11 @@ export class ApiClient {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      const base = requestBase(endpoint);
+      if (/^\/games\/aviator\/(state|history|bet|cashout)$/.test(endpoint) && AVIATOR_API_KEY) {
+        headers['apikey'] = AVIATOR_API_KEY;
+      }
+      const response = await fetch(`${base}${endpoint}`, {
         ...options,
         headers,
         signal: options.signal ?? controller.signal,
