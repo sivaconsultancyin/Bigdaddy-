@@ -6,7 +6,7 @@ import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types
 const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
 const AVIATOR_API_BASE = import.meta.env.VITE_AVIATOR_API_BASE_URL
   || 'https://yrleubhpiqejfvingqfj.supabase.co/functions/v1/aviator-api';
-const AVIATOR_API_KEY = import.meta.env.VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY || '';
+const AVIATOR_API_KEY = import.meta.env.VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_ld4nm-c1SKFdDeTOh31HkA_5KPAZSSy';
 const API_BASE = import.meta.env.PROD
   ? SUPABASE_API_BASE
   : (import.meta.env.VITE_API_BASE_URL || '/api');
