@@ -95,7 +95,7 @@ Deno.serve(async (req: Request) => {
     }
     const amount = BigInt(amountText);
     const autoCashoutText = body.autoCashoutMultiplier == null ? null : String(body.autoCashoutMultiplier).trim();
-    if (autoCashoutText !== null && !/^([0-9]{1,3})(\\.[0-9]{1,2})?$/.test(autoCashoutText)) {
+    if (autoCashoutText !== null && !/^([0-9]{1,3})(\.[0-9]{1,2})?$/.test(autoCashoutText)) {
       return json({ error: "INVALID_AUTO_CASHOUT" }, 400, origin);
     }
     const autoCashout = autoCashoutText === null ? null : Number(autoCashoutText);
