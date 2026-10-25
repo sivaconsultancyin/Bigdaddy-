@@ -239,6 +239,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     disposedRef.current = false;
     const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
+    const aviatorApiBase = import.meta.env.VITE_AVIATOR_API_BASE_URL || 'https://yrleubhpiqejfvingqfj.supabase.co/functions/v1/aviator-api';
+    const aviatorApiKey = import.meta.env.VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY || '';
     const scheduleNextPoll = (pollStartedAt: number) => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
@@ -380,9 +382,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               emitDiagnostic({ outcome: 'error', error: 'AUTH_REQUIRED', httpStatus: null, latencyMs: Math.round(performance.now() - started), pollingGapMs: previousStart === null ? null : Math.round(started - previousStart), receivedAt: null });
               return { key, data: null, error: 'AUTH_REQUIRED', receivedAt: null };
             }
-            const response = await fetch(apiBase + path + (key === 'aviator' ? `?request_id=${encodeURIComponent(requestId)}` : ''), {
+            const requestBase = key === 'aviator' ? aviatorApiBase : apiBase;
+            const requestHeaders: Record<string, string> = { Accept: 'application/json', Authorization: `Bearer ${token}` };
+            if (key === 'aviator' && aviatorApiKey) requestHeaders.apikey = aviatorApiKey;
+            const response = await fetch(requestBase + path + (key === 'aviator' ? `?request_id=${encodeURIComponent(requestId)}` : ''), {
               cache: 'no-store',
-              headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+              headers: requestHeaders,
               signal: controller.signal,
             });
             const receivedAt = new Date().toISOString();
