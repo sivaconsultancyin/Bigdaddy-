@@ -33,3 +33,15 @@ Important integration rules:
 - Crash loss/refund operations are allowed to finish even if the account becomes inactive after the bet was placed.
 - Never infer a failed debit/payout from an HTTP timeout; retry the same key and reconcile.
 - The RPC has been installed and its grants verified. No real-money operation was invoked during verification. End-to-end calls and engine deployment remain pending.
+
+## Isolated round lifecycle primitives
+
+Migration `20261025130000_aviator_round_lifecycle.sql` is applied to the target Aviator project and committed to the feature branch. It adds service-role-only functions to create a waiting round, start it, atomically accept a cashout intent, and crash a running round. Round creation uses a transaction advisory lock to prevent two concurrent workers creating active rounds. Cashout checks the bet's user ID and serializes against crash on the round row. A successful cashout creates a pending settlement intent; it does **not** pay the wallet itself.
+
+The target was verified to contain all four functions, with service-role execution and no anonymous cashout permission. The target still has zero rounds/bets/settlements because verification did not create test rounds or move money.
+
+Important remaining safeguards before these primitives are wired to HTTP routes:
+- Only accept a cashout multiplier calculated by the trusted server engine from server time; never trust a client-supplied multiplier.
+- Before treating a bet as funded, implement a cross-database saga: persist debit intent, call the shared-wallet RPC with a stable key, then reconcile the result.
+- Add a complete settlement worker that retries payout/loss/refund operations and only marks a round SETTLED after all operations are reconciled.
+- Verify the shared wallet RPC's transaction type and liability behavior against real source-schema definitions in staging before enabling any money movement.
