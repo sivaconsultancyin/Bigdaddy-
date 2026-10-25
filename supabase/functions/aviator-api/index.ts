@@ -105,7 +105,8 @@ Deno.serve(async (req: Request) => {
 
     const crashed = ["CRASHED", "SETTLED"].includes(row.status);
     const elapsed = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
-    const live = Math.floor(Math.exp(0.06 * Math.pow(elapsed, 1.15)) * 100) / 100;
+    const exponent = 0.06 * Math.pow(elapsed, 1.15);
+    const live = Math.min(100000, Math.floor(Math.exp(Math.min(Math.log(100000), exponent)) * 100) / 100);
     const multiplier = row.status === "RUNNING"
       ? Math.min(live, Number(row.crash_multiplier ?? live))
       : crashed ? Number(row.crash_multiplier ?? 1) : 1;
