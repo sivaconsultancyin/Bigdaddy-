@@ -67,7 +67,7 @@ async function authenticate(req: Request, shared: ReturnType<typeof createClient
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("origin");
-  if (req.method === "OPTIONS") return json({}, 204, origin);
+  if (req.method === "OPTIONS") return json({}, 200, origin);
   if (req.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405, origin);
 
   let target: ReturnType<typeof createClient>;
