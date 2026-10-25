@@ -28,3 +28,7 @@ verify_jwt = false
 [functions.aviator-engine]
 # The handler enforces a separate high-entropy scheduler secret in x-aviator-engine-secret.
 verify_jwt = false
+
+[functions.aviator-api]
+# The function validates the existing BigDaddy HS256 JWT and current shared user/role itself.
+verify_jwt = false
