@@ -6,7 +6,7 @@ BEGIN;
 CREATE SCHEMA IF NOT EXISTS aviator;
 
 CREATE TABLE IF NOT EXISTS aviator.game_rounds (
-  id uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
   game_code varchar(32) NOT NULL DEFAULT 'aviator' CHECK (game_code = 'aviator'),
   round_number bigint NOT NULL CHECK (round_number > 0),
   status text NOT NULL DEFAULT 'WAITING'
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS aviator.game_rounds (
 );
 
 CREATE TABLE IF NOT EXISTS aviator.game_bets (
-  id uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
   round_id uuid NOT NULL REFERENCES aviator.game_rounds(id),
   user_id uuid NOT NULL,
   bet_amount bigint NOT NULL CHECK (bet_amount > 0),
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS aviator.game_bets (
 );
 
 CREATE TABLE IF NOT EXISTS aviator.game_settlements (
-  id uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
   bet_id uuid NOT NULL UNIQUE REFERENCES aviator.game_bets(id),
   round_id uuid NOT NULL REFERENCES aviator.game_rounds(id),
   wallet_transaction_id uuid,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS aviator.game_settlements (
 );
 
 CREATE TABLE IF NOT EXISTS aviator.wallet_operations (
-  id uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
   bet_id uuid NOT NULL REFERENCES aviator.game_bets(id),
   operation_type text NOT NULL CHECK (operation_type IN ('DEBIT_BET', 'CREDIT_PAYOUT', 'REFUND_BET')),
   amount bigint NOT NULL CHECK (amount > 0),
