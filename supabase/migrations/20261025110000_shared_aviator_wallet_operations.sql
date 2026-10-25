@@ -31,6 +31,7 @@ DECLARE
   v_metadata jsonb;
   v_tx_id uuid;
   v_payout bigint;
+  v_expected_amount bigint;
   v_existing wallet.wallet_transactions%ROWTYPE;
   v_role_count integer;
   v_role text;
@@ -145,6 +146,8 @@ BEGIN
     );
   END IF;
 
+  v_expected_amount := CASE WHEN p_action = 'CASHOUT' THEN v_payout ELSE p_amount END;
+
   -- Use the same global wallet-ID lock order as wallet_transfer_atomic.
   PERFORM w.id
     FROM wallet.wallets w
@@ -158,8 +161,7 @@ BEGIN
   IF FOUND THEN
     IF v_existing.source_wallet_id IS DISTINCT FROM v_source
        OR v_existing.target_wallet_id IS DISTINCT FROM v_target
-       OR v_existing.amount IS DISTINCT FROM
-          CASE WHEN p_action = 'CASHOUT' THEN v_payout ELSE p_amount END
+       OR v_existing.amount IS DISTINCT FROM v_expected_amount
        OR v_existing.type IS DISTINCT FROM v_type
        OR COALESCE(v_existing.metadata, '{}'::jsonb) IS DISTINCT FROM v_metadata THEN
       RAISE EXCEPTION 'IDEMPOTENCY_KEY_REUSE' USING ERRCODE = '22023';
@@ -219,7 +221,7 @@ BEGIN
 
   RETURN jsonb_build_object(
     'action', p_action, 'transactionId', v_tx_id,
-    'amount', CASE WHEN p_action = 'CASHOUT' THEN v_payout ELSE p_amount END,
+    'amount', v_expected_amount,
     'replayed', false
   );
 END;
