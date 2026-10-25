@@ -50,7 +50,7 @@ BEGIN
                wo.liability, wo.idempotency_key, wo.attempts
   )
   SELECT c.id, b.id, c.operation_type, c.amount, c.liability,
-         c.idempotency_key, b.user_id, b.round_id, c.attempts
+         c.idempotency_key::text, b.user_id, b.round_id, c.attempts
     FROM claimed c
     JOIN aviator.game_bets b ON b.id = c.bet_id;
 END;
