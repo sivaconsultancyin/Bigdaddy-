@@ -1,0 +1,238 @@
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import { jwtVerify } from "npm:jose@5.9.6";
+
+type Claims = { id: string; username: string; role: "OWNER" | "SUPER_ADMIN" | "ADMIN" | "PLAYER"; parentId: string | null };
+
+const json = (body: Record<string, unknown>, status = 200, origin: string | null = null) => {
+  const configured = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const native = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
+  const allowed = new Set([...configured, ...native]);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type, idempotency-key",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
+  if (!configured.length) headers["Access-Control-Allow-Origin"] = "*";
+  else if (origin && allowed.has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  return new Response(JSON.stringify(body), { status, headers });
+};
+
+function clients() {
+  const targetUrl = Deno.env.get("SUPABASE_URL");
+  const targetKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const sharedUrl = Deno.env.get("BIGDADDY_SHARED_SUPABASE_URL");
+  const sharedKey = Deno.env.get("BIGDADDY_SHARED_SERVICE_ROLE_KEY");
+  const jwtSecret = Deno.env.get("BIGDADDY_JWT_SECRET");
+  if (!targetUrl || !targetKey || !sharedUrl || !sharedKey || !jwtSecret || jwtSecret.length < 32) {
+    throw new Error("AVIATOR_API_NOT_CONFIGURED");
+  }
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  return {
+    target: createClient(targetUrl, targetKey, options),
+    shared: createClient(sharedUrl, sharedKey, options),
+    jwtSecret: new TextEncoder().encode(jwtSecret),
+  };
+}
+
+async function authenticate(req: Request, shared: ReturnType<typeof createClient>, secret: Uint8Array): Promise<Claims | null> {
+  const header = req.headers.get("authorization") ?? "";
+  if (!header.startsWith("Bearer ")) return null;
+  try {
+    const { payload, protectedHeader } = await jwtVerify(header.slice(7).trim(), secret, { algorithms: ["HS256"] });
+    if (protectedHeader.alg !== "HS256" || typeof payload.id !== "string" ||
+        typeof payload.username !== "string" ||
+        !["OWNER", "SUPER_ADMIN", "ADMIN", "PLAYER"].includes(String(payload.role))) return null;
+
+    const { data: user, error: userError } = await shared.schema("platform").from("users")
+      .select("id,username,parent_id,is_active").eq("id", payload.id).maybeSingle();
+    if (userError || !user?.is_active) return null;
+
+    const { data: roles, error: roleError } = await shared.schema("platform").from("role_assignments")
+      .select("role").eq("user_id", user.id).limit(2);
+    if (roleError || !roles || roles.length !== 1 || roles[0].role !== payload.role) return null;
+    return {
+      id: user.id,
+      username: user.username,
+      role: payload.role as Claims["role"],
+      parentId: user.parent_id ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+Deno.serve(async (req: Request) => {
+  const origin = req.headers.get("origin");
+  if (req.method === "OPTIONS") return json({}, 200, origin);
+  if (req.method !== "GET" && req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405, origin);
+
+  let target: ReturnType<typeof createClient>;
+  let shared: ReturnType<typeof createClient>;
+  let jwtSecret: Uint8Array;
+  try {
+    ({ target, shared, jwtSecret } = clients());
+  } catch {
+    return json({ error: "AVIATOR_API_NOT_CONFIGURED" }, 503, origin);
+  }
+
+  const actor = await authenticate(req, shared, jwtSecret);
+  if (!actor) return json({ error: "AUTH_REQUIRED" }, 401, origin);
+
+  const path = new URL(req.url).pathname.replace(/\/+$/, "");
+  if (req.method === "POST" && path.endsWith("/games/aviator/bet")) {
+    if (actor.role !== "PLAYER") return json({ error: "PLAYER_ONLY" }, 403, origin);
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return json({ error: "INVALID_JSON" }, 400, origin); }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "INVALID_JSON" }, 400, origin);
+
+    const amountText = String(body.amount ?? "").trim();
+    if (!/^[0-9]{1,18}$/.test(amountText) || BigInt(amountText) <= 0n) {
+      return json({ error: "INVALID_BET_AMOUNT" }, 400, origin);
+    }
+    const amount = BigInt(amountText);
+    const autoCashoutText = body.autoCashoutMultiplier == null ? null : String(body.autoCashoutMultiplier).trim();
+    if (autoCashoutText !== null && !/^([0-9]{1,3})(\.[0-9]{1,2})?$/.test(autoCashoutText)) {
+      return json({ error: "INVALID_AUTO_CASHOUT" }, 400, origin);
+    }
+    const autoCashout = autoCashoutText === null ? null : Number(autoCashoutText);
+    if (autoCashout !== null && (!Number.isFinite(autoCashout) || autoCashout < 1.01 || autoCashout > 50)) {
+      return json({ error: "INVALID_AUTO_CASHOUT" }, 400, origin);
+    }
+    const idempotencyKey = (req.headers.get("idempotency-key") ?? "").trim();
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(idempotencyKey)) {
+      return json({ error: "INVALID_IDEMPOTENCY_KEY" }, 400, origin);
+    }
+
+    const { data: state, error: stateError } = await target.schema("aviator").rpc("get_aviator_state_bundle");
+    if (stateError || !state || typeof state !== "object") return json({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
+    const round = (state as Record<string, any>).round;
+    if (!round?.id) return json({ error: "NO_OPEN_ROUND" }, 409, origin);
+    if (round.status !== "WAITING") return json({ error: "BETTING_CLOSED" }, 409, origin);
+
+    // Reserve liability at the configured auto-cashout or 50x maximum. Integer
+    // arithmetic and ceiling division ensure liability can never be rounded below
+    // the maximum payout for a supported two-decimal multiplier.
+    const liabilityMultiplierHundredths = BigInt(Math.round((autoCashout ?? 50) * 100));
+    const liability = (amount * liabilityMultiplierHundredths + 99n) / 100n;
+    const { data, error } = await target.schema("aviator").rpc("create_bet_intent", {
+      p_round_id: round.id,
+      p_user_id: actor.id,
+      p_bet_amount: amountText,
+      p_auto_cashout: autoCashout,
+      p_idempotency_key: idempotencyKey,
+      p_liability: liability.toString(),
+    });
+    if (error || !data || typeof data !== "object") {
+      const message = error?.message ?? "";
+      if (/IDEMPOTENCY_KEY_REUSE/i.test(message)) return json({ error: "IDEMPOTENCY_KEY_REUSE" }, 409, origin);
+      if (/ROUND_NOT_ACCEPTING_BETS|ROUND_NOT_FOUND/i.test(message)) return json({ error: "BETTING_CLOSED" }, 409, origin);
+      if (/INVALID_BET_PARAMETERS/i.test(message)) return json({ error: "INVALID_BET" }, 400, origin);
+      console.error("Aviator bet intent failed:", error?.code ?? "INVALID_BET_INTENT");
+      return json({ error: "BET_SERVICE_UNAVAILABLE" }, 503, origin);
+    }
+    return json({ bet: data, roundId: round.id }, 201, origin);
+  }
+
+  if (req.method === "POST" && path.endsWith("/games/aviator/cashout")) {
+    if (actor.role !== "PLAYER") return json({ error: "PLAYER_ONLY" }, 403, origin);
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return json({ error: "INVALID_JSON" }, 400, origin); }
+    const betId = String(body?.betId ?? "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(betId)) {
+      return json({ error: "INVALID_BET_ID" }, 400, origin);
+    }
+    const { data, error } = await target.schema("aviator").rpc("cashout_bet_intent", {
+      p_bet_id: betId,
+      p_user_id: actor.id,
+    });
+    if (error || !data || typeof data !== "object") {
+      const message = error?.message ?? "";
+      if (/BET_NOT_FOUND|BET_NOT_OWNED_BY_USER/i.test(message)) return json({ error: "BET_NOT_FOUND" }, 404, origin);
+      if (/BET_NOT_FUNDED/i.test(message)) return json({ error: "BET_NOT_FUNDED" }, 409, origin);
+      if (/ROUND_ALREADY_CRASHED|ROUND_NOT_RUNNING|BET_NOT_CASHOUTABLE|MULTIPLIER_NOT_CASHOUTABLE/i.test(message)) {
+        return json({ error: "BET_ALREADY_CASHED_OUT_OR_UNAVAILABLE" }, 409, origin);
+      }
+      console.error("Aviator cashout intent failed:", error?.code ?? "CASHOUT_FAILED");
+      return json({ error: "CASHOUT_SERVICE_UNAVAILABLE" }, 503, origin);
+    }
+    return json({ result: data }, 200, origin);
+  }
+
+  if (path.endsWith("/games/aviator/state")) {
+    const { data, error } = await target.schema("aviator").rpc("get_aviator_state_bundle");
+    if (error || !data || typeof data !== "object") {
+      console.error("Aviator state bundle failed:", error?.code ?? "INVALID_STATE_BUNDLE");
+      return json({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
+    }
+
+    const row = (data as Record<string, any>).round ?? null;
+    const historyRows = Array.isArray((data as Record<string, any>).rounds) ? (data as Record<string, any>).rounds : [];
+    const history = historyRows
+      .filter((round: any) => round.status === "CRASHED" || round.status === "SETTLED")
+      .map((round: any) => ({
+        roundNumber: Number(round.round_number),
+        crashMultiplier: Number(round.crash_multiplier ?? 0),
+        endedAt: round.ended_at,
+        serverSeedHash: round.server_seed_hash,
+        revealedServerSeed: round.revealed_server_seed,
+      }));
+    if (!row) return json({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
+
+    const crashed = ["CRASHED", "SETTLED"].includes(row.status);
+    const elapsed = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
+    const exponent = 0.06 * Math.pow(elapsed, 1.15);
+    const live = Math.min(100000, Math.floor(Math.exp(Math.min(Math.log(100000), exponent)) * 100) / 100);
+    const multiplier = row.status === "RUNNING"
+      ? Math.min(live, Number(row.crash_multiplier ?? live))
+      : crashed ? Number(row.crash_multiplier ?? 1) : 1;
+    const betRows = Array.isArray((data as Record<string, any>).bets) ? (data as Record<string, any>).bets : [];
+    return json({
+      round: {
+        id: row.id,
+        roundNumber: Number(row.round_number),
+        status: row.status,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
+        multiplier,
+        crashMultiplier: crashed ? row.crash_multiplier : null,
+        serverSeedHash: row.server_seed_hash,
+        revealedServerSeed: row.revealed_server_seed,
+      },
+      bets: betRows.map((bet: any) => ({
+        id: bet.id,
+        roundId: bet.round_id,
+        betAmount: String(bet.bet_amount),
+        autoCashout: bet.auto_cashout,
+        status: bet.status,
+        payoutAmount: String(bet.payout_amount ?? 0),
+        cashedOutAt: bet.cashed_out_at,
+        username: "Player",
+      })),
+      history,
+      serverTime: new Date().toISOString(),
+    }, 200, origin);
+  }
+
+  if (path.endsWith("/games/aviator/history")) {
+    const { data, error } = await target.schema("aviator").from("game_rounds")
+      .select("round_number,crash_multiplier,ended_at,server_seed_hash,revealed_server_seed")
+      .eq("game_code", "aviator").in("status", ["CRASHED", "SETTLED"])
+      .order("round_number", { ascending: false }).limit(20);
+    if (error) return json({ error: "GAME_STORAGE_UNAVAILABLE" }, 503, origin);
+    return json({
+      history: (data ?? []).map((round: any) => ({
+        roundNumber: Number(round.round_number),
+        crashMultiplier: round.crash_multiplier == null ? null : Number(round.crash_multiplier),
+        endedAt: round.ended_at,
+        serverSeedHash: round.server_seed_hash,
+        revealedServerSeed: round.revealed_server_seed,
+      })),
+    }, 200, origin);
+  }
+
+  return json({ error: "NOT_FOUND" }, 404, origin);
+});
