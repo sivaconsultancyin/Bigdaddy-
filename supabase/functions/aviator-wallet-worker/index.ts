@@ -41,7 +41,9 @@ const permanentErrorCodes = new Set([
 ]);
 
 function errorCode(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error ?? "");
+  const message = error && typeof error === "object" && "message" in error
+    ? String((error as { message?: unknown }).message ?? "")
+    : error instanceof Error ? error.message : String(error ?? "");
   const match = message.match(/(?:AVIATOR_|INVALID_|BET_|ROUND_|PLAYER_|USER_|IDEMPOTENCY_|AMOUNT_|WALLET_)[A-Z0-9_:-]*/);
   return (match?.[0] ?? "WALLET_OPERATION_FAILED").slice(0, 80);
 }
@@ -115,8 +117,8 @@ Deno.serve(async (req: Request) => {
           p_user_id: operation.user_id,
           p_bet_id: operation.bet_id,
           p_round_id: operation.round_id,
-          p_amount: Number(operation.amount),
-          p_liability: Number(operation.liability),
+          p_amount: String(operation.amount),
+          p_liability: String(operation.liability),
           p_multiplier: null,
           p_idempotency_key: operation.idempotency_key,
         },
