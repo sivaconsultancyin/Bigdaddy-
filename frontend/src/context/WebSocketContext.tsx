@@ -240,7 +240,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     disposedRef.current = false;
     const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
     const aviatorApiBase = import.meta.env.VITE_AVIATOR_API_BASE_URL || 'https://yrleubhpiqejfvingqfj.supabase.co/functions/v1/aviator-api';
-    const aviatorApiKey = import.meta.env.VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY || '';
+    const aviatorApiKey = import.meta.env.VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_ld4nm-c1SKFdDeTOh31HkA_5KPAZSSy';
     const scheduleNextPoll = (pollStartedAt: number) => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
