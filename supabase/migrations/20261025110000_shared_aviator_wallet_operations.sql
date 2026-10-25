@@ -60,20 +60,24 @@ BEGIN
     RAISE EXCEPTION 'INVALID_CASHOUT_MULTIPLIER' USING ERRCODE = '22023';
   END IF;
 
-  SELECT u.is_active, count(ra.role)::integer, min(ra.role::text)
-    INTO v_active, v_role_count, v_role
-    FROM platform.users u
-    LEFT JOIN platform.role_assignments ra ON ra.user_id = u.id
-   WHERE u.id = p_user_id
-   GROUP BY u.id, u.is_active;
-  IF NOT FOUND OR v_active IS DISTINCT FROM true THEN
-    RAISE EXCEPTION 'USER_NOT_FOUND_OR_DISABLED';
-  END IF;
-  IF v_role_count <> 1 OR v_role IS NULL THEN
-    RAISE EXCEPTION 'AUTH_SERVICE_UNAVAILABLE';
-  END IF;
-  IF v_role <> 'PLAYER' THEN
-    RAISE EXCEPTION 'PLAYER_ONLY';
+  -- New bets and player cashouts require an active PLAYER. Crash settlement and
+  -- refunds must still complete if an account was disabled after the bet.
+  IF p_action IN ('DEBIT_BET', 'CASHOUT') THEN
+    SELECT u.is_active, count(ra.role)::integer, min(ra.role::text)
+      INTO v_active, v_role_count, v_role
+      FROM platform.users u
+      LEFT JOIN platform.role_assignments ra ON ra.user_id = u.id
+     WHERE u.id = p_user_id
+     GROUP BY u.id, u.is_active;
+    IF NOT FOUND OR v_active IS DISTINCT FROM true THEN
+      RAISE EXCEPTION 'USER_NOT_FOUND_OR_DISABLED';
+    END IF;
+    IF v_role_count <> 1 OR v_role IS NULL THEN
+      RAISE EXCEPTION 'AUTH_SERVICE_UNAVAILABLE';
+    END IF;
+    IF v_role <> 'PLAYER' THEN
+      RAISE EXCEPTION 'PLAYER_ONLY';
+    END IF;
   END IF;
 
   SELECT pool_wallet_id, min_bet, max_bet, status::text
