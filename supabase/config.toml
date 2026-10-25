@@ -40,3 +40,7 @@ verify_jwt = false
 [functions.aviator-round-engine]
 # The handler authenticates a high-entropy internal scheduler secret.
 verify_jwt = false
+
+[functions.aviator-settlement-worker]
+# The handler authenticates a separate high-entropy settlement secret.
+verify_jwt = false
