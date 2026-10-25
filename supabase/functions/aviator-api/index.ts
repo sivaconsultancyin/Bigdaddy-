@@ -11,8 +11,8 @@ const json = (body: Record<string, unknown>, status = 200, origin: string | null
   const headers: Record<string, string> = {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type, idempotency-key",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -68,7 +68,7 @@ async function authenticate(req: Request, shared: ReturnType<typeof createClient
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return json({}, 200, origin);
-  if (req.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405, origin);
+  if (req.method !== "GET" && req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405, origin);
 
   let target: ReturnType<typeof createClient>;
   let shared: ReturnType<typeof createClient>;
@@ -83,6 +83,80 @@ Deno.serve(async (req: Request) => {
   if (!actor) return json({ error: "AUTH_REQUIRED" }, 401, origin);
 
   const path = new URL(req.url).pathname.replace(/\/+$/, "");
+  if (req.method === "POST" && path.endsWith("/games/aviator/bet")) {
+    if (actor.role !== "PLAYER") return json({ error: "PLAYER_ONLY" }, 403, origin);
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return json({ error: "INVALID_JSON" }, 400, origin); }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "INVALID_JSON" }, 400, origin);
+
+    const amountText = String(body.amount ?? "").trim();
+    if (!/^[0-9]{1,18}$/.test(amountText) || BigInt(amountText) <= 0n) {
+      return json({ error: "INVALID_BET_AMOUNT" }, 400, origin);
+    }
+    const amount = BigInt(amountText);
+    const autoCashout = body.autoCashoutMultiplier == null ? null : Number(body.autoCashoutMultiplier);
+    if (autoCashout !== null && (!Number.isFinite(autoCashout) || autoCashout < 1.01 || autoCashout > 50)) {
+      return json({ error: "INVALID_AUTO_CASHOUT" }, 400, origin);
+    }
+    const idempotencyKey = (req.headers.get("idempotency-key") ?? "").trim();
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(idempotencyKey)) {
+      return json({ error: "INVALID_IDEMPOTENCY_KEY" }, 400, origin);
+    }
+
+    const { data: state, error: stateError } = await target.schema("aviator").rpc("get_aviator_state_bundle");
+    if (stateError || !state || typeof state !== "object") return json({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
+    const round = (state as Record<string, any>).round;
+    if (!round?.id) return json({ error: "NO_OPEN_ROUND" }, 409, origin);
+    if (round.status !== "WAITING") return json({ error: "BETTING_CLOSED" }, 409, origin);
+
+    // Reserve liability at the configured auto-cashout or 50x maximum. Integer
+    // arithmetic avoids floating-point rounding of token amounts.
+    const liabilityMultiplierHundredths = BigInt(Math.floor((autoCashout ?? 50) * 100 + 1e-8));
+    const liability = (amount * liabilityMultiplierHundredths) / 100n;
+    const { data, error } = await target.schema("aviator").rpc("create_bet_intent", {
+      p_round_id: round.id,
+      p_user_id: actor.id,
+      p_bet_amount: amountText,
+      p_auto_cashout: autoCashout,
+      p_idempotency_key: idempotencyKey,
+      p_liability: liability.toString(),
+    });
+    if (error || !data || typeof data !== "object") {
+      const message = error?.message ?? "";
+      if (/IDEMPOTENCY_KEY_REUSE/i.test(message)) return json({ error: "IDEMPOTENCY_KEY_REUSE" }, 409, origin);
+      if (/ROUND_NOT_ACCEPTING_BETS|ROUND_NOT_FOUND/i.test(message)) return json({ error: "BETTING_CLOSED" }, 409, origin);
+      if (/INVALID_BET_PARAMETERS/i.test(message)) return json({ error: "INVALID_BET" }, 400, origin);
+      console.error("Aviator bet intent failed:", error?.code ?? "INVALID_BET_INTENT");
+      return json({ error: "BET_SERVICE_UNAVAILABLE" }, 503, origin);
+    }
+    return json({ bet: data, roundId: round.id }, 201, origin);
+  }
+
+  if (req.method === "POST" && path.endsWith("/games/aviator/cashout")) {
+    if (actor.role !== "PLAYER") return json({ error: "PLAYER_ONLY" }, 403, origin);
+    let body: Record<string, unknown>;
+    try { body = await req.json(); } catch { return json({ error: "INVALID_JSON" }, 400, origin); }
+    const betId = String(body?.betId ?? "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(betId)) {
+      return json({ error: "INVALID_BET_ID" }, 400, origin);
+    }
+    const { data, error } = await target.schema("aviator").rpc("cashout_bet_intent", {
+      p_bet_id: betId,
+      p_user_id: actor.id,
+    });
+    if (error || !data || typeof data !== "object") {
+      const message = error?.message ?? "";
+      if (/BET_NOT_FOUND|BET_NOT_OWNED_BY_USER/i.test(message)) return json({ error: "BET_NOT_FOUND" }, 404, origin);
+      if (/BET_NOT_FUNDED/i.test(message)) return json({ error: "BET_NOT_FUNDED" }, 409, origin);
+      if (/ROUND_ALREADY_CRASHED|ROUND_NOT_RUNNING|BET_NOT_CASHOUTABLE|MULTIPLIER_NOT_CASHOUTABLE/i.test(message)) {
+        return json({ error: "BET_ALREADY_CASHED_OUT_OR_UNAVAILABLE" }, 409, origin);
+      }
+      console.error("Aviator cashout intent failed:", error?.code ?? "CASHOUT_FAILED");
+      return json({ error: "CASHOUT_SERVICE_UNAVAILABLE" }, 503, origin);
+    }
+    return json({ result: data }, 200, origin);
+  }
+
   if (path.endsWith("/games/aviator/state")) {
     const { data, error } = await target.schema("aviator").rpc("get_aviator_state_bundle");
     if (error || !data || typeof data !== "object") {
