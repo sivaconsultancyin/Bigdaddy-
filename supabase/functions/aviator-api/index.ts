@@ -94,7 +94,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: "INVALID_BET_AMOUNT" }, 400, origin);
     }
     const amount = BigInt(amountText);
-    const autoCashout = body.autoCashoutMultiplier == null ? null : Number(body.autoCashoutMultiplier);
+    const autoCashoutText = body.autoCashoutMultiplier == null ? null : String(body.autoCashoutMultiplier).trim();
+    if (autoCashoutText !== null && !/^([0-9]{1,3})(\\.[0-9]{1,2})?$/.test(autoCashoutText)) {
+      return json({ error: "INVALID_AUTO_CASHOUT" }, 400, origin);
+    }
+    const autoCashout = autoCashoutText === null ? null : Number(autoCashoutText);
     if (autoCashout !== null && (!Number.isFinite(autoCashout) || autoCashout < 1.01 || autoCashout > 50)) {
       return json({ error: "INVALID_AUTO_CASHOUT" }, 400, origin);
     }
@@ -110,9 +114,10 @@ Deno.serve(async (req: Request) => {
     if (round.status !== "WAITING") return json({ error: "BETTING_CLOSED" }, 409, origin);
 
     // Reserve liability at the configured auto-cashout or 50x maximum. Integer
-    // arithmetic avoids floating-point rounding of token amounts.
-    const liabilityMultiplierHundredths = BigInt(Math.floor((autoCashout ?? 50) * 100 + 1e-8));
-    const liability = (amount * liabilityMultiplierHundredths) / 100n;
+    // arithmetic and ceiling division ensure liability can never be rounded below
+    // the maximum payout for a supported two-decimal multiplier.
+    const liabilityMultiplierHundredths = BigInt(Math.round((autoCashout ?? 50) * 100));
+    const liability = (amount * liabilityMultiplierHundredths + 99n) / 100n;
     const { data, error } = await target.schema("aviator").rpc("create_bet_intent", {
       p_round_id: round.id,
       p_user_id: actor.id,
