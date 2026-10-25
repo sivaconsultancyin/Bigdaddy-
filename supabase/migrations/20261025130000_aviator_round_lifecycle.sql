@@ -60,6 +60,7 @@ $function$;
 
 CREATE OR REPLACE FUNCTION aviator.cashout_bet_intent(
   p_bet_id uuid,
+  p_user_id uuid,
   p_multiplier numeric
 )
 RETURNS jsonb
@@ -78,6 +79,7 @@ BEGIN
 
   SELECT * INTO v_bet FROM aviator.game_bets WHERE id=p_bet_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'BET_NOT_FOUND'; END IF;
+  IF v_bet.user_id IS DISTINCT FROM p_user_id THEN RAISE EXCEPTION 'BET_NOT_OWNED_BY_USER'; END IF;
   -- Lock round first so crash and cashout serialize on the same row.
   SELECT * INTO v_round FROM aviator.game_rounds WHERE id=v_bet.round_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'ROUND_NOT_FOUND'; END IF;
@@ -141,11 +143,11 @@ $function$;
 
 REVOKE ALL ON FUNCTION aviator.create_waiting_round(bigint,text,text,numeric) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION aviator.start_round(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION aviator.cashout_bet_intent(uuid,numeric) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION aviator.cashout_bet_intent(uuid,uuid,numeric) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION aviator.crash_round(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION aviator.create_waiting_round(bigint,text,text,numeric) TO service_role;
 GRANT EXECUTE ON FUNCTION aviator.start_round(uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION aviator.cashout_bet_intent(uuid,numeric) TO service_role;
+GRANT EXECUTE ON FUNCTION aviator.cashout_bet_intent(uuid,uuid,numeric) TO service_role;
 GRANT EXECUTE ON FUNCTION aviator.crash_round(uuid) TO service_role;
 
 COMMIT;
