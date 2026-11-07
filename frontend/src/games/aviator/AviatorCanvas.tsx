@@ -31,7 +31,6 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const statusRef = useRef(status);
   const multiplierRef = useRef(multiplier);
-  const previousStatusRef = useRef(status);
   const isCrashResult = status === 'CRASHED' || status === 'SETTLED';
   statusRef.current = status;
   multiplierRef.current = multiplier;
@@ -445,7 +444,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
           </div>
         )}
 
-        {currentStatus === 'WAITING' && (
+        {status === 'WAITING' && (
           <div className="text-center bg-zinc-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-rose-500/30 shadow-md mx-2">
             <div className="text-rose-400 font-bold text-[10px] uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping"></span>
