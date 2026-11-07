@@ -20,7 +20,7 @@ GRANT SELECT, INSERT, UPDATE ON aviator.engine_worker_lease TO service_role;
 
 CREATE OR REPLACE FUNCTION aviator.acquire_engine_worker_lease(p_worker_id text, p_lease_seconds integer DEFAULT 15)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, aviator AS $$
-DECLARE acquired boolean;
+DECLARE acquired integer;
 BEGIN
   IF p_worker_id IS NULL OR length(p_worker_id) < 16 OR length(p_worker_id) > 100
      OR p_lease_seconds < 5 OR p_lease_seconds > 60 THEN
@@ -32,7 +32,7 @@ BEGIN
   WHERE singleton = true AND (worker_id IS NULL OR lease_until IS NULL OR lease_until <= clock_timestamp()
       OR worker_id = p_worker_id);
   GET DIAGNOSTICS acquired = ROW_COUNT;
-  RETURN acquired;
+  RETURN acquired = 1;
 END $$;
 
 CREATE OR REPLACE FUNCTION aviator.heartbeat_engine_worker_lease(p_worker_id text, p_lease_seconds integer DEFAULT 15)
