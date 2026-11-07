@@ -43,7 +43,6 @@ Deno.serve(async (req: Request) => {
   const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const workerId = crypto.randomUUID();
   const started = Date.now();
-  const leaseMs = 15_000;
   let leaseAcquired = false;
   let continuationScheduled = false;
   let heartbeatTimer: number | null = null;
