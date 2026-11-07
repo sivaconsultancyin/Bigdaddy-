@@ -29,7 +29,12 @@ interface CrashParticle {
 
 export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const statusRef = useRef(status);
+  const multiplierRef = useRef(multiplier);
+  const previousStatusRef = useRef(status);
   const isCrashResult = status === 'CRASHED' || status === 'SETTLED';
+  statusRef.current = status;
+  multiplierRef.current = multiplier;
 
   // References to preserve state across render frames
   const starsRef = useRef<Star[]>([]);
@@ -61,39 +66,32 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       starsRef.current = starList;
     }
 
-    // Trigger crash animation particles on status switch to CRASHED
-    if (isCrashResult && lastStatusRef.current !== 'CRASHED' && lastStatusRef.current !== 'SETTLED') {
+    let animationFrameId: number;
+    let particleOffset = 0;
+
+    const render = () => {
+      const currentStatus = statusRef.current;
+      const currentMultiplier = multiplierRef.current;
+      const currentIsCrashResult = currentStatus === 'CRASHED' || currentStatus === 'SETTLED';
+      if (currentIsCrashResult && lastStatusRef.current !== 'CRASHED' && lastStatusRef.current !== 'SETTLED') {
       const origin = planePosRef.current;
       const particles: CrashParticle[] = [];
       const colors = ['#ef4444', '#dc2626', '#f97316', '#fbbf24', '#ffffff', '#7f1d1d'];
       for (let i = 0; i < 40; i++) {
         const speed = 2 + Math.random() * 7;
         const angle = Math.random() * Math.PI * 2;
-        particles.push({
-          x: origin.x,
-          y: origin.y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          size: 2.5 + Math.random() * 4.5,
-          alpha: 1,
-          decay: 0.015 + Math.random() * 0.025,
-          spin: Math.random() * Math.PI * 2,
-          spinSpeed: (Math.random() - 0.5) * 0.3,
-        });
+        particles.push({ x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+          color: colors[Math.floor(Math.random() * colors.length)], size: 2.5 + Math.random() * 4.5,
+          alpha: 1, decay: 0.015 + Math.random() * 0.025, spin: Math.random() * Math.PI * 2,
+          spinSpeed: (Math.random() - 0.5) * 0.3 });
       }
       crashParticlesRef.current = particles;
       crashAnimationProgressRef.current = 0;
-    } else if (status === 'WAITING') {
+    } else if (currentStatus === 'WAITING') {
       crashParticlesRef.current = [];
       crashAnimationProgressRef.current = 0;
     }
-    lastStatusRef.current = status;
-
-    let animationFrameId: number;
-    let particleOffset = 0;
-
-    const render = () => {
+    lastStatusRef.current = currentStatus;
       const width = canvas.width;
       const height = canvas.height;
 
@@ -108,9 +106,9 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
       // 2. Stars Moving Animation (Speed scales up as flight multiplier increases)
       // When multiplier goes high, stars streak leftwards rapidly giving sensation of supersonic speed
-      const speedMultiplier = status === 'RUNNING' 
-        ? Math.min(1 + (multiplier - 1.0) * 1.8, 12)
-        : isCrashResult
+      const speedMultiplier = currentStatus === 'RUNNING' 
+        ? Math.min(1 + (currentMultiplier - 1.0) * 1.8, 12)
+        : currentIsCrashResult
         ? 0.5
         : 0.8;
 
@@ -123,7 +121,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
         }
 
         // Streak length stretches with velocity
-        const streakLength = status === 'RUNNING' ? Math.max(star.length, star.speed * speedMultiplier * 1.6) : star.length;
+        const streakLength = currentStatus === 'RUNNING' ? Math.max(star.length, star.speed * speedMultiplier * 1.6) : star.length;
 
         ctx.strokeStyle = `rgba(255, 255, 255, ${star.opacity})`;
         ctx.lineWidth = star.size;
@@ -170,7 +168,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(0, startY);
-      ctx.lineTo(status === 'RUNNING' || isCrashResult ? Math.max(planePosRef.current.x, 32) : 48, startY);
+      ctx.lineTo(currentStatus === 'RUNNING' || currentIsCrashResult ? Math.max(planePosRef.current.x, 32) : 48, startY);
       ctx.stroke();
 
       // Runway guideline from 0 boundary
@@ -178,13 +176,13 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(0, startY);
-      ctx.lineTo(status === 'RUNNING' || isCrashResult ? Math.max(planePosRef.current.x, 32) : 48, startY);
+      ctx.lineTo(currentStatus === 'RUNNING' || currentIsCrashResult ? Math.max(planePosRef.current.x, 32) : 48, startY);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      if (status === 'RUNNING' || isCrashResult) {
+      if (currentStatus === 'RUNNING' || currentIsCrashResult) {
         // Normalized progress smoothly maps multiplier (1.00x -> 10.00x+) into full trajectory
-        const norm = Math.min(Math.max((multiplier - 1.0) / 9.0, 0), 1.0);
+        const norm = Math.min(Math.max((currentMultiplier - 1.0) / 9.0, 0), 1.0);
         
         // Aerodynamic flight path: smoothly takes off forward from boundary x=0 and curves into upper right
         const progressX = Math.min(Math.pow(norm, 0.72), 1.0);
@@ -208,7 +206,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
         // 4. Draw Trajectory Glow Curve & Area (originates directly from boundary 0)
         const fillGrad = ctx.createLinearGradient(0, currentY, 0, height);
-        if (isCrashResult) {
+        if (currentIsCrashResult) {
           fillGrad.addColorStop(0, 'rgba(239, 68, 68, 0.22)');
           fillGrad.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
         } else {
@@ -231,15 +229,15 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
         ctx.beginPath();
         ctx.moveTo(0, startY);
         ctx.quadraticCurveTo(controlX, controlY, currentX, currentY);
-        ctx.strokeStyle = isCrashResult ? '#ef4444' : '#f43f5e';
+        ctx.strokeStyle = currentIsCrashResult ? '#ef4444' : '#f43f5e';
         ctx.lineWidth = 3;
-        ctx.shadowColor = isCrashResult ? 'rgba(239, 68, 68, 0.9)' : 'rgba(244, 63, 94, 0.85)';
+        ctx.shadowColor = currentIsCrashResult ? 'rgba(239, 68, 68, 0.9)' : 'rgba(244, 63, 94, 0.85)';
         ctx.shadowBlur = 10;
         ctx.stroke();
         ctx.shadowBlur = 0;
 
         // 5. Plane Rendering or Crash Explosion Animation
-        if (status === 'RUNNING') {
+        if (currentStatus === 'RUNNING') {
           // Draw Aircraft
           ctx.save();
           ctx.translate(currentX, currentY);
@@ -247,7 +245,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
 
           // Jet Exhaust Flame
           const flameFlicker = (Math.sin(particleOffset * 2.5) + 1) * 3;
-          const flameLength = 12 + flameFlicker + (multiplier > 3 ? 8 : 0);
+          const flameLength = 12 + flameFlicker + (currentMultiplier > 3 ? 8 : 0);
           const flameGrad = ctx.createLinearGradient(0, 0, -flameLength, 0);
           flameGrad.addColorStop(0, '#ffffff');
           flameGrad.addColorStop(0.3, '#fbbf24');
@@ -301,7 +299,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
           ctx.fill();
 
           ctx.restore();
-        } else if (isCrashResult) {
+        } else if (currentIsCrashResult) {
           // Crash Animation: Render Falling Debris & Flying Away Explosion
           crashAnimationProgressRef.current += 1;
 
@@ -356,7 +354,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
           });
           ctx.globalAlpha = 1.0;
         }
-      } else if (status === 'WAITING') {
+      } else if (currentStatus === 'WAITING') {
         // Parked plane ready at boundary origin lower down
         const parkedY = height * 0.88;
         const initialPlaneX = 14;
@@ -415,7 +413,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [status, multiplier]);
+  }, []);
 
   return (
     <div className="relative w-full aspect-[16/8.4] max-h-[180px] min-h-[145px] bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 shadow-md flex items-center justify-center">
@@ -447,7 +445,7 @@ export const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ status, multiplier
           </div>
         )}
 
-        {status === 'WAITING' && (
+        {currentStatus === 'WAITING' && (
           <div className="text-center bg-zinc-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-rose-500/30 shadow-md mx-2">
             <div className="text-rose-400 font-bold text-[10px] uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping"></span>
