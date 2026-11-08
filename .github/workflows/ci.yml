@@ -71,7 +71,7 @@ jobs:
     - name: Verify schema access boundaries
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$$
         DECLARE
           schema_name text;
         BEGIN
@@ -95,7 +95,7 @@ jobs:
             END IF;
           END LOOP;
         END
-        $$;
+        $verify$;
         SQL
 
     - name: Verify schema migration is repeatable
@@ -147,7 +147,7 @@ jobs:
     - name: Verify exact replay and conflicting-key rejection
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$$
         DECLARE
           first_id uuid;
           replay_id uuid;
@@ -191,13 +191,13 @@ jobs:
             RAISE EXCEPTION 'Expected exactly two double-entry ledger rows';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
     - name: Verify wallet API boundary grants and execution
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$$
         BEGIN
           IF has_function_privilege('anon', 'wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)', 'EXECUTE') THEN
             RAISE EXCEPTION 'anon unexpectedly has wallet API execute privilege';
@@ -209,7 +209,7 @@ jobs:
             RAISE EXCEPTION 'service_role cannot execute wallet API';
           END IF;
         END
-        $$;
+        $verify$;
 
         SET ROLE service_role;
         SELECT wallet.wallet_transfer_atomic(
@@ -220,7 +220,7 @@ jobs:
         );
         RESET ROLE;
 
-        DO $$
+        DO $verify$$
         BEGIN
           IF (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 850
              OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 150 THEN
@@ -230,7 +230,7 @@ jobs:
             RAISE EXCEPTION 'Wallet wrapper did not create exactly two additional ledger rows';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
 
@@ -272,7 +272,7 @@ jobs:
     - name: Verify tables, compatibility views, and function boundaries
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$$
         DECLARE
           name text;
         BEGIN
@@ -317,7 +317,7 @@ jobs:
             RAISE EXCEPTION 'Pool reconciliation unexpectedly changed wallet balances/reservations';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
     - name: Apply per-game authoritative schema split
@@ -326,7 +326,7 @@ jobs:
     - name: Verify per-game tables, foreign keys, and preserved history
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$$
         DECLARE
           schema_name text;
           table_name text;
@@ -391,7 +391,7 @@ jobs:
             RAISE EXCEPTION 'Per-game bet-to-round foreign keys are missing';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
   validate-edge-functions:
@@ -488,7 +488,7 @@ jobs:
     - name: Verify single-worker lease, heartbeat, handoff, and multiplier broadcast
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $
+        DO $verify$
         DECLARE
           first_owner uuid := '00000000-0000-4000-8000-000000000011';
           duplicate_owner uuid := '00000000-0000-4000-8000-000000000012';
