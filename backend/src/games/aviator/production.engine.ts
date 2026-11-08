@@ -42,16 +42,20 @@ async function runWorker(): Promise<void> {
   const ownerToken = crypto.randomUUID();
   let ownsLease = false;
   let nextHeartbeatAt = 0;
-  const db = getEngineClient();
-
+  let db: SupabaseClient;
   try {
+    db = getEngineClient();
     while (workerRunning) {
       if (!ownsLease) {
         const claim = await db.schema('aviator').rpc('claim_crash_engine_lease', {
           p_owner_token: ownerToken,
           p_ttl_seconds: LEASE_TTL_SECONDS,
         });
-        if (claim.error) throw claim.error;
+        if (claim.error) {
+          logWorkerError('Aviator backend worker lease claim failed.', claim.error);
+          await sleep(5_000);
+          continue;
+        }
         ownsLease = claim.data === true;
         if (!ownsLease) {
           await sleep(5_000);
@@ -62,14 +66,10 @@ async function runWorker(): Promise<void> {
       }
 
       const { data, error } = await db.schema('aviator').rpc('tick_crash_engine_with_broadcast');
+      const result = data as EngineTickResult | null;
       if (error) {
         logWorkerError('Aviator backend worker tick failed.', error);
-        await sleep(1_000);
-        continue;
-      }
-
-      const result = data as EngineTickResult | null;
-      if (result && ['round_created', 'round_started', 'round_crashed', 'settled_recovery'].includes(result.action ?? '')) {
+      } else if (result && ['round_created', 'round_started', 'round_crashed', 'settled_recovery'].includes(result.action ?? '')) {
         console.info('Aviator Supabase engine state transition.', result);
       }
 
@@ -87,8 +87,9 @@ async function runWorker(): Promise<void> {
         nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL_MS;
       }
 
-      const action = result?.action ?? 'unknown';
-      const delayMs = action === 'round_running' ? 250
+      const action = error ? 'rpc_error' : (result?.action ?? 'unknown');
+      const delayMs = action === 'rpc_error' ? 1_000
+        : action === 'round_running' ? 250
         : action === 'round_started' ? 150
         : action === 'waiting' || action === 'round_created' ? 500
         : action === 'cooldown' || action === 'busy' ? 1_000
