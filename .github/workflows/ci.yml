@@ -464,18 +464,18 @@ jobs:
           topic text NOT NULL
         );
         CREATE FUNCTION realtime.send(jsonb, text, text, boolean)
-        RETURNS void LANGUAGE sql AS $
+        RETURNS void LANGUAGE sql AS $function$
           INSERT INTO realtime.broadcast_events(payload, event_name, topic)
           VALUES ($1, $2, $3);
-        $;
+        $function$;
         CREATE FUNCTION aviator.tick_crash_engine()
-        RETURNS jsonb LANGUAGE sql AS $
+        RETURNS jsonb LANGUAGE sql AS $function$
           SELECT jsonb_build_object(
             'action', 'round_running',
             'roundId', '00000000-0000-4000-8000-000000000001',
             'multiplier', 1.23
           );
-        $;
+        $function$;
         INSERT INTO aviator.game_rounds(id, round_number, status, started_at, crash_multiplier)
         VALUES ('00000000-0000-4000-8000-000000000001', 7, 'RUNNING', now(), 2.5);
         SQL
@@ -527,5 +527,5 @@ jobs:
             RAISE EXCEPTION 'Authoritative multiplier was not broadcast';
           END IF;
         END
-        $;
+        $function$;
         SQL
