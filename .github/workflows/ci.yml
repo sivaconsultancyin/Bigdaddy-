@@ -408,7 +408,7 @@ jobs:
       run: deno check --config supabase/functions/api/deno.json supabase/functions/api/index.ts
 
     - name: Type-check Aviator engine Edge Function
-      run: deno check supabase/functions/aviator-engine/index.ts
+      run: deno check --config supabase/functions/api/deno.json supabase/functions/aviator-engine/index.ts
 
   validate-aviator-engine-lease:
     runs-on: ubuntu-latest
