@@ -42,7 +42,7 @@ async function runWorker(): Promise<void> {
   const ownerToken = crypto.randomUUID();
   let ownsLease = false;
   let nextHeartbeatAt = 0;
-  let db: SupabaseClient;
+  let db: SupabaseClient | null = null;
   try {
     db = getEngineClient();
     while (workerRunning) {
@@ -99,7 +99,7 @@ async function runWorker(): Promise<void> {
   } catch (error) {
     logWorkerError('Aviator backend worker stopped after an unrecoverable error.', error);
   } finally {
-    if (ownsLease) {
+    if (ownsLease && db) {
       const released = await db.schema('aviator').rpc('release_crash_engine_lease', {
         p_owner_token: ownerToken,
       });
