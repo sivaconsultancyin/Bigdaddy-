@@ -608,7 +608,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 id: eventRoundId,
                 roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : current.roundNumber,
                 status: eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED',
-                startTime: payload.startedAt ? new Date(String(payload.startedAt)).getTime() - serverClockOffsetMs : current.startTime,
+                startTime: payload.startedAt ? new Date(String(payload.startedAt)).getTime() : current.startTime,
                 crashMultiplier: Number.isFinite(Number(payload.crashMultiplier)) ? Number(payload.crashMultiplier) : current.crashMultiplier,
               };
             });
