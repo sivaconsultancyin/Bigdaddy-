@@ -90,10 +90,20 @@ async function runTestSuite() {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.appliedLedger.length, 65);
-    assert.strictEqual(manifest.exactMatches.length, 21);
-    assert.strictEqual(manifest.appliedOnly.length, 44);
-    assert.strictEqual(manifest.fileOnly.length, 34);
+    assert.deepStrictEqual(
+      [...(manifest.sharedProjectFiles as string[]), ...(manifest.isolatedProjectFiles as string[])].sort(),
+      actualFiles,
+    );
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 65);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 56);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
+    assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
+    assert.strictEqual(manifest.counts.sharedFileOnly, 35);
+    assert.strictEqual(manifest.counts.isolatedAppliedLedger, 7);
+    assert.strictEqual(manifest.counts.isolatedRepositoryFiles, 11);
+    assert.strictEqual(manifest.counts.isolatedExactVersionNameMatches, 0);
+    assert.strictEqual(manifest.counts.isolatedSameNameDifferentVersion, 7);
+    assert.strictEqual(manifest.counts.isolatedFileOnly, 4);
     const versions: string[] = (manifest.repositoryFiles as string[]).map((name: string) => name.slice(0, 14));
     const duplicates = [...new Set(versions.filter((version: string, index: number) => versions.indexOf(version) !== index))].sort();
     assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
