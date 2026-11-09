@@ -1,14 +1,16 @@
 # Shared BigDaddy Supabase migration ledger reconciliation
 
-Read-only snapshot taken 2026-11-09. GitHub main commit: `aaef4f728e5e4c17fa05a2690306577f2585e465`. Target project: shared BigDaddy (`nzvpuoeibqrpcltrszvr`).
+Initial read-only snapshot taken 2026-11-09 and rechecked against both live ledgers on 2026-11-10. Target project: shared BigDaddy (`nzvpuoeibqrpcltrszvr`).
 
 ## Exact comparison
 
 - Applied ledger entries: **65**
-- SQL files in `supabase/migrations/`: **55**
+- Shared-project SQL files in `supabase/migrations/`: **56**
+- Isolated-Aviator SQL files mixed into the same directory: **11**
+- Total SQL files physically in `supabase/migrations/`: **67**
 - Exact version + name matches: **21**
 - Applied ledger entries with no exact file match: **44**
-- GitHub SQL files not represented by an exact applied version + name: **34**
+- Shared-project SQL files not represented by an exact applied version + name: **35**
 - Duplicate filename version prefixes: **2**
 
 A name-only comparison is insufficient. A file with the same migration name but a different 14-digit version is still a pending file to the Supabase CLI and can be replayed. Do not run `supabase db push`, `migration repair`, or rename/replay files until each row has an approved source/effect mapping.
@@ -99,6 +101,7 @@ A name-only comparison is insufficient. A file with the same migration name but 
 | `20261023160000` | `20261023160000_roulette_bet_validation.sql` |
 | `20261023170000` | `20261023170000_roulette_hash_integer_overflow.sql` |
 | `20261023190000` | `20261023190000_aviator_realtime_broadcast.sql` |
+| `20261025110000` | `20261025110000_shared_aviator_wallet_operations.sql` |
 | `20261109090000` | `20261109090000_aviator_realtime_and_recovery_hardening.sql` |
 
 ## Duplicate version prefixes
@@ -118,7 +121,7 @@ A name-only comparison is insufficient. A file with the same migration name but 
 
 1. Recover original SQL from Git history/PRs for every applied-only version where possible.
 2. For same-name/different-version candidates, compare full SQL and live database effects; document exact equivalence or keep both distinct.
-3. For the 34 file-only versions, classify as bootstrap-only, superseded, equivalent-to-an-applied-version, or genuinely pending. Never apply them in bulk.
+3. For the 35 shared-project file-only versions, classify as bootstrap-only, superseded, equivalent-to-an-applied-version, or genuinely pending. Never apply them in bulk.
 4. Resolve duplicate version prefixes so migration ordering is deterministic.
 5. Build two disposable PostgreSQL tests: a clean bootstrap replay and an upgrade replay using the current applied ledger. Both must use `ON_ERROR_STOP=1` and synthetic data.
 6. Only after review, propose a controlled migration-history reconciliation plan. No production migration ledger edits or DDL are part of this documentation PR.
@@ -126,3 +129,9 @@ A name-only comparison is insufficient. A file with the same migration name but 
 ## Scope and safety
 
 This is an audit artifact only. No SQL was executed against the shared project, and no production data, migration history, wallets, bets, rounds, or schedulers were changed.
+
+## Cross-project migration files discovered on 2026-11-10
+
+The repository currently contains 67 SQL files in `supabase/migrations/`: 56 shared-project candidates and 11 isolated-Aviator project migrations (the `aviator_isolated_schema`, `aviator_round_lifecycle`, bet-intent/outbox, worker, server-fair-engine, and payout-settlement migrations). One additional `shared_aviator_wallet_operations` file is a shared-project candidate with a version prefix that does not match the applied shared ledger. The 11 isolated files correspond by name to seven applied isolated-project ledger entries with different version prefixes, plus four files not present in the isolated project's applied ledger. Their SQL equivalence and deployment history are not yet proven.
+
+**Safety:** the shared and isolated project migration sources are currently mixed in one directory. Do not run a blanket `supabase db push` against either project until the deployment workflow and both ledgers are reconciled. The new `supabase/aviator-migrations/` directory contains the isolated security migration but does not yet reconstruct the seven historical isolated migration sources.
