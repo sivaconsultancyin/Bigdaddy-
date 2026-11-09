@@ -2,7 +2,7 @@ name: BigDaddy Casino CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, feat/aviator-isolated-backend ]
   pull_request:
     branches: [ main, master ]
 
