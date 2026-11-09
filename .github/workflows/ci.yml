@@ -254,8 +254,24 @@ jobs:
         $verify$;
         SQL
 
-        # Restore the post-idempotency fixture balances for the following wallet-boundary test.
+        # Remove concurrency-only records and restore the post-idempotency fixture state
+        # so the following wallet-boundary assertions remain isolated.
         psql -v ON_ERROR_STOP=1 <<'SQL'
+        DELETE FROM public.ledger_entries
+        WHERE transaction_id IN (
+          SELECT id FROM public.wallet_transactions
+          WHERE idempotency_key IN (
+            'wallet-concurrent-key-0001',
+            'wallet-concurrent-distinct-a',
+            'wallet-concurrent-distinct-b'
+          )
+        );
+        DELETE FROM public.wallet_transactions
+        WHERE idempotency_key IN (
+          'wallet-concurrent-key-0001',
+          'wallet-concurrent-distinct-a',
+          'wallet-concurrent-distinct-b'
+        );
         UPDATE public.wallets SET balance=900 WHERE id='00000000-0000-0000-0000-000000000001';
         UPDATE public.wallets SET balance=100 WHERE id='00000000-0000-0000-0000-000000000002';
         SQL
