@@ -575,12 +575,39 @@ jobs:
         $function$;
         INSERT INTO aviator.game_rounds(id, round_number, status, started_at, crash_multiplier)
         VALUES ('00000000-0000-4000-8000-000000000001', 7, 'RUNNING', now(), 2.5);
+
+        CREATE TABLE aviator.game_bets (
+          id uuid PRIMARY KEY,
+          round_id uuid NOT NULL REFERENCES aviator.game_rounds(id)
+        );
+        CREATE TABLE aviator.game_settlements (
+          id uuid PRIMARY KEY,
+          bet_id uuid NOT NULL REFERENCES aviator.game_bets(id),
+          round_id uuid NOT NULL REFERENCES aviator.game_rounds(id)
+        );
+
+        CREATE TABLE public.rls_trigger_invocations(id bigserial PRIMARY KEY);
+        CREATE FUNCTION public.rls_auto_enable()
+        RETURNS event_trigger LANGUAGE plpgsql SECURITY DEFINER AS $function$
+        BEGIN
+          INSERT INTO public.rls_trigger_invocations DEFAULT VALUES;
+        END;
+        $function$;
+        GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO PUBLIC, anon, authenticated, service_role;
+        CREATE EVENT TRIGGER ensure_rls
+          ON ddl_command_end EXECUTE FUNCTION public.rls_auto_enable();
         SQL
+
+    - name: Apply isolated Aviator security migration
+      run: psql -v ON_ERROR_STOP=1 -f supabase/aviator-migrations/20261110100000_harden_aviator_grants_and_fk_indexes.sql
 
     - name: Apply Aviator lease and Realtime migrations
       run: |
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063629_aviator_engine_worker_lease.sql
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063705_aviator_multiplier_realtime_broadcast.sql
+
+    - name: Verify isolated Aviator grants, indexes, and event trigger
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/isolated-aviator-security-verify.sql
 
     - name: Verify single-worker lease, heartbeat, handoff, and multiplier broadcast
       run: |
