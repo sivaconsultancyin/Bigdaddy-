@@ -6,8 +6,13 @@ type Claims = { id: string; username: string; role: "OWNER" | "SUPER_ADMIN" | "A
 const json = (body: Record<string, unknown>, status = 200, origin: string | null = null) => {
   const configured = (Deno.env.get("BIGDADDY_ALLOWED_ORIGINS") ?? "")
     .split(",").map((value) => value.trim()).filter(Boolean);
+  const defaultOrigins = [
+    "https://bigdaddy-frontend.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ];
   const native = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
-  const allowed = new Set([...configured, ...native]);
+  const allowed = new Set([...configured, ...defaultOrigins, ...native]);
   const headers: Record<string, string> = {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -16,8 +21,7 @@ const json = (body: Record<string, unknown>, status = 200, origin: string | null
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
-  if (!configured.length) headers["Access-Control-Allow-Origin"] = "*";
-  else if (origin && allowed.has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  if (origin && allowed.has(origin)) headers["Access-Control-Allow-Origin"] = origin;
   return new Response(JSON.stringify(body), { status, headers });
 };
 
