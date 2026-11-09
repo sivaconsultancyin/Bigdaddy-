@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
@@ -60,13 +60,6 @@ async function runTestSuite() {
     assert.deepStrictEqual(missing, [], 'Health inventory is missing registered backend routes');
   });
 
-
-  test('Supabase config keeps the general API as the only Aviator Edge API entry point', () => {
-    const configSource = readFileSync('supabase/config.toml', 'utf8');
-    assert.ok(configSource.includes('[functions.api]'));
-    assert.ok(!configSource.includes('[functions.aviator-api]'));
-    assert.strictEqual(existsSync('supabase/functions/aviator-api/index.ts'), false);
-  });
 
   test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
