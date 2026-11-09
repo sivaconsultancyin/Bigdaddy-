@@ -544,3 +544,41 @@ jobs:
         END
         $verify$;
         SQL
+
+  validate-aviator-recovery-realtime:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install PostgreSQL client
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+
+    - name: Create isolated Aviator recovery and Realtime fixtures
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-recovery-realtime-fixture.sql
+
+    - name: Apply Aviator recovery and Realtime hardening migration
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109090000_aviator_realtime_and_recovery_hardening.sql
+
+    - name: Verify stale-round refunds, fail-closed behavior, and public broadcasts
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-recovery-realtime-verify.sql
