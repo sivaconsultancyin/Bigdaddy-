@@ -591,12 +591,26 @@ jobs:
           duplicate_owner uuid := '00000000-0000-4000-8000-000000000012';
           handoff_token uuid := '00000000-0000-4000-8000-000000000013';
           next_owner uuid := '00000000-0000-4000-8000-000000000014';
+          current_owner uuid;
         BEGIN
+          IF aviator.claim_crash_engine_lease(first_owner, 9) THEN
+            RAISE EXCEPTION 'Lease accepted a TTL below the minimum';
+          END IF;
           IF NOT aviator.claim_crash_engine_lease(first_owner, 45) THEN
             RAISE EXCEPTION 'Initial lease claim failed';
           END IF;
           IF aviator.claim_crash_engine_lease(duplicate_owner, 45) THEN
             RAISE EXCEPTION 'Duplicate worker acquired an active lease';
+          END IF;
+          IF aviator.release_crash_engine_lease(duplicate_owner) THEN
+            RAISE EXCEPTION 'Non-owner released the active worker lease';
+          END IF;
+          SELECT owner_token INTO current_owner FROM aviator.engine_worker_lease WHERE lease_key='aviator';
+          IF current_owner IS DISTINCT FROM first_owner THEN
+            RAISE EXCEPTION 'Failed non-owner release changed the lease owner';
+          END IF;
+          IF aviator.heartbeat_crash_engine_lease(first_owner, 121) THEN
+            RAISE EXCEPTION 'Heartbeat accepted a TTL above the maximum';
           END IF;
           IF NOT aviator.heartbeat_crash_engine_lease(first_owner, 45) THEN
             RAISE EXCEPTION 'Lease heartbeat failed';
@@ -604,14 +618,48 @@ jobs:
           IF NOT aviator.handoff_crash_engine_lease(first_owner, handoff_token, 60) THEN
             RAISE EXCEPTION 'Atomic lease handoff failed';
           END IF;
-          IF aviator.heartbeat_crash_engine_lease(first_owner, 45) THEN
-            RAISE EXCEPTION 'Previous worker retained lease after handoff';
+          IF aviator.heartbeat_crash_engine_lease(first_owner, 45)
+             OR aviator.release_crash_engine_lease(first_owner) THEN
+            RAISE EXCEPTION 'Previous worker retained control after handoff';
+          END IF;
+          IF aviator.consume_crash_engine_handoff(duplicate_owner, next_owner, 45) THEN
+            RAISE EXCEPTION 'Invalid handoff token was accepted';
           END IF;
           IF NOT aviator.consume_crash_engine_handoff(handoff_token, next_owner, 45) THEN
             RAISE EXCEPTION 'Continuation did not consume handoff token';
           END IF;
+          IF aviator.release_crash_engine_lease(handoff_token) THEN
+            RAISE EXCEPTION 'Handoff token released the new owner lease';
+          END IF;
+          IF NOT aviator.heartbeat_crash_engine_lease(next_owner, 45) THEN
+            RAISE EXCEPTION 'New owner heartbeat failed';
+          END IF;
           IF NOT aviator.release_crash_engine_lease(next_owner) THEN
             RAISE EXCEPTION 'Lease release failed';
+          END IF;
+
+          -- Simulate a worker that stopped heartbeating: expiry must block its
+          -- heartbeat/release and permit exactly one new owner to claim the lease.
+          IF NOT aviator.claim_crash_engine_lease(next_owner, 10) THEN
+            RAISE EXCEPTION 'Lease could not be reclaimed after release';
+          END IF;
+          UPDATE aviator.engine_worker_lease
+          SET lease_expires_at = clock_timestamp() - interval '1 second'
+          WHERE lease_key='aviator';
+          IF aviator.heartbeat_crash_engine_lease(next_owner, 45) THEN
+            RAISE EXCEPTION 'Expired worker heartbeat unexpectedly succeeded';
+          END IF;
+          IF NOT aviator.claim_crash_engine_lease(duplicate_owner, 45) THEN
+            RAISE EXCEPTION 'New worker could not claim an expired lease';
+          END IF;
+          IF aviator.release_crash_engine_lease(next_owner) THEN
+            RAISE EXCEPTION 'Expired previous worker released the new owner lease';
+          END IF;
+          IF aviator.claim_crash_engine_lease(first_owner, 45) THEN
+            RAISE EXCEPTION 'Two workers acquired the lease after expiry';
+          END IF;
+          IF NOT aviator.release_crash_engine_lease(duplicate_owner) THEN
+            RAISE EXCEPTION 'Reclaimed lease could not be released by its owner';
           END IF;
           PERFORM aviator.tick_crash_engine_with_broadcast();
           IF NOT EXISTS (
