@@ -2,12 +2,19 @@
   "snapshotDate": "2026-11-10",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "appliedLedger": 65,
-    "repositoryFiles": 55,
-    "exactVersionNameMatches": 21,
-    "appliedOnly": 44,
-    "fileOnly": 34,
-    "duplicateVersionPrefixes": 2
+    "sharedAppliedLedger": 65,
+    "sharedRepositoryFiles": 56,
+    "sharedExactVersionNameMatches": 21,
+    "sharedAppliedOnly": 44,
+    "sharedFileOnly": 35,
+    "sharedDuplicateVersionPrefixes": 2,
+    "isolatedAppliedLedger": 7,
+    "isolatedRepositoryFiles": 11,
+    "isolatedExactVersionNameMatches": 0,
+    "isolatedSameNameDifferentVersion": 7,
+    "isolatedFileOnly": 4,
+    "isolatedNewMigrationFiles": 1,
+    "totalSupabaseMigrationFiles": 67
   },
   "appliedLedger": [
     {
@@ -608,6 +615,18 @@
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025053037_shared_aviator_wallet_operations.sql",
+    "20261025090000_aviator_isolated_schema.sql",
+    "20261025110000_shared_aviator_wallet_operations.sql",
+    "20261025130000_aviator_round_lifecycle.sql",
+    "20261025150000_aviator_bet_intent_outbox.sql",
+    "20261025160000_fix_aviator_bet_intent_idempotency.sql",
+    "20261025170000_aviator_wallet_outbox_liability.sql",
+    "20261025180000_aviator_state_only_funded_bets.sql",
+    "20261025190000_aviator_wallet_outbox_worker.sql",
+    "20261025200000_aviator_wait_for_bet_funding.sql",
+    "20261025210000_aviator_server_fair_round_engine.sql",
+    "20261025220000_aviator_payout_settlement_worker.sql",
+    "20261025230000_aviator_payout_liability_cap.sql",
     "20261107192153_aviator_scheduler_guard_security_performance.sql",
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
@@ -652,5 +671,476 @@
   "duplicateVersionPrefixes": [
     "20261021120000",
     "20261023160000"
+  ],
+  "scopeNote": "The repository migration directory currently mixes shared-project and isolated-Aviator migration sources. Do not run blanket db push to either project until the deployment path and histories are reconciled.",
+  "sharedProjectFiles": [
+    "20261018000000_initial_schema.sql",
+    "20261018110227_atomic_wallet_transfer.sql",
+    "20261018110302_production_database_hardening.sql",
+    "20261019050149_bootstrap_production_storage_and_rls.sql",
+    "20261019050807_production_financial_functions.sql",
+    "20261019051322_crash_round_fairness_columns.sql",
+    "20261019051624_enforce_owner_and_case_insensitive_identity_uniqueness.sql",
+    "20261019052109_fix_crash_cashout_lock_order.sql",
+    "20261019052349_reserve_crash_pool_liabilities_atomically.sql",
+    "20261019140541_remove_duplicate_game_round_index.sql",
+    "20261019162822_add_bet_loss_game_pool_transaction_type.sql",
+    "20261019162923_fix_crash_losses_credit_game_pool.sql",
+    "20261019162947_recycle_cashout_stake_to_game_pool.sql",
+    "20261019170000_fix_crash_pool_reservation_release.sql",
+    "20261019171000_validate_wallet_idempotency_reuse.sql",
+    "20261019185311_reconcile_aviator_pool_reservations.sql",
+    "20261020120000_authoritative_game_runtime.sql",
+    "20261020140000_shared_game_pool.sql",
+    "20261020150000_harden_aviator_bet_idempotency.sql",
+    "20261020170000_restore_aviator_pool_reservations.sql",
+    "20261021100000_prepare_game_schema_isolation.sql",
+    "20261021110000_harden_wallet_transfer_idempotency.sql",
+    "20261021120000_protect_reserved_wallet_balances.sql",
+    "20261021120000_wallet_transfer_api_boundary.sql",
+    "20261021130000_move_platform_wallet_aviator_tables.sql",
+    "20261021140000_split_authoritative_games_by_schema.sql",
+    "20261021160000_add_system_health_events.sql",
+    "20261021163700_fix_wallet_token_supply_invariant.sql",
+    "20261021165000_harden_aviator_cashout_idempotency.sql",
+    "20261021171000_limit_aviator_bet_idempotency_key_length.sql",
+    "20261021171227_aviator_engine_tick_rpc.sql",
+    "20261021173000_validate_aviator_bet_user_and_round.sql",
+    "20261021175000_harden_aviator_bet_function_search_path.sql",
+    "20261021180000_harden_aviator_cashout_settlement_search_path.sql",
+    "20261021190000_add_authoritative_game_bet_rpc.sql",
+    "20261021193000_add_atomic_user_creation_rpcs.sql",
+    "20261021200000_expose_backend_schemas_to_postgrest.sql",
+    "20261023055120_optimize_aviator_bet_round_lookup.sql",
+    "20261023062437_aviator_bet_auth_single_rpc.sql",
+    "20261023065013_aviator_state_single_rpc.sql",
+    "20261023100000_reduce_aviator_round_cooldown_to_4_seconds.sql",
+    "20261023110000_allow_concurrent_aviator_cashouts.sql",
+    "20261023120000_harden_concurrent_aviator_cashout_timing.sql",
+    "20261023130000_roulette_durable_lifecycle.sql",
+    "20261023140000_roulette_escrow_stake_settlement.sql",
+    "20261023150000_roulette_persist_spin_phase.sql",
+    "20261023160000_aviator_cashout_single_authenticated_rpc.sql",
+    "20261023160000_roulette_bet_validation.sql",
+    "20261023170000_roulette_hash_integer_overflow.sql",
+    "20261023190000_aviator_realtime_broadcast.sql",
+    "20261025053037_shared_aviator_wallet_operations.sql",
+    "20261025110000_shared_aviator_wallet_operations.sql",
+    "20261107192153_aviator_scheduler_guard_security_performance.sql",
+    "20261108063629_aviator_engine_worker_lease.sql",
+    "20261108063705_aviator_multiplier_realtime_broadcast.sql",
+    "20261109090000_aviator_realtime_and_recovery_hardening.sql"
+  ],
+  "isolatedProjectFiles": [
+    "20261025090000_aviator_isolated_schema.sql",
+    "20261025130000_aviator_round_lifecycle.sql",
+    "20261025150000_aviator_bet_intent_outbox.sql",
+    "20261025160000_fix_aviator_bet_intent_idempotency.sql",
+    "20261025170000_aviator_wallet_outbox_liability.sql",
+    "20261025180000_aviator_state_only_funded_bets.sql",
+    "20261025190000_aviator_wallet_outbox_worker.sql",
+    "20261025200000_aviator_wait_for_bet_funding.sql",
+    "20261025210000_aviator_server_fair_round_engine.sql",
+    "20261025220000_aviator_payout_settlement_worker.sql",
+    "20261025230000_aviator_payout_liability_cap.sql"
+  ],
+  "sharedExactMatches": [
+    {
+      "version": "20261018110227",
+      "name": "atomic_wallet_transfer",
+      "file": "20261018110227_atomic_wallet_transfer.sql"
+    },
+    {
+      "version": "20261018110302",
+      "name": "production_database_hardening",
+      "file": "20261018110302_production_database_hardening.sql"
+    },
+    {
+      "version": "20261019050149",
+      "name": "bootstrap_production_storage_and_rls",
+      "file": "20261019050149_bootstrap_production_storage_and_rls.sql"
+    },
+    {
+      "version": "20261019050807",
+      "name": "production_financial_functions",
+      "file": "20261019050807_production_financial_functions.sql"
+    },
+    {
+      "version": "20261019051322",
+      "name": "crash_round_fairness_columns",
+      "file": "20261019051322_crash_round_fairness_columns.sql"
+    },
+    {
+      "version": "20261019051624",
+      "name": "enforce_owner_and_case_insensitive_identity_uniqueness",
+      "file": "20261019051624_enforce_owner_and_case_insensitive_identity_uniqueness.sql"
+    },
+    {
+      "version": "20261019052109",
+      "name": "fix_crash_cashout_lock_order",
+      "file": "20261019052109_fix_crash_cashout_lock_order.sql"
+    },
+    {
+      "version": "20261019052349",
+      "name": "reserve_crash_pool_liabilities_atomically",
+      "file": "20261019052349_reserve_crash_pool_liabilities_atomically.sql"
+    },
+    {
+      "version": "20261019140541",
+      "name": "remove_duplicate_game_round_index",
+      "file": "20261019140541_remove_duplicate_game_round_index.sql"
+    },
+    {
+      "version": "20261019162822",
+      "name": "add_bet_loss_game_pool_transaction_type",
+      "file": "20261019162822_add_bet_loss_game_pool_transaction_type.sql"
+    },
+    {
+      "version": "20261019162923",
+      "name": "fix_crash_losses_credit_game_pool",
+      "file": "20261019162923_fix_crash_losses_credit_game_pool.sql"
+    },
+    {
+      "version": "20261019162947",
+      "name": "recycle_cashout_stake_to_game_pool",
+      "file": "20261019162947_recycle_cashout_stake_to_game_pool.sql"
+    },
+    {
+      "version": "20261019185311",
+      "name": "reconcile_aviator_pool_reservations",
+      "file": "20261019185311_reconcile_aviator_pool_reservations.sql"
+    },
+    {
+      "version": "20261021171227",
+      "name": "aviator_engine_tick_rpc",
+      "file": "20261021171227_aviator_engine_tick_rpc.sql"
+    },
+    {
+      "version": "20261023055120",
+      "name": "optimize_aviator_bet_round_lookup",
+      "file": "20261023055120_optimize_aviator_bet_round_lookup.sql"
+    },
+    {
+      "version": "20261023062437",
+      "name": "aviator_bet_auth_single_rpc",
+      "file": "20261023062437_aviator_bet_auth_single_rpc.sql"
+    },
+    {
+      "version": "20261023065013",
+      "name": "aviator_state_single_rpc",
+      "file": "20261023065013_aviator_state_single_rpc.sql"
+    },
+    {
+      "version": "20261025053037",
+      "name": "shared_aviator_wallet_operations",
+      "file": "20261025053037_shared_aviator_wallet_operations.sql"
+    },
+    {
+      "version": "20261107192153",
+      "name": "aviator_scheduler_guard_security_performance",
+      "file": "20261107192153_aviator_scheduler_guard_security_performance.sql"
+    },
+    {
+      "version": "20261108063629",
+      "name": "aviator_engine_worker_lease",
+      "file": "20261108063629_aviator_engine_worker_lease.sql"
+    },
+    {
+      "version": "20261108063705",
+      "name": "aviator_multiplier_realtime_broadcast",
+      "file": "20261108063705_aviator_multiplier_realtime_broadcast.sql"
+    }
+  ],
+  "sharedAppliedOnly": [
+    {
+      "version": "20261020031459",
+      "name": "authoritative_game_runtime"
+    },
+    {
+      "version": "20261020034914",
+      "name": "use_one_shared_game_pool"
+    },
+    {
+      "version": "20261020072454",
+      "name": "harden_aviator_bet_idempotency"
+    },
+    {
+      "version": "20261020082549",
+      "name": "restore_aviator_pool_reservations"
+    },
+    {
+      "version": "20261021073604",
+      "name": "prepare_game_schema_isolation"
+    },
+    {
+      "version": "20261021074007",
+      "name": "harden_wallet_transfer_idempotency"
+    },
+    {
+      "version": "20261021074016",
+      "name": "wallet_transfer_api_boundary"
+    },
+    {
+      "version": "20261021075943",
+      "name": "move_platform_wallet_aviator_tables"
+    },
+    {
+      "version": "20261021080013",
+      "name": "split_authoritative_games_by_schema"
+    },
+    {
+      "version": "20261021090243",
+      "name": "add_system_health_events"
+    },
+    {
+      "version": "20261021105932",
+      "name": "enable_rls_system_health_events"
+    },
+    {
+      "version": "20261021110411",
+      "name": "protect_reserved_wallet_balances"
+    },
+    {
+      "version": "20261021110835",
+      "name": "fix_wallet_token_supply_invariant"
+    },
+    {
+      "version": "20261021111016",
+      "name": "harden_aviator_cashout_idempotency"
+    },
+    {
+      "version": "20261021112046",
+      "name": "limit_aviator_bet_idempotency_key_length"
+    },
+    {
+      "version": "20261021112226",
+      "name": "validate_aviator_bet_user_and_round"
+    },
+    {
+      "version": "20261021112352",
+      "name": "harden_aviator_bet_function_search_path"
+    },
+    {
+      "version": "20261021115840",
+      "name": "add_authoritative_game_bet_and_request_rpcs"
+    },
+    {
+      "version": "20261021120305",
+      "name": "add_atomic_user_creation_rpcs"
+    },
+    {
+      "version": "20261021131844",
+      "name": "expose_backend_schemas_to_postgrest"
+    },
+    {
+      "version": "20261021132931",
+      "name": "refresh_postgrest_custom_schema_cache"
+    },
+    {
+      "version": "20261021161239",
+      "name": "harden_aviator_cashout_settlement_search_path"
+    },
+    {
+      "version": "20261021161812",
+      "name": "harden_public_compatibility_views_rls"
+    },
+    {
+      "version": "20261021181244",
+      "name": "enable_pg_cron"
+    },
+    {
+      "version": "20261021182703",
+      "name": "enable_pg_net_for_aviator_engine"
+    },
+    {
+      "version": "20261021184042",
+      "name": "pause_aviator_engine_scheduler_for_auth_debug"
+    },
+    {
+      "version": "20261021185943",
+      "name": "restore_aviator_engine_scheduler"
+    },
+    {
+      "version": "20261021190040",
+      "name": "verify_aviator_engine_secret_against_vault"
+    },
+    {
+      "version": "20261021190059",
+      "name": "pause_aviator_scheduler_until_auth_fixed"
+    },
+    {
+      "version": "20261022192457",
+      "name": "reduce_aviator_round_cooldown_to_4_seconds"
+    },
+    {
+      "version": "20261023093157",
+      "name": "allow_concurrent_aviator_cashouts"
+    },
+    {
+      "version": "20261023093446",
+      "name": "harden_concurrent_aviator_cashout_timing"
+    },
+    {
+      "version": "20261023101542",
+      "name": "aviator_cashout_single_authenticated_rpc"
+    },
+    {
+      "version": "20261023111617",
+      "name": "roulette_durable_round_lifecycle"
+    },
+    {
+      "version": "20261023111733",
+      "name": "roulette_lifecycle_pgcrypto_and_result_hold_fix"
+    },
+    {
+      "version": "20261023111952",
+      "name": "roulette_escrow_stake_settlement"
+    },
+    {
+      "version": "20261023112228",
+      "name": "roulette_persist_spin_phase"
+    },
+    {
+      "version": "20261023112431",
+      "name": "roulette_database_bet_selection_validation"
+    },
+    {
+      "version": "20261023115040",
+      "name": "roulette_hash_integer_overflow"
+    },
+    {
+      "version": "20261023175014",
+      "name": "aviator_realtime_broadcast"
+    },
+    {
+      "version": "20261107193251",
+      "name": "refund_stale_waiting_aviator_bets"
+    },
+    {
+      "version": "20261107193319",
+      "name": "fix_aviator_stale_bet_refund_audit"
+    },
+    {
+      "version": "20261107193342",
+      "name": "fix_aviator_refund_count"
+    },
+    {
+      "version": "20261109163549",
+      "name": "aviator_realtime_and_recovery_hardening"
+    }
+  ],
+  "sharedFileOnly": [
+    "20261018000000_initial_schema.sql",
+    "20261019170000_fix_crash_pool_reservation_release.sql",
+    "20261019171000_validate_wallet_idempotency_reuse.sql",
+    "20261020120000_authoritative_game_runtime.sql",
+    "20261020140000_shared_game_pool.sql",
+    "20261020150000_harden_aviator_bet_idempotency.sql",
+    "20261020170000_restore_aviator_pool_reservations.sql",
+    "20261021100000_prepare_game_schema_isolation.sql",
+    "20261021110000_harden_wallet_transfer_idempotency.sql",
+    "20261021120000_protect_reserved_wallet_balances.sql",
+    "20261021120000_wallet_transfer_api_boundary.sql",
+    "20261021130000_move_platform_wallet_aviator_tables.sql",
+    "20261021140000_split_authoritative_games_by_schema.sql",
+    "20261021160000_add_system_health_events.sql",
+    "20261021163700_fix_wallet_token_supply_invariant.sql",
+    "20261021165000_harden_aviator_cashout_idempotency.sql",
+    "20261021171000_limit_aviator_bet_idempotency_key_length.sql",
+    "20261021173000_validate_aviator_bet_user_and_round.sql",
+    "20261021175000_harden_aviator_bet_function_search_path.sql",
+    "20261021180000_harden_aviator_cashout_settlement_search_path.sql",
+    "20261021190000_add_authoritative_game_bet_rpc.sql",
+    "20261021193000_add_atomic_user_creation_rpcs.sql",
+    "20261021200000_expose_backend_schemas_to_postgrest.sql",
+    "20261023100000_reduce_aviator_round_cooldown_to_4_seconds.sql",
+    "20261023110000_allow_concurrent_aviator_cashouts.sql",
+    "20261023120000_harden_concurrent_aviator_cashout_timing.sql",
+    "20261023130000_roulette_durable_lifecycle.sql",
+    "20261023140000_roulette_escrow_stake_settlement.sql",
+    "20261023150000_roulette_persist_spin_phase.sql",
+    "20261023160000_aviator_cashout_single_authenticated_rpc.sql",
+    "20261023160000_roulette_bet_validation.sql",
+    "20261023170000_roulette_hash_integer_overflow.sql",
+    "20261023190000_aviator_realtime_broadcast.sql",
+    "20261025110000_shared_aviator_wallet_operations.sql",
+    "20261109090000_aviator_realtime_and_recovery_hardening.sql"
+  ],
+  "isolatedAppliedLedger": [
+    {
+      "version": "20261025052246",
+      "name": "aviator_isolated_schema"
+    },
+    {
+      "version": "20261025053328",
+      "name": "aviator_round_lifecycle"
+    },
+    {
+      "version": "20261025053515",
+      "name": "aviator_bet_intent_outbox"
+    },
+    {
+      "version": "20261025053551",
+      "name": "fix_aviator_bet_intent_idempotency"
+    },
+    {
+      "version": "20261025053631",
+      "name": "aviator_wallet_outbox_liability"
+    },
+    {
+      "version": "20261025065000",
+      "name": "aviator_payout_settlement_worker"
+    },
+    {
+      "version": "20261025065635",
+      "name": "aviator_payout_liability_cap"
+    }
+  ],
+  "isolatedNameMatches": [
+    {
+      "version": "20261025052246",
+      "name": "aviator_isolated_schema",
+      "file": "20261025090000_aviator_isolated_schema.sql"
+    },
+    {
+      "version": "20261025053328",
+      "name": "aviator_round_lifecycle",
+      "file": "20261025130000_aviator_round_lifecycle.sql"
+    },
+    {
+      "version": "20261025053515",
+      "name": "aviator_bet_intent_outbox",
+      "file": "20261025150000_aviator_bet_intent_outbox.sql"
+    },
+    {
+      "version": "20261025053551",
+      "name": "fix_aviator_bet_intent_idempotency",
+      "file": "20261025160000_fix_aviator_bet_intent_idempotency.sql"
+    },
+    {
+      "version": "20261025053631",
+      "name": "aviator_wallet_outbox_liability",
+      "file": "20261025170000_aviator_wallet_outbox_liability.sql"
+    },
+    {
+      "version": "20261025065000",
+      "name": "aviator_payout_settlement_worker",
+      "file": "20261025220000_aviator_payout_settlement_worker.sql"
+    },
+    {
+      "version": "20261025065635",
+      "name": "aviator_payout_liability_cap",
+      "file": "20261025230000_aviator_payout_liability_cap.sql"
+    }
+  ],
+  "isolatedFileOnly": [
+    "20261025180000_aviator_state_only_funded_bets.sql",
+    "20261025190000_aviator_wallet_outbox_worker.sql",
+    "20261025200000_aviator_wait_for_bet_funding.sql",
+    "20261025210000_aviator_server_fair_round_engine.sql"
+  ],
+  "isolatedExactMatches": [],
+  "isolatedNewMigrationFiles": [
+    "20261110100000_harden_aviator_grants_and_fk_indexes.sql"
   ]
 }
