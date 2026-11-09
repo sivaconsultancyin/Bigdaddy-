@@ -69,7 +69,7 @@ async function runTestSuite() {
 
   test('Aviator public broadcast migration redacts crash target until terminal status', () => {
     const migration = readFileSync('supabase/migrations/20261109090000_aviator_realtime_and_recovery_hardening.sql', 'utf8');
-    assert.ok(migration.includes("CASE WHEN new.status::text IN ('CRASHED', 'SETTLED')"));
+    assert.ok(migration.replace(/\\s+/g, ' ').includes("CASE WHEN new.status::text IN ('CRASHED', 'SETTLED')"));
     assert.ok(migration.includes("jsonb_build_object('crashMultiplier', new.crash_multiplier)"));
     assert.ok(migration.includes('aviator.recover_stale_waiting_rounds(120)'));
     assert.ok(migration.includes('STALE_WAITING_REFUND_BLOCKED'));
