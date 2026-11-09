@@ -12,18 +12,21 @@ function corsHeadersForOrigin(origin?: string | null): Record<string, string> {
     .split(",").map((s) => s.trim()).filter(Boolean);
   // Capacitor Android WebView commonly uses https://localhost as its origin.
   // CORS is not authentication; protected endpoints still require a valid BigDaddy token.
+  const defaultOrigins = [
+    "https://bigdaddy-frontend.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ];
   const nativeOrigins = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
-  const allowed = new Set([...configured, ...nativeOrigins]);
+  const allowed = new Set([...configured, ...defaultOrigins, ...nativeOrigins]);
   const headers: Record<string, string> = { ...corsHeaders };
-  if (configured.length > 0) {
-    delete headers["Access-Control-Allow-Origin"];
-    delete headers["Vary"];
-    if (origin && allowed.has(origin)) {
-      headers["Access-Control-Allow-Origin"] = origin;
-      headers["Vary"] = "Origin";
-    }
-  } else {
-    headers["Access-Control-Allow-Origin"] = "*";
+  // Never use wildcard CORS. The production frontend origin is explicitly
+  // allowed by default; additional trusted origins belong in the Edge secret.
+  delete headers["Access-Control-Allow-Origin"];
+  delete headers["Vary"];
+  if (origin && allowed.has(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Vary"] = "Origin";
   }
   headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
   headers["Access-Control-Allow-Headers"] = "authorization, x-client-info, apikey, content-type, idempotency-key";
