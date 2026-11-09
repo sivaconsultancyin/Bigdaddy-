@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.5
 import bcrypt from "npm:bcryptjs@2.4.3";
 import { corsHeaders, jsonResponse, signBigDaddyToken, verifyBigDaddyToken, type BigDaddyClaims } from "./bigdaddy-jwt.ts";
 import { handleAviatorApi } from "./aviator.routes.ts";
+import { applyExplicitCorsOrigin } from "../../../shared/src/cors.ts";
 
 type Role = "OWNER" | "SUPER_ADMIN" | "ADMIN" | "PLAYER";
 type Actor = BigDaddyClaims & { parentId: string | null };
@@ -19,15 +20,9 @@ function corsHeadersForOrigin(origin?: string | null): Record<string, string> {
   ];
   const nativeOrigins = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
   const allowed = new Set([...configured, ...defaultOrigins, ...nativeOrigins]);
-  const headers: Record<string, string> = { ...corsHeaders };
   // Never use wildcard CORS. The production frontend origin is explicitly
   // allowed by default; additional trusted origins belong in the Edge secret.
-  delete headers["Access-Control-Allow-Origin"];
-  delete headers["Vary"];
-  if (origin && allowed.has(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-    headers["Vary"] = "Origin";
-  }
+  const headers = applyExplicitCorsOrigin(corsHeaders, origin, allowed);
   headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
   headers["Access-Control-Allow-Headers"] = "authorization, x-client-info, apikey, content-type, idempotency-key";
   headers["Access-Control-Max-Age"] = "86400";
