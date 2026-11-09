@@ -47,8 +47,32 @@ app.get(['/health', '/api/health'], (_req, res) => {
   });
 });
 
-app.get(['/ready', '/api/ready'], (_req, res) => {
-  res.status(200).json({ status: 'ready', upstream: EDGE_API_BASE });
+app.get(['/ready', '/api/ready'], async (_req, res) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3_000);
+  try {
+    const upstream = await fetch(`${EDGE_API_BASE}/health`, {
+      method: 'GET',
+      headers: process.env.SUPABASE_PUBLISHABLE_KEY
+        ? { apikey: process.env.SUPABASE_PUBLISHABLE_KEY }
+        : undefined,
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    if (!upstream.ok) {
+      res.status(503).json({ status: 'not_ready', dependency: 'supabase_edge_api', upstreamStatus: upstream.status });
+      return;
+    }
+    res.status(200).json({ status: 'ready', dependency: 'supabase_edge_api' });
+  } catch {
+    res.status(503).json({
+      status: 'not_ready',
+      dependency: 'supabase_edge_api',
+      reason: controller.signal.aborted ? 'upstream_timeout' : 'upstream_unavailable',
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 });
 
 app.get('/', (_req, res) => {
@@ -97,12 +121,39 @@ app.all('*', async (req: Request, res: Response) => {
       if (value) res.setHeader(name, value);
     }
 
-    if (upstream.status === 204 || upstream.status === 304 || req.method === 'HEAD') {
+    if (upstream.status === 204 || upstream.status === 304 || req.method === 'HEAD' || !upstream.body) {
       res.end();
       return;
     }
-    res.send(Buffer.from(await upstream.arrayBuffer()));
+
+    // Stream the upstream response instead of buffering it in full. Enforce a
+    // hard cap so a compromised or misconfigured upstream cannot exhaust memory.
+    const maxResponseBytes = 10 * 1024 * 1024;
+    const reader = upstream.body.getReader();
+    let responseBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        responseBytes += value.byteLength;
+        if (responseBytes > maxResponseBytes) {
+          controller.abort();
+          res.destroy(new Error('UPSTREAM_RESPONSE_TOO_LARGE'));
+          return;
+        }
+        if (!res.write(Buffer.from(value))) {
+          await new Promise<void>((resolve) => res.once('drain', resolve));
+        }
+      }
+      res.end();
+    } finally {
+      reader.releaseLock();
+    }
   } catch (error) {
+    if (res.headersSent) {
+      res.destroy(error instanceof Error ? error : undefined);
+      return;
+    }
     const timedOut = controller.signal.aborted;
     res.status(timedOut ? 504 : 502).json({
       error: timedOut ? 'EDGE_API_TIMEOUT' : 'EDGE_API_UNAVAILABLE',
