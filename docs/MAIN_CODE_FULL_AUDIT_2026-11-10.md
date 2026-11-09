@@ -1,0 +1,137 @@
+# BigDaddy Main Code Audit — 2026-11-10
+
+- Repository: `sivaconsultancyin/Bigdaddy-`
+- Branch reviewed: `main`
+- Review type: static source review of the main application entry points, data access, authentication, wallet paths, Aviator engine/API, frontend realtime/animation, CI, deployment routing, and migration inventory.
+- This is not a claim that every line of all 216 tracked files has been dynamically executed. No production writes, live DDL, financial mutations, or deployment changes were performed as part of this review.
+- Severity: P0 = immediate release blocker; P1 = high risk; P2 = medium; P3 = low/maintenance.
+
+## Executive summary
+
+The repository has a substantial production-oriented Supabase/Edge implementation, including server-side JWT verification, atomic Aviator bet/cashout RPCs, distributed worker leases, and realtime multiplier broadcasts. However, there are critical architectural and financial-safety gaps between legacy Node/in-memory code and the deployed Render proxy → Supabase Edge API path. The most important risks are mixed data backends, an unsafe legacy wallet transfer path, demo credentials seeded in the in-memory store, migration ledger drift, and insufficient evidence of full PostgreSQL-backed financial and end-to-end tests.
+
+## Findings
+
+### P0 — Release blockers / immediate containment
+
+#### BD-AUD-001 — Legacy wallet routes still perform financial operations against process-local in-memory storage
+- File: `backend/src/routes/wallet.routes.ts`
+- Evidence: wallet read, ledger, recipient lookup, transfer and `executeTransfer` all call `db.*` from `backend/src/db/storage`; transfer idempotency key is generated from `Date.now()`.
+- Impact: if these routes are mounted/reachable in any deployed server mode, balances and ledger are not durable/shared across instances; restart or multiple instances can diverge. A timestamp-derived key is not a client-stable retry key, so retries can double-submit.
+- Recommendation: remove or hard-disable legacy financial routes in production; route all wallet mutations through authenticated PostgreSQL RPCs with client-provided idempotency keys and transactionally enforced hierarchy/available-balance checks. Add an integration test proving this route cannot be reached in production.
+- Validation needed: enumerate every mounted route in both server entry points and test deployed route map.
+
+#### BD-AUD-002 — Development StorageEngine seeds known demo accounts and passwords
+- File: `backend/src/db/storage.ts`
+- Evidence: constructor seeds owner, super-admin, admin and player records with predictable usernames/emails and literal passwords before bcrypt hashing.
+- Impact: dangerous if the in-memory engine is accidentally used in production, shared demo credentials are exposed, and test/demo identities can be mistaken for live accounts.
+- Recommendation: remove seeded credentials from production code paths; seed only disposable test fixtures with random credentials. Fail startup if production can instantiate the in-memory storage engine. Rotate any credentials if these defaults were ever enabled on a reachable deployment.
+- Validation needed: verify production build and route graph never import/use seeded storage for financial/auth paths.
+
+### P1 — High risk
+
+#### BD-AUD-003 — Multiple backend execution paths make route/data-source consistency difficult to guarantee
+- Files: `render-proxy.ts`, `server.ts`, `backend/src/db/storage.ts`, `backend/src/db/postgres.ts`, `supabase/functions/api/index.ts`, `supabase/functions/aviator-api/index.ts`.
+- Evidence: package start script runs `tsx render-proxy.ts`; Render proxy forwards application requests to Supabase Edge `/functions/v1/api`. A separate Express `server.ts` contains legacy routers and PostgreSQL startup/worker orchestration. The repository also has a separate `aviator-api` Edge Function with its own auth and state/bet implementation.
+- Impact: security fixes or API behavior may be applied to one path but not the deployed path; two Aviator APIs may drift in authorization, validation, response shape, and financial semantics.
+- Recommendation: publish a single canonical production route map; mark legacy server/routes as development-only or remove them after migration. Decide whether `aviator-api` is active; if not, decommission it, otherwise share common contract tests and versioned RPCs.
+- Validation needed: inspect Render service start command and Supabase function deployment/configuration; run route-level tests against the actual deployed entry point.
+
+#### BD-AUD-004 — Legacy direct wallet transfer does not use a stable caller idempotency key
+- File: `backend/src/routes/wallet.routes.ts`
+- Evidence: `idempotencyKey: TRANSFER_<sender>_<recipient>_<Date.now()>`.
+- Impact: network retries produce new keys; duplicate transfers are possible if this route is live and the client retries after a timeout.
+- Recommendation: require and validate `Idempotency-Key`; persist request fingerprint and result atomically; reject same key with a different sender/recipient/amount; test concurrent duplicate submissions.
+- Note: this is a distinct concrete defect within the legacy in-memory path and is covered by BD-AUD-001's containment recommendation.
+
+#### BD-AUD-005 — Shared Supabase migration ledger and repository migration files are materially out of sync
+- File: `docs/shared-supabase-migration-ledger-reconciliation.md`
+- Evidence from the documented read-only snapshot (2026-11-09): 65 applied ledger entries vs 55 SQL files; 21 exact version+name matches; 44 applied entries without an exact filename match; 34 repository files not represented by an exact applied version+name; two duplicate version prefixes.
+- Impact: a normal migration push may attempt already-applied effects or apply migrations in an unsafe order; financial schema/function behavior may diverge.
+- Recommendation: do not run `supabase db push`, migration repair, or manual production DDL until a row-by-row source/effect reconciliation and restore-tested rollback plan are approved. Resolve duplicate timestamps and test clean bootstrap plus upgrade-from-live-ledger in disposable PostgreSQL.
+- Status: already documented in merged PR #124; remains an operational blocker until reconciled.
+
+#### BD-AUD-006 — Test coverage does not yet prove production financial behavior end-to-end
+- Files: `test/run_tests.ts`, `.github/workflows/ci.yml`, `scripts/production_financial_reconciliation.sql`.
+- Evidence: package test command runs `test/run_tests.ts`; the documented earlier audit states this suite exercises the in-memory store. CI includes targeted disposable PostgreSQL tests for selected lease/realtime/security migrations, but that is not equivalent to complete wallet/bet/cashout/refund concurrency and rollback coverage.
+- Impact: unit tests can pass while PostgreSQL locking, RPC authorization, idempotency, constraints, RLS, and settlement transactions fail in production.
+- Recommendation: add disposable PostgreSQL integration tests for wallet transfer, bet funding/outbox, cashout, settlement, refunds, token-supply invariant, duplicate/concurrent requests, worker lease handoff, and rollback. Add deployed Edge API smoke tests using synthetic accounts in staging.
+- Validation needed: run CI and capture the exact workflow results; no successful full test run is asserted by this audit.
+
+#### BD-AUD-007 — Two Aviator API implementations create potential contract and authorization drift
+- Files: `supabase/functions/api/aviator.routes.ts`, `supabase/functions/aviator-api/index.ts`.
+- Evidence: both implement Aviator bet/state paths; the dedicated function independently verifies JWT and queries the shared auth project, while the general API uses a separate actor resolver and authenticated atomic RPC path.
+- Impact: clients may hit different implementations depending on URL/configuration, with different idempotency constraints and response behavior.
+- Recommendation: choose one canonical API and route all clients through it; if both are required, extract shared contract fixtures and run identical auth, validation, idempotency and response tests against both.
+
+#### BD-AUD-008 — Aviator worker failure paths need explicit lease-release/expiry observability tests
+- File: `supabase/functions/aviator-engine/index.ts`
+- Evidence: when heartbeat reports lease lost, function returns 409; lease release is explicit on tick RPC failure, while other early failure/exception paths rely on lease TTL expiry. Handoff and continuation scheduling are separate asynchronous steps.
+- Impact: temporary orphaned lease delays recovery; handoff/continuation failures may leave a round stalled until TTL expiry.
+- Recommendation: wrap lease ownership in a single try/finally lifecycle, release only with matching owner token, record handoff failures and recovery lag, and test timeout/exception/continuation rejection/lease-loss cases. Do not weaken fencing/owner-token checks.
+- Validation needed: fault-injection tests for every exit branch.
+
+### P2 — Medium risk / performance and maintainability
+
+#### BD-AUD-009 — Supabase Realtime and state polling need operational freshness SLOs
+- Files: `frontend/src/context/WebSocketContext.tsx`, `shared/src/aviatorRealtime.ts`, `supabase/functions/aviator-api/index.ts`.
+- Evidence: frontend has authoritative realtime multiplier handling plus polling/state fetch logic; the separate state API derives live multiplier from server timestamps and crash multiplier.
+- Impact: missed or delayed events, stale state responses, duplicate events, or round transitions can cause UI lag or confusing animation even when the database engine is correct.
+- Recommendation: instrument per-round event sequence/version, server event timestamp, client receive lag, polling fallback count, and round-ID transitions. Test reconnect, out-of-order/duplicate events, missing final crash event, and round rollover. Keep displayed multiplier subordinate to authoritative server state.
+- Positive observation: frontend currently reads the Realtime multiplier payload and resets animation tracking on round ID changes; this is a useful existing safeguard, not a finding of absence.
+
+#### BD-AUD-010 — Realtime client configuration is hard-coded to a specific Supabase project
+- File: `frontend/src/context/WebSocketContext.tsx`
+- Evidence: Realtime URL and fallback publishable key are literal constants.
+- Impact: staging/fork/local environments can silently subscribe to the production project; project migration requires code changes.
+- Recommendation: use validated Vite environment variables for URL and publishable key, fail clearly when absent, and ensure only publishable keys are shipped to browsers.
+
+#### BD-AUD-011 — Proxy health/readiness endpoints report process health, not upstream readiness
+- File: `render-proxy.ts`
+- Evidence: `/health` always returns status ok and `/ready` returns ready with configured upstream string without checking upstream connectivity.
+- Impact: Render may mark the proxy healthy while Supabase Edge API is unavailable; monitoring can miss user-facing outages.
+- Recommendation: keep liveness separate; make readiness perform a bounded, non-mutating upstream health check and return 503 on dependency failure. Avoid exposing sensitive upstream configuration in public responses.
+
+#### BD-AUD-012 — API proxy buffers complete upstream responses and permits 40-second requests
+- File: `render-proxy.ts`
+- Evidence: upstream response is fully buffered with `arrayBuffer()`; timeout is 40 seconds.
+- Impact: large responses consume memory per request and long waits can tie up proxy resources during incidents.
+- Recommendation: stream response bodies where supported, cap request/response sizes, set endpoint-specific timeouts and add concurrency/rate limits on sensitive endpoints.
+
+#### BD-AUD-013 — CORS defaults to wildcard when explicit allowed origins are absent
+- File: `supabase/functions/api/index.ts`
+- Evidence: if `BIGDADDY_ALLOWED_ORIGINS` is empty, Access-Control-Allow-Origin is `*`.
+- Impact: any browser origin can make cross-origin requests; CORS is not authorization, but a strict production origin allowlist reduces exposure and accidental embedding.
+- Recommendation: require a non-empty production origin allowlist and fail production configuration validation if absent. Keep native app origins explicitly documented.
+
+## Positive controls observed
+
+- Supabase service-role credentials are read server-side in Edge Functions; browser uses a publishable key for Realtime.
+- General API actor resolution checks current active user and exactly one current role assignment, and compares role to JWT claims.
+- Aviator bet and cashout routes call authenticated atomic database RPCs.
+- Dedicated engine code uses owner tokens, lease claim/heartbeat/handoff RPCs and bounded execution windows.
+- `supabase/functions/aviator-engine` validates a long secret using constant-time byte comparison.
+- Database clients use bounded connection pools, statement/lock timeouts and separate auth/wallet/engine pools in the legacy server.
+- Frontend realtime multiplier parsing and round-ID animation reset are present.
+
+## Recommended remediation order
+
+1. Contain/disable legacy in-memory financial routes and ensure seeded demo accounts cannot be used in production (BD-AUD-001/002/004).
+2. Confirm the actual Render + Supabase production route map; consolidate duplicate API implementations (BD-AUD-003/007).
+3. Freeze production migration pushes until exact ledger reconciliation and restore-tested plan is complete (BD-AUD-005).
+4. Add PostgreSQL integration and staging end-to-end tests for financial invariants and concurrency (BD-AUD-006).
+5. Add worker failure-path fault injection and realtime freshness observability (BD-AUD-008/009).
+6. Improve deployment readiness, CORS, proxy streaming/limits and environment-based Realtime config (BD-AUD-010–013).
+
+## Audit limitations / evidence still required
+
+- Static code review only; the complete 216-file tree was inventoried, and key production/runtime files were inspected, but not every line of every file was exhaustively reviewed.
+- No production login, bet, cashout, settlement, wallet transfer, or refund was executed.
+- No live database DDL, migration repair, schema mutation, or financial data change was performed.
+- No Render deployment logs, Supabase live function logs, full database catalog, backup restore, or mobile end-to-end session was verified in this audit.
+- Findings about route reachability must be confirmed against the deployed Render start command and deployed Supabase function configuration before declaring a specific legacy endpoint externally exploitable.
+
+## Related repository work
+
+- PR #124 merged the migration ledger reconciliation documentation, but did not resolve the migration drift.
+- PR #123 was observed open at review time; its isolated Aviator DB grant/index migration must remain isolated to its intended project and receive independent SQL/security review before merge/deploy.
