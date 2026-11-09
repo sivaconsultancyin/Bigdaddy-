@@ -203,9 +203,9 @@ jobs:
         UPDATE public.wallets SET balance=0 WHERE id='00000000-0000-0000-0000-000000000002';
         SQL
 
-        psql -v ON_ERROR_STOP=1 -At -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-key-0001','BET_ESCROW_LOCK',100,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-replay\\"}'::jsonb)" > /tmp/wallet-concurrent-a.out &
+        psql -v ON_ERROR_STOP=1 -At -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-key-0001','BET_ESCROW_LOCK',100,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\"purpose\":\"concurrent-replay\"}'::jsonb)" > /tmp/wallet-concurrent-a.out &
         first_pid=$!
-        psql -v ON_ERROR_STOP=1 -At -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-key-0001','BET_ESCROW_LOCK',100,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-replay\\"}'::jsonb)" > /tmp/wallet-concurrent-b.out &
+        psql -v ON_ERROR_STOP=1 -At -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-key-0001','BET_ESCROW_LOCK',100,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\"purpose\":\"concurrent-replay\"}'::jsonb)" > /tmp/wallet-concurrent-b.out &
         second_pid=$!
         wait "$first_pid"
         wait "$second_pid"
@@ -234,9 +234,9 @@ jobs:
         UPDATE public.wallets SET balance=100 WHERE id='00000000-0000-0000-0000-000000000002';
         SQL
 
-        psql -v ON_ERROR_STOP=1 -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-distinct-a','BET_ESCROW_LOCK',400,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-a\\"}'::jsonb)" &
+        psql -v ON_ERROR_STOP=1 -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-distinct-a','BET_ESCROW_LOCK',400,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\"purpose\":\"concurrent-a\"}'::jsonb)" &
         first_pid=$!
-        psql -v ON_ERROR_STOP=1 -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-distinct-b','BET_ESCROW_LOCK',500,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-b\\"}'::jsonb)" &
+        psql -v ON_ERROR_STOP=1 -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-distinct-b','BET_ESCROW_LOCK',500,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\"purpose\":\"concurrent-b\"}'::jsonb)" &
         second_pid=$!
         wait "$first_pid"
         wait "$second_pid"
