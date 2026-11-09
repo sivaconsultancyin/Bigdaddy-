@@ -37,7 +37,8 @@ const upstream = createServer((req, res) => {
   if (req.url === '/slow') {
     setTimeout(() => res.writeHead(200).end('slow-ok'), 500);
     return;
-  }\n  if (req.url === '/stream') {
+  }
+  if (req.url === '/stream') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.write('chunk-one');
     setTimeout(() => res.end('chunk-two'), 100);
@@ -63,7 +64,8 @@ try {
       NODE_ENV: 'test',
       PORT: String(proxyPort),
       SUPABASE_API_BASE_URL: 'http://127.0.0.1:' + upstreamPort,
-      CORS_ORIGINS: 'http://allowed.test',\n      PROXY_MAX_CONCURRENT_REQUESTS: '1',
+      CORS_ORIGINS: 'http://allowed.test',
+      PROXY_MAX_CONCURRENT_REQUESTS: '1',
     },
     stdio: 'ignore',
   });
