@@ -34,7 +34,7 @@ const upstream = createServer((req, res) => {
     res.writeHead(200).end('ok');
     return;
   }
-  if (req.url === '/stream') {
+  if (req.url === '/slow') {\n    setTimeout(() => res.writeHead(200).end('slow-ok'), 500);\n    return;\n  }\n  if (req.url === '/stream') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.write('chunk-one');
     setTimeout(() => res.end('chunk-two'), 100);
@@ -60,7 +60,7 @@ try {
       NODE_ENV: 'test',
       PORT: String(proxyPort),
       SUPABASE_API_BASE_URL: 'http://127.0.0.1:' + upstreamPort,
-      CORS_ORIGINS: 'http://allowed.test',
+      CORS_ORIGINS: 'http://allowed.test',\n      PROXY_MAX_CONCURRENT_REQUESTS: '1',
     },
     stdio: 'ignore',
   });
@@ -96,6 +96,15 @@ try {
   assert.equal(streamed.status, 200);
   assert.equal(await streamed.text(), 'chunk-onechunk-two');
 
+  const firstSlowRequest = fetch('http://127.0.0.1:' + proxyPort + '/slow');
+  await delay(50);
+  const overloaded = await fetch('http://127.0.0.1:' + proxyPort + '/slow');
+  assert.equal(overloaded.status, 503);
+  assert.equal(overloaded.headers.get('retry-after'), '1');
+  const firstSlowResponse = await firstSlowRequest;
+  assert.equal(firstSlowResponse.status, 200);
+  assert.equal(await firstSlowResponse.text(), 'slow-ok');
+
   await assert.rejects(
     async () => {
       const response = await fetch('http://127.0.0.1:' + proxyPort + '/large');
@@ -104,7 +113,7 @@ try {
     'oversized upstream response should be terminated',
   );
 
-  console.log('Render proxy integration tests passed: liveness, upstream readiness, timeout, streaming, response-size cap.');
+  console.log('Render proxy integration tests passed: liveness, upstream readiness, timeout, streaming, concurrency cap, response-size cap.');
 } finally {
   proxy?.kill('SIGTERM');
   await closeServer(upstream);
