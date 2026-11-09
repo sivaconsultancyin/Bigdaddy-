@@ -254,10 +254,10 @@ jobs:
         $verify$;
         SQL
 
-        # Restore the original fixture balances for the following wallet-boundary test.
+        # Restore the post-idempotency fixture balances for the following wallet-boundary test.
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        UPDATE public.wallets SET balance=1000 WHERE id='00000000-0000-0000-0000-000000000001';
-        UPDATE public.wallets SET balance=0 WHERE id='00000000-0000-0000-0000-000000000002';
+        UPDATE public.wallets SET balance=900 WHERE id='00000000-0000-0000-0000-000000000001';
+        UPDATE public.wallets SET balance=100 WHERE id='00000000-0000-0000-0000-000000000002';
         SQL
 
     - name: Verify wallet API boundary grants and execution
