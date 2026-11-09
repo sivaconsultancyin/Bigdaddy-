@@ -1,4 +1,5 @@
 -- Run after applying 20261025240000_aviator_security_and_fk_indexes.sql.
+-- This file is executed only by the disposable PostgreSQL 16 CI job.
 DO $verify$
 BEGIN
   IF has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE')
