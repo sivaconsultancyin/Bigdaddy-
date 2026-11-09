@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { applyExplicitCorsOrigin } from '../shared/src/cors';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
@@ -84,6 +84,19 @@ async function runTestSuite() {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', multiplier: 1.27, crashMultiplier: 25 }), 1.27);
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'CRASHED', crashMultiplier: 1.27 }), null);
+  });
+
+  test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
+    const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
+    const actualFiles = readdirSync('supabase/migrations').filter((name) => name.endsWith('.sql')).sort();
+    assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
+    assert.strictEqual(manifest.appliedLedger.length, 65);
+    assert.strictEqual(manifest.exactMatches.length, 21);
+    assert.strictEqual(manifest.appliedOnly.length, 44);
+    assert.strictEqual(manifest.fileOnly.length, 34);
+    const versions = manifest.repositoryFiles.map((name) => name.slice(0, 14));
+    const duplicates = [...new Set(versions.filter((version, index) => versions.indexOf(version) !== index))].sort();
+    assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
   });
 
   test('Explicit CORS policy allows trusted origins and rejects unknown origins', () => {
