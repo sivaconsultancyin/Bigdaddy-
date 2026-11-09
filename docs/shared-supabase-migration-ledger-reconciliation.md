@@ -1,6 +1,6 @@
 # Shared BigDaddy Supabase migration ledger reconciliation
 
-Read-only snapshot taken 2026-11-09. GitHub main commit: `aaef4f728e5e4c17fa05a2690306577f2585e465`. Target project: shared BigDaddy (`nzvpuoeibqrpcltrszvr`).
+Initial read-only snapshot taken 2026-11-09 and rechecked against both live ledgers on 2026-11-10. Target project: shared BigDaddy (`nzvpuoeibqrpcltrszvr`).
 
 ## Exact comparison
 
