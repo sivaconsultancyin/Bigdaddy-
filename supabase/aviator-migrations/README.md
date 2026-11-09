@@ -1,7 +1,23 @@
 # Isolated Aviator migrations
 
-This directory is for SQL changes that target the separate \`Bigdaddy aviator\` Supabase project (\`yrleubhpiqejfvingqfj\`). It is intentionally separate from \`supabase/migrations/\`, whose configured project is the shared BigDaddy project.
+Target project: \`Bigdaddy aviator\` (\`yrleubhpiqejfvingqfj\`).
 
-Do not run \`supabase db push\` from the repository root for files in this directory. The isolated project's existing seven migration sources are not yet reconstructed here, so a CLI migration-history reconciliation is still required before automating deploys.
+## Current source layout
 
-The migration in this directory is source-controlled and covered by the disposable PostgreSQL CI fixture. It is **not applied to the live project by CI**. Before a live apply, review the isolated project's migration ledger and use the approved deployment process with the explicit isolated project ref and backup/rollback plan.
+- Eleven isolated-Aviator migration files are still stored in the root \`supabase/migrations/\` directory alongside shared-project SQL.
+- The isolated project has seven applied ledger entries. Seven repository files match those entries by migration name but have different version prefixes; four additional isolated files are not present in the isolated applied ledger.
+- This directory currently contains the new isolated security migration \`20261110100000_harden_aviator_grants_and_fk_indexes.sql\`.
+- The root \`supabase/config.toml\` points to the shared BigDaddy project, not this isolated project.
+
+## Safety
+
+Do not run a blanket \`supabase db push\` from the repository root against either project. The mixed directory can send isolated-project migrations to the shared project. Do not run \`supabase db push\` from this directory either: the seven historical isolated migration sources have not yet been reconstructed here.
+
+Before deployment:
+1. Confirm the existing isolated-project deployment workflow.
+2. Reconcile all seven applied ledger entries with the eleven repository files by SQL effect, not name alone.
+3. Decide and review the final per-project directory/config layout.
+4. Run clean-bootstrap and upgrade tests against disposable PostgreSQL.
+5. Obtain explicit approval and a backup/rollback plan before applying any live DDL.
+
+The migration in this directory is source-controlled and covered by disposable PostgreSQL CI. It is **not applied to the live project by CI**.
