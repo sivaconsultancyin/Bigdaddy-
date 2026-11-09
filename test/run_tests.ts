@@ -85,6 +85,22 @@ async function runTestSuite() {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'CRASHED', crashMultiplier: 1.27 }), null);
   });
 
+  test('Production API routing preserves the shared and isolated Supabase project boundary', () => {
+    const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
+    const sharedConfig = readFileSync('supabase/config.toml', 'utf8');
+    const isolatedApi = readFileSync('supabase/functions/aviator-api/index.ts', 'utf8');
+    assert.ok(apiClient.includes('const SUPABASE_API_BASE'));
+    assert.ok(apiClient.includes('const AVIATOR_API_BASE'));
+    assert.ok(apiClient.includes('return AVIATOR_API_BASE'));
+    assert.ok(apiClient.includes('return API_BASE'));
+    assert.ok(sharedConfig.includes('[functions.api]'));
+    assert.ok(sharedConfig.includes('[functions.aviator-api]'));
+    assert.ok(apiClient.includes('(state|history|bet|cashout)'), 'Frontend API client must route all four Aviator endpoint suffixes to the isolated API');
+    for (const route of ['/games/aviator/state', '/games/aviator/history', '/games/aviator/bet', '/games/aviator/cashout']) {
+      assert.ok(isolatedApi.includes(route), `Isolated Aviator API is missing ${route}`);
+    }
+  });
+
   test('Aviator public broadcast migration redacts crash target until terminal status', () => {
     const migration = readFileSync('supabase/migrations/20261109090000_aviator_realtime_and_recovery_hardening.sql', 'utf8');
     assert.ok(migration.replace(/\s+/g, ' ').includes("CASE WHEN new.status::text IN ('CRASHED', 'SETTLED')"));
