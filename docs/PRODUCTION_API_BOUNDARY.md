@@ -28,6 +28,10 @@ Snapshot verified on 2026-11-10 using the repository source and read-only Supaba
 
 These are intentionally separate Supabase projects, not a duplicate deployment of one function. Do not delete \`supabase/functions/aviator-api\`, remove its function config, or run a blanket deployment against the wrong project. Any deployment of isolated Aviator functions must explicitly target the isolated project ref.
 
+## Migration directory safety
+
+The root `supabase/migrations/` directory currently mixes shared-project SQL with eleven isolated-Aviator migration files. The shared project has 65 applied ledger versions; the isolated project has seven. Do not run a blanket `supabase db push` against either project until both ledgers and the per-project deployment workflow are reconciled. See `docs/shared-supabase-migration-ledger-reconciliation.md` and `supabase/aviator-migrations/README.md`.
+
 ## Other server entry points
 
 - \`package.json\` starts \`render-proxy.ts\`.
