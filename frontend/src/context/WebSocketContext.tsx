@@ -585,10 +585,47 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // public topic. Never subscribe to or broadcast wallet, bet, or seed secrets.
     const channel = supabaseRealtime
       .channel('aviator:rounds', { config: { broadcast: { self: false } } })
-      .on('broadcast', { event: 'round_state_changed' }, () => {
-        if (stopped || disposedRef.current) return;
-        // Coalesce broadcasts while a request is running; fetch one fresh snapshot
-        // immediately after it completes instead of overlapping requests or losing the event.
+      .on('broadcast', { event: 'round_state_changed' }, ({ payload }) => {
+        if (stopped || disposedRef.current || !payload || typeof payload !== 'object') return;
+
+        // Apply server-authoritative multiplier broadcasts immediately. The
+        // authenticated state endpoint remains the fallback for missed events
+        // and the source for user-specific wallet/bet data.
+        const eventRoundId = typeof payload.id === 'string' ? payload.id : null;
+        const eventRoundNumber = Number(payload.roundNumber);
+        const eventStatus = typeof payload.status === 'string' ? payload.status : null;
+        const eventMultiplier = Number(payload.multiplier ?? payload.crashMultiplier);
+        const validMultiplier = Number.isFinite(eventMultiplier) && eventMultiplier >= 1;
+        const validStatus = ['WAITING', 'RUNNING', 'CRASHED', 'SETTLED'].includes(eventStatus ?? '');
+
+        if (eventRoundId && validStatus) {
+          const currentRoundNumber = Number(roundStateRef.current.roundNumber ?? 0);
+          if (!Number.isFinite(eventRoundNumber) || eventRoundNumber >= currentRoundNumber) {
+            setRoundState((current) => {
+              const currentNumber = Number(current.roundNumber ?? 0);
+              if (Number.isFinite(eventRoundNumber) && eventRoundNumber < currentNumber) return current;
+              return {
+                id: eventRoundId,
+                roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : current.roundNumber,
+                status: eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED',
+                startTime: payload.startedAt ? new Date(String(payload.startedAt)).getTime() : current.startTime,
+                crashMultiplier: Number.isFinite(Number(payload.crashMultiplier)) ? Number(payload.crashMultiplier) : current.crashMultiplier,
+              };
+            });
+          }
+        }
+
+        if (eventRoundId && validMultiplier && eventStatus === 'RUNNING') {
+          const previous = lastAuthoritativeMultiplierRef.current;
+          if (!previous || previous.roundId !== eventRoundId || eventMultiplier >= previous.value) {
+            lastAuthoritativeMultiplierRef.current = { value: eventMultiplier, at: Date.now(), roundId: eventRoundId };
+            setAuthoritativeMultiplier(eventMultiplier);
+          }
+          // Do not fetch the state endpoint for every multiplier tick. The normal
+          // 200ms RUNNING poll remains active as a recovery fallback.
+          return;
+        }
+
         if (simIntervalRef.current !== null) {
           window.clearTimeout(simIntervalRef.current);
           simIntervalRef.current = null;

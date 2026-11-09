@@ -71,7 +71,7 @@ jobs:
     - name: Verify schema access boundaries
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$
         DECLARE
           schema_name text;
         BEGIN
@@ -95,7 +95,7 @@ jobs:
             END IF;
           END LOOP;
         END
-        $$;
+        $verify$;
         SQL
 
     - name: Verify schema migration is repeatable
@@ -147,7 +147,7 @@ jobs:
     - name: Verify exact replay and conflicting-key rejection
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$
         DECLARE
           first_id uuid;
           replay_id uuid;
@@ -191,13 +191,13 @@ jobs:
             RAISE EXCEPTION 'Expected exactly two double-entry ledger rows';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
     - name: Verify wallet API boundary grants and execution
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$
         BEGIN
           IF has_function_privilege('anon', 'wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)', 'EXECUTE') THEN
             RAISE EXCEPTION 'anon unexpectedly has wallet API execute privilege';
@@ -209,7 +209,7 @@ jobs:
             RAISE EXCEPTION 'service_role cannot execute wallet API';
           END IF;
         END
-        $$;
+        $verify$;
 
         SET ROLE service_role;
         SELECT wallet.wallet_transfer_atomic(
@@ -220,7 +220,7 @@ jobs:
         );
         RESET ROLE;
 
-        DO $$
+        DO $verify$
         BEGIN
           IF (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 850
              OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 150 THEN
@@ -230,7 +230,7 @@ jobs:
             RAISE EXCEPTION 'Wallet wrapper did not create exactly two additional ledger rows';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
 
@@ -272,7 +272,7 @@ jobs:
     - name: Verify tables, compatibility views, and function boundaries
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$
         DECLARE
           name text;
         BEGIN
@@ -317,7 +317,7 @@ jobs:
             RAISE EXCEPTION 'Pool reconciliation unexpectedly changed wallet balances/reservations';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
     - name: Apply per-game authoritative schema split
@@ -326,7 +326,7 @@ jobs:
     - name: Verify per-game tables, foreign keys, and preserved history
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $$
+        DO $verify$
         DECLARE
           schema_name text;
           table_name text;
@@ -391,7 +391,7 @@ jobs:
             RAISE EXCEPTION 'Per-game bet-to-round foreign keys are missing';
           END IF;
         END
-        $$;
+        $verify$;
         SQL
 
   validate-edge-functions:
@@ -399,10 +399,148 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Deno
-      uses: denoland/setup-deno@v2
-      with:
-        deno-version: v2.x
+    - name: Set up Deno (retry transient download failures)
+      shell: bash
+      run: |
+        set -euo pipefail
+        installed=false
+        for attempt in 1 2 3; do
+          if curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 https://deno.land/install.sh | sh; then
+            installed=true
+            break
+          fi
+          echo "Deno install attempt ${attempt} failed; retrying..."
+          sleep 5
+        done
+        if [ "${installed}" != "true" ]; then
+          echo "Deno installation failed after retries" >&2
+          exit 1
+        fi
+        echo "${HOME}/.deno/bin" >> "${GITHUB_PATH}"
+        "${HOME}/.deno/bin/deno" --version
 
     - name: Type-check Supabase Edge API
       run: deno check --config supabase/functions/api/deno.json supabase/functions/api/index.ts
+
+    - name: Type-check Aviator engine Edge Function
+      run: deno check --config supabase/functions/api/deno.json supabase/functions/aviator-engine/index.ts
+
+  validate-aviator-engine-lease:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install PostgreSQL client
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+
+    - name: Create isolated Aviator lease and Realtime fixtures
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        CREATE ROLE anon NOLOGIN;
+        CREATE ROLE authenticated NOLOGIN;
+        CREATE ROLE service_role NOLOGIN;
+        CREATE SCHEMA aviator;
+        CREATE SCHEMA realtime;
+        GRANT USAGE ON SCHEMA aviator TO service_role;
+        CREATE TABLE aviator.game_rounds (
+          id uuid PRIMARY KEY,
+          round_number bigint NOT NULL,
+          status text NOT NULL,
+          started_at timestamptz,
+          crash_multiplier numeric,
+          ended_at timestamptz,
+          server_seed_hash text,
+          revealed_server_seed text
+        );
+        CREATE TABLE realtime.broadcast_events (
+          payload jsonb NOT NULL,
+          event_name text NOT NULL,
+          topic text NOT NULL
+        );
+        CREATE FUNCTION realtime.send(jsonb, text, text, boolean)
+        RETURNS void LANGUAGE sql AS $function$
+          INSERT INTO realtime.broadcast_events(payload, event_name, topic)
+          VALUES ($1, $2, $3);
+        $function$;
+        CREATE FUNCTION aviator.tick_crash_engine()
+        RETURNS jsonb LANGUAGE sql AS $function$
+          SELECT jsonb_build_object(
+            'action', 'round_running',
+            'roundId', '00000000-0000-4000-8000-000000000001',
+            'multiplier', 1.23
+          );
+        $function$;
+        INSERT INTO aviator.game_rounds(id, round_number, status, started_at, crash_multiplier)
+        VALUES ('00000000-0000-4000-8000-000000000001', 7, 'RUNNING', now(), 2.5);
+        SQL
+
+    - name: Apply Aviator lease and Realtime migrations
+      run: |
+        psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063629_aviator_engine_worker_lease.sql
+        psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063705_aviator_multiplier_realtime_broadcast.sql
+
+    - name: Verify single-worker lease, heartbeat, handoff, and multiplier broadcast
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $verify$
+        DECLARE
+          first_owner uuid := '00000000-0000-4000-8000-000000000011';
+          duplicate_owner uuid := '00000000-0000-4000-8000-000000000012';
+          handoff_token uuid := '00000000-0000-4000-8000-000000000013';
+          next_owner uuid := '00000000-0000-4000-8000-000000000014';
+        BEGIN
+          IF NOT aviator.claim_crash_engine_lease(first_owner, 45) THEN
+            RAISE EXCEPTION 'Initial lease claim failed';
+          END IF;
+          IF aviator.claim_crash_engine_lease(duplicate_owner, 45) THEN
+            RAISE EXCEPTION 'Duplicate worker acquired an active lease';
+          END IF;
+          IF NOT aviator.heartbeat_crash_engine_lease(first_owner, 45) THEN
+            RAISE EXCEPTION 'Lease heartbeat failed';
+          END IF;
+          IF NOT aviator.handoff_crash_engine_lease(first_owner, handoff_token, 60) THEN
+            RAISE EXCEPTION 'Atomic lease handoff failed';
+          END IF;
+          IF aviator.heartbeat_crash_engine_lease(first_owner, 45) THEN
+            RAISE EXCEPTION 'Previous worker retained lease after handoff';
+          END IF;
+          IF NOT aviator.consume_crash_engine_handoff(handoff_token, next_owner, 45) THEN
+            RAISE EXCEPTION 'Continuation did not consume handoff token';
+          END IF;
+          IF NOT aviator.release_crash_engine_lease(next_owner) THEN
+            RAISE EXCEPTION 'Lease release failed';
+          END IF;
+          PERFORM aviator.tick_crash_engine_with_broadcast();
+          IF NOT EXISTS (
+            SELECT 1 FROM realtime.broadcast_events
+            WHERE event_name = 'round_state_changed'
+              AND topic = 'aviator:rounds'
+              AND payload->>'multiplier' = '1.23'
+              AND payload->>'id' = '00000000-0000-4000-8000-000000000001'
+          ) THEN
+            RAISE EXCEPTION 'Authoritative multiplier was not broadcast';
+          END IF;
+        END
+        $verify$;
+        SQL
