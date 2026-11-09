@@ -1,43 +1,23 @@
-# BigDaddy production API and project boundary
+# Isolated Aviator migrations
 
-Snapshot verified on 2026-11-10 using the repository source and read-only Supabase project inspection.
+Target project: \`Bigdaddy aviator\` (\`yrleubhpiqejfvingqfj\`).
 
-## Shared BigDaddy project
+## Current source layout
 
-- Project ref: \`nzvpuoeibqrpcltrszvr\`
-- Canonical general API: \`https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api\`
-- The frontend routes login, wallet, account, and non-Aviator game requests to this API in production.
-- The Render proxy's default upstream is also this API, but the frontend's production API client currently calls Supabase directly.
-- The shared project currently has the \`api\` Edge Function active. Its general API handler also contains Aviator route code, but the browser client does not select it for the four isolated Aviator endpoints.
+- Eleven isolated-Aviator migration files are still stored in the root \`supabase/migrations/\` directory alongside shared-project SQL.
+- The isolated project has seven applied ledger entries. Seven repository files match those entries by migration name but have different version prefixes; four additional isolated files are not present in the isolated applied ledger.
+- This directory currently contains the new isolated security migration \`20261110100000_harden_aviator_grants_and_fk_indexes.sql\`.
+- The root \`supabase/config.toml\` points to the shared BigDaddy project, not this isolated project.
 
-## Isolated Aviator project
+## Safety
 
-- Project ref: \`yrleubhpiqejfvingqfj\`
-- Project name/region: \`Bigdaddy aviator\`, \`ap-northeast-1\`
-- Canonical Aviator API: \`https://yrleubhpiqejfvingqfj.supabase.co/functions/v1/aviator-api\`
-- The frontend routes \`/games/aviator/state\`, \`history\`, \`bet\`, and \`cashout\` to this API.
-- Read-only function inventory verified these active functions in the isolated project: \`aviator-api\`, \`aviator-wallet-worker\`, \`aviator-round-engine\`, and \`aviator-settlement-worker\`.
+Do not run a blanket \`supabase db push\` from the repository root against either project. The mixed directory can send isolated-project migrations to the shared project. Do not run \`supabase db push\` from this directory either: the seven historical isolated migration sources have not yet been reconstructed here.
 
-## Routing contract
+Before deployment:
+1. Confirm the existing isolated-project deployment workflow.
+2. Reconcile all seven applied ledger entries with the eleven repository files by SQL effect, not name alone.
+3. Decide and review the final per-project directory/config layout.
+4. Run clean-bootstrap and upgrade tests against disposable PostgreSQL.
+5. Obtain explicit approval and a backup/rollback plan before applying any live DDL.
 
-\`frontend/src/api/client.ts\` is the client-side routing authority:
-
-- Production non-Aviator endpoints use the shared BigDaddy API.
-- The four Aviator endpoints above use the isolated Aviator API and its project publishable key.
-- Realtime multiplier subscriptions in \`frontend/src/context/WebSocketContext.tsx\` use the shared project's Realtime endpoint.
-
-These are intentionally separate Supabase projects, not a duplicate deployment of one function. Do not delete \`supabase/functions/aviator-api\`, remove its function config, or run a blanket deployment against the wrong project. Any deployment of isolated Aviator functions must explicitly target the isolated project ref.
-
-## Other server entry points
-
-- \`package.json\` starts \`render-proxy.ts\`.
-- \`render-proxy.ts\` forwards to the shared \`/functions/v1/api\` endpoint.
-- \`server.ts\` is a separate Express/PostgreSQL implementation with persistent production routers and a worker process. It is not the package's configured start entry point.
-- The legacy in-memory wallet router is not mounted by \`server.ts\`'s production router list; \`StorageEngine\` now fails closed in production (see PR #131).
-
-## Operational cautions
-
-- Do not consolidate the two Supabase projects without a reviewed migration, wallet-operation, worker, and latency plan.
-- Do not change Edge API CORS behavior until the live \`BIGDADDY_ALLOWED_ORIGINS\` secret is verified; the browser calls the shared Edge API directly in production.
-- The client currently has project URLs and fallback publishable keys in source. Track migration to validated Vite environment variables separately; never place service-role keys in browser variables.
-- This document records routing as inspected on the date above; re-check deployed function inventories and Render service configuration before any deployment change.
+The migration in this directory is source-controlled and covered by disposable PostgreSQL CI. It is **not applied to the live project by CI**.
