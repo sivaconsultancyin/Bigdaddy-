@@ -85,6 +85,15 @@ async function runTestSuite() {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'CRASHED', crashMultiplier: 1.27 }), null);
   });
 
+  test('Shared and isolated Edge APIs never emit wildcard CORS', () => {
+    const sharedApi = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const isolatedApi = readFileSync('supabase/functions/aviator-api/index.ts', 'utf8');
+    assert.ok(sharedApi.includes('https://bigdaddy-frontend.onrender.com'));
+    assert.ok(isolatedApi.includes('https://bigdaddy-frontend.onrender.com'));
+    assert.ok(!sharedApi.includes('headers["Access-Control-Allow-Origin"] = "*"'));
+    assert.ok(!isolatedApi.includes('headers["Access-Control-Allow-Origin"] = "*"'));
+  });
+
   test('Production API routing preserves the shared and isolated Supabase project boundary', () => {
     const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
     const sharedConfig = readFileSync('supabase/config.toml', 'utf8');
