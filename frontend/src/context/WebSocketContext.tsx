@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { useAuth } from './AuthContext';
 import { ApiClient } from '../api/client';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
-import { readRunningRealtimeMultiplier } from '../../../shared/src/aviatorRealtime';
+import { isNewerRealtimeEvent, readRealtimeEventCursor, readRunningRealtimeMultiplier, type RealtimeEventCursor } from '../../../shared/src/aviatorRealtime';
 
 const SUPABASE_REALTIME_URL = 'https://nzvpuoeibqrpcltrszvr.supabase.co';
 const SUPABASE_REALTIME_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_3StQxumtXcMHvM9i3bTldw_e1toL-FR';
@@ -54,6 +54,12 @@ interface WebSocketContextType {
   lastSuccessfulRoundAt: number | null;
   lastRoundError: string | null;
   isSimulatedFallback: boolean;
+  isRealtimeConnected: boolean;
+  lastRealtimeEventAt: number | null;
+  realtimeEventLagMs: number | null;
+  realtimeEventCount: number;
+  pollingFallbackCount: number;
+  realtimeReconnectCount: number;
   multiplier: number;
   roundState: {
     id?: string;
@@ -97,6 +103,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastSuccessfulRoundAt, setLastSuccessfulRoundAt] = useState<number | null>(null);
   const [lastRoundError, setLastRoundError] = useState<string | null>(null);
   const [isSimulatedFallback, setIsSimulatedFallback] = useState(false);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [lastRealtimeEventAt, setLastRealtimeEventAt] = useState<number | null>(null);
+  const [realtimeEventLagMs, setRealtimeEventLagMs] = useState<number | null>(null);
+  const [realtimeEventCount, setRealtimeEventCount] = useState(0);
+  const [pollingFallbackCount, setPollingFallbackCount] = useState(0);
+  const [realtimeReconnectCount, setRealtimeReconnectCount] = useState(0);
+  const lastRealtimeEventCursorRef = useRef<RealtimeEventCursor | null>(null);
+  const lastRealtimeEventAtRef = useRef<number | null>(null);
+  const lastFallbackCountAtRef = useRef(0);
+  const hasRealtimeSubscribedRef = useRef(false);
   const [multiplier, setMultiplier] = useState(1.0);
   const [authoritativeMultiplier, setAuthoritativeMultiplier] = useState(1.0);
   const displayedMultiplierRef = useRef(1.0);
@@ -245,6 +261,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const scheduleNextPoll = (pollStartedAt: number) => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
+      const now = Date.now();
+      const lastEventAt = lastRealtimeEventAtRef.current;
+      const realtimeStale = !isRealtimeConnectedRef.current || lastEventAt === null || now - lastEventAt > 1000;
+      if (running && realtimeStale && now - lastFallbackCountAtRef.current >= 1000) {
+        lastFallbackCountAtRef.current = now;
+        setPollingFallbackCount((count) => count + 1);
+      }
       // Realtime is a fast path, not a substitute for polling. Poll every second
       // outside RUNNING so WAITING -> RUNNING is detected even if a broadcast is lost.
       // Keep the 200ms authoritative polling cadence while RUNNING.
@@ -597,6 +620,17 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // Apply server-authoritative multiplier broadcasts immediately. The
         // authenticated state endpoint remains the fallback for missed events
         // and the source for user-specific wallet/bet data.
+        const eventCursor = readRealtimeEventCursor(payload);
+        if (eventCursor && !isNewerRealtimeEvent(payload, lastRealtimeEventCursorRef.current)) return;
+        if (eventCursor) lastRealtimeEventCursorRef.current = eventCursor;
+        const receivedAt = Date.now();
+        lastRealtimeEventAtRef.current = receivedAt;
+        setLastRealtimeEventAt(receivedAt);
+        setRealtimeEventCount((count) => count + 1);
+        setRealtimeEventLagMs(eventCursor?.serverTime !== null && eventCursor?.serverTime !== undefined
+          ? Math.max(0, receivedAt - eventCursor.serverTime)
+          : null);
+
         const eventRoundId = typeof payload.id === 'string' ? payload.id : null;
         const eventRoundNumber = Number(payload.roundNumber);
         const eventStatus = typeof payload.status === 'string' ? payload.status : null;
@@ -609,7 +643,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           if (!Number.isFinite(eventRoundNumber) || eventRoundNumber >= currentRoundNumber) {
             setRoundState((current) => {
               const currentNumber = Number(current.roundNumber ?? 0);
+              const statusRank: Record<'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED', number> = {
+                WAITING: 0, RUNNING: 1, CRASHED: 2, SETTLED: 3,
+              };
+              const incomingStatus = eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED';
               if (Number.isFinite(eventRoundNumber) && eventRoundNumber < currentNumber) return current;
+              if (current.id === eventRoundId && statusRank[incomingStatus] < statusRank[current.status]) return current;
               return {
                 id: eventRoundId,
                 roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : current.roundNumber,
@@ -649,8 +688,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       })
       .subscribe((status) => {
         if (stopped || disposedRef.current) return;
-        isRealtimeConnectedRef.current = status === 'SUBSCRIBED';
-        if (status === 'SUBSCRIBED') {
+        const connected = status === 'SUBSCRIBED';
+        if (connected && hasRealtimeSubscribedRef.current && !isRealtimeConnectedRef.current) {
+          setRealtimeReconnectCount((count) => count + 1);
+        }
+        if (connected) hasRealtimeSubscribedRef.current = true;
+        isRealtimeConnectedRef.current = connected;
+        setIsRealtimeConnected(connected);
+        if (connected) {
           if (simIntervalRef.current !== null) {
             window.clearTimeout(simIntervalRef.current);
             simIntervalRef.current = null;
@@ -740,6 +785,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         lastSuccessfulRoundAt,
         lastRoundError,
         isSimulatedFallback,
+        isRealtimeConnected,
+        lastRealtimeEventAt,
+        realtimeEventLagMs,
+        realtimeEventCount,
+        pollingFallbackCount,
+        realtimeReconnectCount,
         multiplier,
         roundState,
         recentHistory,
