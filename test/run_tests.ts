@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readFileSync } from 'node:fs';
 import { db } from '../backend/src/db/storage';
@@ -27,6 +28,23 @@ async function runTestSuite() {
   console.log('\n======================================================');
   console.log('🎰 BIGDADDY CASINO — AUTOMATED TEST SUITE');
   console.log('======================================================\n');
+
+  test('In-memory StorageEngine fails closed in production mode', () => {
+    const script = "import('./backend/src/db/storage.ts').then(() => process.exit(2)).catch((error) => { if (error?.message === 'IN_MEMORY_STORAGE_DISABLED_IN_PRODUCTION') process.exit(0); console.error(error); process.exit(1); })";
+    const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+    assert.strictEqual(result.status, 0, `Production storage guard failed. stdout=${result.stdout} stderr=${result.stderr}`);
+  });
+
+  test('Production auth modules do not eagerly import seeded in-memory storage', () => {
+    const authSource = readFileSync('backend/src/services/auth.service.ts', 'utf8');
+    const middlewareSource = readFileSync('backend/src/middleware/auth.middleware.ts', 'utf8');
+    assert.ok(!authSource.includes("from '../db/storage'"));
+    assert.ok(!middlewareSource.includes("import { db } from '../db/storage'"));
+    assert.ok(middlewareSource.includes("await import('../db/storage')"));
+  });
 
   test('API health inventory covers every registered backend API route', () => {
     const routeFiles = [
