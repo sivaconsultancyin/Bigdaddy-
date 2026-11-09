@@ -406,3 +406,41 @@ jobs:
 
     - name: Type-check Supabase Edge API
       run: deno check --config supabase/functions/api/deno.json supabase/functions/api/index.ts
+
+  validate-aviator-isolated-security:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install PostgreSQL client
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+
+    - name: Create isolated Aviator schema and event-trigger fixture
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-isolated-security-fixture.sql
+
+    - name: Apply isolated Aviator security and index migration
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261025240000_aviator_security_and_fk_indexes.sql
+
+    - name: Verify function grants, event-trigger behavior, and indexes
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-isolated-security-verify.sql
