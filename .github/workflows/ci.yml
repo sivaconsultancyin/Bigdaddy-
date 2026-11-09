@@ -605,6 +605,7 @@ jobs:
       run: |
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063629_aviator_engine_worker_lease.sql
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063705_aviator_multiplier_realtime_broadcast.sql
+        psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110120000_aviator_realtime_event_sequence.sql
 
     - name: Verify isolated Aviator grants, indexes, and event trigger
       run: psql -v ON_ERROR_STOP=1 -f scripts/db/isolated-aviator-security-verify.sql
@@ -689,14 +690,21 @@ jobs:
             RAISE EXCEPTION 'Reclaimed lease could not be released by its owner';
           END IF;
           PERFORM aviator.tick_crash_engine_with_broadcast();
+          PERFORM aviator.tick_crash_engine_with_broadcast();
           IF NOT EXISTS (
             SELECT 1 FROM realtime.broadcast_events
             WHERE event_name = 'round_state_changed'
               AND topic = 'aviator:rounds'
               AND payload->>'multiplier' = '1.23'
               AND payload->>'id' = '00000000-0000-4000-8000-000000000001'
+              AND payload ? 'serverTime'
+              AND (payload->>'serverTime')::timestamptz IS NOT NULL
+              AND (payload->>'tickSequence')::bigint = 2
           ) THEN
-            RAISE EXCEPTION 'Authoritative multiplier was not broadcast';
+            RAISE EXCEPTION 'Authoritative multiplier sequence/server timestamp was not broadcast';
+          END IF;
+          IF (SELECT multiplier_tick_seq FROM aviator.game_rounds WHERE id='00000000-0000-4000-8000-000000000001') <> 2 THEN
+            RAISE EXCEPTION 'Per-round multiplier sequence did not advance exactly twice';
           END IF;
         END
         $verify$;
