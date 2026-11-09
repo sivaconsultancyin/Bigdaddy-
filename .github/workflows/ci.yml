@@ -71,7 +71,7 @@ jobs:
     - name: Verify schema access boundaries
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $verify$$
+        DO $verify$
         DECLARE
           schema_name text;
         BEGIN
@@ -147,7 +147,7 @@ jobs:
     - name: Verify exact replay and conflicting-key rejection
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $verify$$
+        DO $verify$
         DECLARE
           first_id uuid;
           replay_id uuid;
@@ -197,7 +197,7 @@ jobs:
     - name: Verify wallet API boundary grants and execution
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $verify$$
+        DO $verify$
         BEGIN
           IF has_function_privilege('anon', 'wallet.wallet_transfer_atomic(text,public.transaction_type_enum,bigint,uuid,uuid,jsonb)', 'EXECUTE') THEN
             RAISE EXCEPTION 'anon unexpectedly has wallet API execute privilege';
@@ -220,7 +220,7 @@ jobs:
         );
         RESET ROLE;
 
-        DO $verify$$
+        DO $verify$
         BEGIN
           IF (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 850
              OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 150 THEN
@@ -272,7 +272,7 @@ jobs:
     - name: Verify tables, compatibility views, and function boundaries
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $verify$$
+        DO $verify$
         DECLARE
           name text;
         BEGIN
@@ -326,7 +326,7 @@ jobs:
     - name: Verify per-game tables, foreign keys, and preserved history
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
-        DO $verify$$
+        DO $verify$
         DECLARE
           schema_name text;
           table_name text;
@@ -527,5 +527,5 @@ jobs:
             RAISE EXCEPTION 'Authoritative multiplier was not broadcast';
           END IF;
         END
-        $function$;
+        $verify$;
         SQL
