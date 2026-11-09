@@ -194,6 +194,66 @@ jobs:
         $verify$;
         SQL
 
+    - name: Verify concurrent wallet transfers serialize and replay exactly once
+      shell: bash
+      run: |
+        set -euo pipefail
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        UPDATE public.wallets SET balance=1000 WHERE id='00000000-0000-0000-0000-000000000001';
+        UPDATE public.wallets SET balance=0 WHERE id='00000000-0000-0000-0000-000000000002';
+        SQL
+
+        psql -v ON_ERROR_STOP=1 -At -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-key-0001','BET_ESCROW_LOCK',100,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-replay\\"}'::jsonb)" > /tmp/wallet-concurrent-a.out &
+        first_pid=$!
+        psql -v ON_ERROR_STOP=1 -At -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-key-0001','BET_ESCROW_LOCK',100,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-replay\\"}'::jsonb)" > /tmp/wallet-concurrent-b.out &
+        second_pid=$!
+        wait "$first_pid"
+        wait "$second_pid"
+        test "$(cat /tmp/wallet-concurrent-a.out)" = "$(cat /tmp/wallet-concurrent-b.out)"
+
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $verify$
+        DECLARE
+          tx_id uuid;
+        BEGIN
+          SELECT id INTO tx_id FROM public.wallet_transactions
+          WHERE idempotency_key='wallet-concurrent-key-0001';
+          IF tx_id IS NULL
+             OR (SELECT count(*) FROM public.wallet_transactions WHERE idempotency_key='wallet-concurrent-key-0001') <> 1
+             OR (SELECT count(*) FROM public.ledger_entries WHERE transaction_id=tx_id) <> 2
+             OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 900
+             OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 100 THEN
+            RAISE EXCEPTION 'Concurrent exact replay did not produce one transfer and two ledger entries';
+          END IF;
+        END
+        $verify$;
+        SQL
+
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        UPDATE public.wallets SET balance=900 WHERE id='00000000-0000-0000-0000-000000000001';
+        UPDATE public.wallets SET balance=100 WHERE id='00000000-0000-0000-0000-000000000002';
+        SQL
+
+        psql -v ON_ERROR_STOP=1 -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-distinct-a','BET_ESCROW_LOCK',400,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-a\\"}'::jsonb)" &
+        first_pid=$!
+        psql -v ON_ERROR_STOP=1 -c "SELECT public.wallet_transfer_atomic('wallet-concurrent-distinct-b','BET_ESCROW_LOCK',500,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','{\\"purpose\\":\\"concurrent-b\\"}'::jsonb)" &
+        second_pid=$!
+        wait "$first_pid"
+        wait "$second_pid"
+
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        DO $verify$
+        BEGIN
+          IF (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 0
+             OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 1000
+             OR (SELECT count(*) FROM public.wallet_transactions WHERE idempotency_key IN ('wallet-concurrent-distinct-a','wallet-concurrent-distinct-b')) <> 2
+             OR (SELECT count(*) FROM public.ledger_entries le JOIN public.wallet_transactions wt ON wt.id=le.transaction_id WHERE wt.idempotency_key IN ('wallet-concurrent-distinct-a','wallet-concurrent-distinct-b')) <> 4 THEN
+            RAISE EXCEPTION 'Concurrent distinct transfers lost an update or violated double-entry accounting';
+          END IF;
+        END
+        $verify$;
+        SQL
+
     - name: Verify wallet API boundary grants and execution
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
