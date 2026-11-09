@@ -5,9 +5,9 @@ Initial read-only snapshot taken 2026-11-09 and rechecked against both live ledg
 ## Exact comparison
 
 - Applied ledger entries: **65**
-- Shared-project SQL files in `supabase/migrations/`: **56**
+- Shared-project SQL files in `supabase/migrations/`: **57**
 - Isolated-Aviator SQL files mixed into the same directory: **11**
-- Total SQL files physically in `supabase/migrations/`: **67**
+- Total SQL files physically in `supabase/migrations/`: **68**
 - Exact version + name matches: **21**
 - Applied ledger entries with no exact file match: **44**
 - Shared-project SQL files not represented by an exact applied version + name: **35**
@@ -102,6 +102,7 @@ A name-only comparison is insufficient. A file with the same migration name but 
 | `20261023170000` | `20261023170000_roulette_hash_integer_overflow.sql` |
 | `20261023190000` | `20261023190000_aviator_realtime_broadcast.sql` |
 | `20261025110000` | `20261025110000_shared_aviator_wallet_operations.sql` |
+| `20261110120000` | `20261110120000_aviator_realtime_event_sequence.sql` |
 | `20261109090000` | `20261109090000_aviator_realtime_and_recovery_hardening.sql` |
 
 ## Duplicate version prefixes
@@ -132,6 +133,6 @@ This is an audit artifact only. No SQL was executed against the shared project, 
 
 ## Cross-project migration files discovered on 2026-11-10
 
-The repository currently contains 67 SQL files in `supabase/migrations/`: 56 shared-project candidates and 11 isolated-Aviator project migrations (the `aviator_isolated_schema`, `aviator_round_lifecycle`, bet-intent/outbox, worker, server-fair-engine, and payout-settlement migrations). One additional `shared_aviator_wallet_operations` file is a shared-project candidate with a version prefix that does not match the applied shared ledger. The 11 isolated files correspond by name to seven applied isolated-project ledger entries with different version prefixes, plus four files not present in the isolated project's applied ledger. Their SQL equivalence and deployment history are not yet proven.
+The repository currently contains 68 SQL files in `supabase/migrations/`: 57 shared-project candidates and 11 isolated-Aviator project migrations (the `aviator_isolated_schema`, `aviator_round_lifecycle`, bet-intent/outbox, worker, server-fair-engine, and payout-settlement migrations). One additional `shared_aviator_wallet_operations` file is a shared-project candidate with a version prefix that does not match the applied shared ledger. The 11 isolated files correspond by name to seven applied isolated-project ledger entries with different version prefixes, plus four files not present in the isolated project's applied ledger. Their SQL equivalence and deployment history are not yet proven.
 
 **Safety:** the shared and isolated project migration sources are currently mixed in one directory. Do not run a blanket `supabase db push` against either project until the deployment workflow and both ledgers are reconciled. The new `supabase/aviator-migrations/` directory contains the isolated security migration but does not yet reconstruct the seven historical isolated migration sources.
