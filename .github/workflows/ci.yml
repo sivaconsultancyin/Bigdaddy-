@@ -646,12 +646,14 @@ jobs:
           UPDATE aviator.engine_worker_lease
           SET lease_expires_at = clock_timestamp() - interval '1 second'
           WHERE lease_key='aviator';
-          IF aviator.heartbeat_crash_engine_lease(next_owner, 45)
-             OR aviator.release_crash_engine_lease(next_owner) THEN
-            RAISE EXCEPTION 'Expired worker retained lease control';
+          IF aviator.heartbeat_crash_engine_lease(next_owner, 45) THEN
+            RAISE EXCEPTION 'Expired worker heartbeat unexpectedly succeeded';
           END IF;
           IF NOT aviator.claim_crash_engine_lease(duplicate_owner, 45) THEN
             RAISE EXCEPTION 'New worker could not claim an expired lease';
+          END IF;
+          IF aviator.release_crash_engine_lease(next_owner) THEN
+            RAISE EXCEPTION 'Expired previous worker released the new owner lease';
           END IF;
           IF aviator.claim_crash_engine_lease(first_owner, 45) THEN
             RAISE EXCEPTION 'Two workers acquired the lease after expiry';
