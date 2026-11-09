@@ -2,6 +2,7 @@ import assert from 'assert';
 import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readFileSync } from 'node:fs';
+import { applyExplicitCorsOrigin } from '../shared/src/cors';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
@@ -83,6 +84,17 @@ async function runTestSuite() {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', multiplier: 1.27, crashMultiplier: 25 }), 1.27);
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'CRASHED', crashMultiplier: 1.27 }), null);
+  });
+
+  test('Explicit CORS policy allows trusted origins and rejects unknown origins', () => {
+    const allowed = new Set(['https://bigdaddy-frontend.onrender.com', 'capacitor://localhost']);
+    const base = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST' };
+    const trusted = applyExplicitCorsOrigin(base, 'https://bigdaddy-frontend.onrender.com', allowed);
+    assert.strictEqual(trusted['Access-Control-Allow-Origin'], 'https://bigdaddy-frontend.onrender.com');
+    assert.strictEqual(trusted['Vary'], 'Origin');
+    const untrusted = applyExplicitCorsOrigin(base, 'https://evil.example', allowed);
+    assert.strictEqual(untrusted['Access-Control-Allow-Origin'], undefined);
+    assert.strictEqual(untrusted['Vary'], undefined);
   });
 
   test('Shared and isolated Edge APIs never emit wildcard CORS', () => {
