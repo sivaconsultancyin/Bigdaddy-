@@ -34,7 +34,10 @@ const upstream = createServer((req, res) => {
     res.writeHead(200).end('ok');
     return;
   }
-  if (req.url === '/slow') {\n    setTimeout(() => res.writeHead(200).end('slow-ok'), 500);\n    return;\n  }\n  if (req.url === '/stream') {
+  if (req.url === '/slow') {
+    setTimeout(() => res.writeHead(200).end('slow-ok'), 500);
+    return;
+  }\n  if (req.url === '/stream') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.write('chunk-one');
     setTimeout(() => res.end('chunk-two'), 100);
