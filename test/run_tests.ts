@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readdirSync, readFileSync } from 'node:fs';
 import { applyExplicitCorsOrigin } from '../shared/src/cors';
+import { isNewerRealtimeEvent, readRealtimeEventCursor } from '../shared/src/aviatorRealtime';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
@@ -90,15 +91,16 @@ async function runTestSuite() {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 68);
     assert.deepStrictEqual(
       [...(manifest.sharedProjectFiles as string[]), ...(manifest.isolatedProjectFiles as string[])].sort(),
       actualFiles,
     );
     assert.strictEqual(manifest.counts.sharedAppliedLedger, 65);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 56);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 57);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
-    assert.strictEqual(manifest.counts.sharedFileOnly, 35);
+    assert.strictEqual(manifest.counts.sharedFileOnly, 36);
     assert.strictEqual(manifest.counts.isolatedAppliedLedger, 7);
     assert.strictEqual(manifest.counts.isolatedRepositoryFiles, 11);
     assert.strictEqual(manifest.counts.isolatedExactVersionNameMatches, 0);
@@ -107,6 +109,26 @@ async function runTestSuite() {
     const versions: string[] = (manifest.repositoryFiles as string[]).map((name: string) => name.slice(0, 14));
     const duplicates = [...new Set(versions.filter((version: string, index: number) => versions.indexOf(version) !== index))].sort();
     assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
+  });
+
+  test('Realtime event cursor parses server time and rejects duplicate or out-of-order ticks', () => {
+    const first = {
+      id: 'round-1',
+      tickSequence: 4,
+      serverTime: '2026-11-10T10:00:00.000Z',
+    };
+    const cursor = readRealtimeEventCursor(first);
+    assert.deepStrictEqual(cursor, {
+      roundId: 'round-1',
+      tickSequence: 4,
+      serverTime: Date.parse('2026-11-10T10:00:00.000Z'),
+    });
+    assert.ok(isNewerRealtimeEvent(first, null));
+    assert.ok(!isNewerRealtimeEvent({ ...first, tickSequence: 4 }, cursor));
+    assert.ok(!isNewerRealtimeEvent({ ...first, tickSequence: 3 }, cursor));
+    assert.ok(isNewerRealtimeEvent({ ...first, tickSequence: 5 }, cursor));
+    assert.ok(isNewerRealtimeEvent({ ...first, id: 'round-2', tickSequence: 1 }, cursor));
+    assert.strictEqual(readRealtimeEventCursor({ ...first, serverTime: 'invalid' })?.serverTime, null);
   });
 
   test('Explicit CORS policy allows trusted origins and rejects unknown origins', () => {

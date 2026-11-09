@@ -3,10 +3,10 @@
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
     "sharedAppliedLedger": 65,
-    "sharedRepositoryFiles": 56,
+    "sharedRepositoryFiles": 57,
     "sharedExactVersionNameMatches": 21,
     "sharedAppliedOnly": 44,
-    "sharedFileOnly": 35,
+    "sharedFileOnly": 36,
     "sharedDuplicateVersionPrefixes": 2,
     "isolatedAppliedLedger": 7,
     "isolatedRepositoryFiles": 11,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 7,
     "isolatedFileOnly": 4,
     "isolatedNewMigrationFiles": 1,
-    "totalSupabaseMigrationFiles": 67
+    "totalSupabaseMigrationFiles": 68
   },
   "appliedLedger": [
     {
@@ -630,7 +630,8 @@
     "20261107192153_aviator_scheduler_guard_security_performance.sql",
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
-    "20261109090000_aviator_realtime_and_recovery_hardening.sql"
+    "20261109090000_aviator_realtime_and_recovery_hardening.sql",
+    "20261110120000_aviator_realtime_event_sequence.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -667,7 +668,8 @@
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025110000_shared_aviator_wallet_operations.sql",
-    "20261109090000_aviator_realtime_and_recovery_hardening.sql"
+    "20261109090000_aviator_realtime_and_recovery_hardening.sql",
+    "20261110120000_aviator_realtime_event_sequence.sql"
   ],
   "duplicateVersionPrefixes": [
     "20261021120000",
@@ -730,7 +732,8 @@
     "20261107192153_aviator_scheduler_guard_security_performance.sql",
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
-    "20261109090000_aviator_realtime_and_recovery_hardening.sql"
+    "20261109090000_aviator_realtime_and_recovery_hardening.sql",
+    "20261110120000_aviator_realtime_event_sequence.sql"
   ],
   "isolatedProjectFiles": [
     "20261025090000_aviator_isolated_schema.sql",
@@ -1065,7 +1068,8 @@
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025110000_shared_aviator_wallet_operations.sql",
-    "20261109090000_aviator_realtime_and_recovery_hardening.sql"
+    "20261109090000_aviator_realtime_and_recovery_hardening.sql",
+    "20261110120000_aviator_realtime_event_sequence.sql"
   ],
   "isolatedAppliedLedger": [
     {
