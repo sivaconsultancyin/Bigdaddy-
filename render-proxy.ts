@@ -78,8 +78,6 @@ app.get(['/ready', '/api/ready'], async (_req, res) => {
     });
   } finally {
     clearTimeout(timeout);
-    res.off('close', abortOnClientDisconnect);
-    activeProxyRequests = Math.max(0, activeProxyRequests - 1);
   }
 });
 
@@ -182,6 +180,8 @@ app.all('*', async (req: Request, res: Response) => {
     });
   } finally {
     clearTimeout(timeout);
+    res.off('close', abortOnClientDisconnect);
+    activeProxyRequests = Math.max(0, activeProxyRequests - 1);
   }
 });
 
