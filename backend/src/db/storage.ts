@@ -40,6 +40,11 @@ export class StorageEngine {
   private isInitialized = false;
 
   constructor() {
+    // This process-local store is only a disposable development/test fixture.
+    // Production auth, wallet and game paths must use persistent PostgreSQL RPCs.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('IN_MEMORY_STORAGE_DISABLED_IN_PRODUCTION');
+    }
     this.initializeGenesisState();
   }
 

@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/auth.service';
-import { db } from '../db/storage';
 import { config } from '../config';
 import { UserRole } from '../../../shared/src/types';
 
@@ -35,6 +34,9 @@ export async function authenticateJWT(req: AuthenticatedRequest, res: Response, 
         parentId: account.user.parentId,
       };
     } else {
+      // Load the in-memory fixture only in non-production mode. A static import
+      // would instantiate and seed demo users even when production auth uses SQL.
+      const { db } = await import('../db/storage');
       const user = db.getUserById(payload.id);
       if (!user) return res.status(401).json({ error: 'User does not exist' });
       req.user = {

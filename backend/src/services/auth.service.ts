@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { getAuthDatabaseClient } from '../db/postgres';
-import { db } from '../db/storage';
 import { UserRole, User, Wallet, WalletType } from '../../../shared/src/types';
 
 export interface PersistentAccount {
