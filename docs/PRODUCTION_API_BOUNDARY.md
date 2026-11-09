@@ -28,6 +28,16 @@ Snapshot verified on 2026-11-10 using the repository source and read-only Supaba
 
 These are intentionally separate Supabase projects, not a duplicate deployment of one function. Do not delete \`supabase/functions/aviator-api\`, remove its function config, or run a blanket deployment against the wrong project. Any deployment of isolated Aviator functions must explicitly target the isolated project ref.
 
+## Aviator implementation differences that still need parity work
+
+The shared API and isolated Aviator API are both active for different project responsibilities. Their internal implementations are not identical:
+
+- Shared API bet/cashout routes call `place_crash_bet_authenticated_atomic` and `cashout_crash_bet_authenticated_atomic`.
+- Isolated Aviator API calls `create_bet_intent` and `cashout_bet_intent` in its own project after validating the BigDaddy token against the shared project's current user/role records.
+- The frontend sends the four Aviator endpoints to the isolated project; the shared API still contains Aviator routes for compatibility/other clients.
+
+Do not assume these paths are behaviorally equivalent. Issue #126 remains open for request/response, authorization, idempotency, and settlement contract tests across both implementations.
+
 ## Other server entry points
 
 - \`package.json\` starts \`render-proxy.ts\`.
@@ -39,5 +49,5 @@ These are intentionally separate Supabase projects, not a duplicate deployment o
 
 - Do not consolidate the two Supabase projects without a reviewed migration, wallet-operation, worker, and latency plan.
 - Do not change Edge API CORS behavior until the live \`BIGDADDY_ALLOWED_ORIGINS\` secret is verified; the browser calls the shared Edge API directly in production.
-- The client currently has project URLs and fallback publishable keys in source. Track migration to validated Vite environment variables separately; never place service-role keys in browser variables.
+- The client still contains project URL defaults and fallback publishable keys in source. Move these to validated Vite environment variables after the Render workspace environment is inspected; never place service-role keys in browser variables.
 - This document records routing as inspected on the date above; re-check deployed function inventories and Render service configuration before any deployment change.
