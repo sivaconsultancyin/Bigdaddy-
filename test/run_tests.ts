@@ -61,6 +61,13 @@ async function runTestSuite() {
   });
 
 
+  test('Supabase config keeps the general API as the only Aviator Edge API entry point', () => {
+    const configSource = readFileSync('supabase/config.toml', 'utf8');
+    assert.ok(configSource.includes('[functions.api]'));
+    assert.ok(!configSource.includes('[functions.aviator-api]'));
+    assert.ok(!readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8').includes('functions/v1/aviator-api'));
+  });
+
   test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', multiplier: 1.27, crashMultiplier: 25 }), 1.27);
