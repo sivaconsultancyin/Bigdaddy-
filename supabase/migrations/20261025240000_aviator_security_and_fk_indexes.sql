@@ -5,6 +5,8 @@
 -- Event-trigger functions are invoked by PostgreSQL's event-trigger mechanism;
 -- browser roles must not be able to call this SECURITY DEFINER function via PostgREST.
 -- Keep the explicit service_role grant for administrative compatibility.
+-- PostgreSQL checks function EXECUTE privilege when the event trigger is created;
+-- firing the already-registered event trigger does not require browser-role EXECUTE.
 REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;
 
 -- Cover the two round_id foreign keys identified by Supabase's advisor.
