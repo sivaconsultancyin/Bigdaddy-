@@ -8,6 +8,12 @@ const EDGE_API_BASE = (
   process.env.SUPABASE_API_BASE_URL ||
   'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api'
 ).replace(/\/+$/, '');
+const configuredConcurrency = Number(process.env.PROXY_MAX_CONCURRENT_REQUESTS ?? 100);
+const MAX_CONCURRENT_PROXY_REQUESTS =
+  Number.isInteger(configuredConcurrency) && configuredConcurrency > 0 && configuredConcurrency <= 1000
+    ? configuredConcurrency
+    : 100;
+let activeProxyRequests = 0;
 
 const allowedOrigins = new Set(
   (process.env.CORS_ORIGINS ||
@@ -104,7 +110,18 @@ app.all('*', async (req: Request, res: Response) => {
   const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   if (publishableKey && !headers.has('apikey')) headers.set('apikey', publishableKey);
 
+  if (activeProxyRequests >= MAX_CONCURRENT_PROXY_REQUESTS) {
+    res.setHeader('Retry-After', '1');
+    res.status(503).json({ error: 'PROXY_OVERLOADED' });
+    return;
+  }
+  activeProxyRequests += 1;
+
   const controller = new AbortController();
+  const abortOnClientDisconnect = () => {
+    if (!res.writableEnded) controller.abort();
+  };
+  res.on('close', abortOnClientDisconnect);
   const timeout = setTimeout(() => controller.abort(), 40_000);
   try {
     const upstream = await fetch(`${EDGE_API_BASE}${routeAndQuery}`, {
@@ -163,6 +180,8 @@ app.all('*', async (req: Request, res: Response) => {
     });
   } finally {
     clearTimeout(timeout);
+    res.off('close', abortOnClientDisconnect);
+    activeProxyRequests = Math.max(0, activeProxyRequests - 1);
   }
 });
 
