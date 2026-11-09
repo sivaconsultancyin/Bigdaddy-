@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
@@ -65,7 +65,7 @@ async function runTestSuite() {
     const configSource = readFileSync('supabase/config.toml', 'utf8');
     assert.ok(configSource.includes('[functions.api]'));
     assert.ok(!configSource.includes('[functions.aviator-api]'));
-    assert.ok(!readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8').includes('functions/v1/aviator-api'));
+    assert.strictEqual(existsSync('supabase/functions/aviator-api/index.ts'), false);
   });
 
   test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
