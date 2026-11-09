@@ -114,28 +114,14 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 - Database clients use bounded connection pools, statement/lock timeouts and separate auth/wallet/engine pools in the legacy server.
 - Frontend realtime multiplier parsing and round-ID animation reset are present.
 
-## Remediation status (rechecked 2026-11-10)
-
-### Merged and CI-verified
-- **BD-AUD-001 / BD-AUD-002 / BD-AUD-004:** PR #131 blocks the in-memory StorageEngine in production and removes eager production imports of seeded storage. Issue #125 closed.
-- **BD-AUD-010 / BD-AUD-011 / BD-AUD-012 / BD-AUD-013:** PRs #133, #136, #137 and #138 add upstream readiness, streaming/response caps, bounded proxy concurrency, explicit Edge CORS origins, and tests. Issue #128 closed.
-- **BD-AUD-003 / BD-AUD-007:** PR #134 documents the verified shared/isolated project route map and adds frontend route regression checks. Issue #126 remains open because the two API implementations still need full contract parity tests.
-- **BD-AUD-006 (partial):** PR #135 adds disposable PostgreSQL concurrent wallet-transfer/idempotency tests. PR #139 adds worker lease expiry/fault-path tests. Issue #127 remains open for concurrent Aviator cashout/settlement/refund and rollback-injection coverage.
-
-### In progress / not applied to production
-- **Isolated Aviator DB grants/indexes:** PR #140 adds a separate isolated-project migration and disposable PostgreSQL checks. No live DDL has been applied.
-- **Migration ledger drift:** Issue #120 remains open. The shared project still has 65 applied versions vs 55 repository SQL files (21 exact matches, 44 applied-only names, 34 file-only names, 2 duplicate version prefixes). No migration push or repair has been run.
-- **Production Phase 1:** Issue #123 remains open for clean bootstrap/upgrade testing, financial reconciliation queries, and additional transaction rollback coverage.
-- **Realtime freshness observability and frontend Vite environment migration:** remain pending. The Render workspace must be confirmed before inspecting or changing deployed environment variables.
-
 ## Recommended remediation order
 
-1. Complete the isolated-project grant/index migration after its CI review and explicit production approval.
-2. Add full auth/validation/idempotency/response contract parity tests for the shared and isolated Aviator APIs (BD-AUD-003/007).
-3. Reconcile all applied/pending migration effects and add fresh-bootstrap plus current-ledger upgrade tests before any production migration push (BD-AUD-005).
-4. Complete concurrent Aviator bet/cashout/settlement/refund and rollback-injection tests, then run staging end-to-end flows (BD-AUD-006).
-5. Add Realtime freshness/sequence/lag observability and mobile end-to-end testing (BD-AUD-008/009).
-6. Migrate hard-coded frontend project URLs and publishable-key fallbacks to validated Vite environment variables after Render workspace confirmation (BD-AUD-010–013).
+1. Contain/disable legacy in-memory financial routes and ensure seeded demo accounts cannot be used in production (BD-AUD-001/002/004).
+2. Confirm the actual Render + Supabase production route map; consolidate duplicate API implementations (BD-AUD-003/007).
+3. Freeze production migration pushes until exact ledger reconciliation and restore-tested plan is complete (BD-AUD-005).
+4. Add PostgreSQL integration and staging end-to-end tests for financial invariants and concurrency (BD-AUD-006).
+5. Add worker failure-path fault injection and realtime freshness observability (BD-AUD-008/009).
+6. Improve deployment readiness, CORS, proxy streaming/limits and environment-based Realtime config (BD-AUD-010–013).
 
 ## Audit limitations / evidence still required
 
@@ -147,6 +133,5 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 ## Related repository work
 
-- PR #124 and the current migration reconciliation document describe the shared migration drift; issue #120 remains open.
-- PR #131, #133–#139 have merged with all six CI jobs passing on their final commits.
-- PR #140 is under CI review and targets only the isolated Aviator project; it has not been deployed.
+- PR #124 merged the migration ledger reconciliation documentation, but did not resolve the migration drift.
+- PR #123 was observed open at review time; its isolated Aviator DB grant/index migration must remain isolated to its intended project and receive independent SQL/security review before merge/deploy.
