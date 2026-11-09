@@ -15,13 +15,15 @@ function corsHeadersForOrigin(origin?: string | null): Record<string, string> {
   const nativeOrigins = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
   const allowed = new Set([...configured, ...nativeOrigins]);
   const headers: Record<string, string> = { ...corsHeaders };
-  // Never fall back to wildcard CORS. The Render proxy owns browser-facing
-  // CORS; direct browser access to this Edge Function must be explicitly allowed.
-  delete headers["Access-Control-Allow-Origin"];
-  delete headers["Vary"];
-  if (origin && allowed.has(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-    headers["Vary"] = "Origin";
+  if (configured.length > 0) {
+    delete headers["Access-Control-Allow-Origin"];
+    delete headers["Vary"];
+    if (origin && allowed.has(origin)) {
+      headers["Access-Control-Allow-Origin"] = origin;
+      headers["Vary"] = "Origin";
+    }
+  } else {
+    headers["Access-Control-Allow-Origin"] = "*";
   }
   headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
   headers["Access-Control-Allow-Headers"] = "authorization, x-client-info, apikey, content-type, idempotency-key";
