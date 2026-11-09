@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readFileSync } from 'node:fs';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
@@ -59,6 +60,21 @@ async function runTestSuite() {
     assert.deepStrictEqual(missing, [], 'Health inventory is missing registered backend routes');
   });
 
+
+  test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
+    assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
+    assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', multiplier: 1.27, crashMultiplier: 25 }), 1.27);
+    assert.strictEqual(readRunningRealtimeMultiplier({ status: 'CRASHED', crashMultiplier: 1.27 }), null);
+  });
+
+  test('Aviator public broadcast migration redacts crash target until terminal status', () => {
+    const migration = readFileSync('supabase/migrations/20261109090000_aviator_realtime_and_recovery_hardening.sql', 'utf8');
+    assert.ok(migration.replace(/\s+/g, ' ').includes("CASE WHEN new.status::text IN ('CRASHED', 'SETTLED')"));
+    assert.ok(migration.includes("jsonb_build_object('crashMultiplier', new.crash_multiplier)"));
+    assert.ok(migration.includes('aviator.recover_stale_waiting_rounds(120)'));
+    assert.ok(migration.includes('STALE_WAITING_REFUND_BLOCKED'));
+    assert.ok(migration.includes('STALE_WAITING_ROUND_REFUNDED'));
+  });
 
   test('Aviator polling keeps 200ms RUNNING cadence, 1s fallback, and no overlapping requests', () => {
     const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');

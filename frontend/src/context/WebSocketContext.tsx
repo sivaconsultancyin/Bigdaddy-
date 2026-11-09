@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { useAuth } from './AuthContext';
 import { ApiClient } from '../api/client';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
+import { readRunningRealtimeMultiplier } from '../../../shared/src/aviatorRealtime';
 
 const SUPABASE_REALTIME_URL = 'https://nzvpuoeibqrpcltrszvr.supabase.co';
 const SUPABASE_REALTIME_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_3StQxumtXcMHvM9i3bTldw_e1toL-FR';
@@ -594,8 +595,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const eventRoundId = typeof payload.id === 'string' ? payload.id : null;
         const eventRoundNumber = Number(payload.roundNumber);
         const eventStatus = typeof payload.status === 'string' ? payload.status : null;
-        const eventMultiplier = Number(payload.multiplier ?? payload.crashMultiplier);
-        const validMultiplier = Number.isFinite(eventMultiplier) && eventMultiplier >= 1;
+        const eventMultiplier = readRunningRealtimeMultiplier(payload);
+        const validMultiplier = eventMultiplier !== null;
         const validStatus = ['WAITING', 'RUNNING', 'CRASHED', 'SETTLED'].includes(eventStatus ?? '');
 
         if (eventRoundId && validStatus) {
@@ -609,7 +610,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : current.roundNumber,
                 status: eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED',
                 startTime: payload.startedAt ? new Date(String(payload.startedAt)).getTime() : current.startTime,
-                crashMultiplier: Number.isFinite(Number(payload.crashMultiplier)) ? Number(payload.crashMultiplier) : current.crashMultiplier,
+                // Public lifecycle events may include the crash target only after
+                // the round has ended. Never copy a hidden target into RUNNING UI state.
+                crashMultiplier: ['CRASHED', 'SETTLED'].includes(eventStatus ?? '') &&
+                  Number.isFinite(Number(payload.crashMultiplier))
+                  ? Number(payload.crashMultiplier)
+                  : current.crashMultiplier,
               };
             });
           }
