@@ -79,19 +79,24 @@ async function actorFrom(req: Request, db: SupabaseClient): Promise<{ actor?: Ac
   // Keep account and role reads separate here. The embedded PostgREST relationship
   // has caused AUTH_SERVICE_UNAVAILABLE on every authenticated route in production.
   // Both queries remain server-side and we still require exactly one current role.
-  const { data: user, error: userError } = await db.schema("platform").from("users")
-    .select("id,username,parent_id,is_active")
-    .eq("id", claims.id).maybeSingle();
+  // These reads are independent after JWT signature verification; run them in
+  // parallel to remove one full PostgREST round-trip from the live state hot path.
+  const [userResult, roleResult] = await Promise.all([
+    db.schema("platform").from("users")
+      .select("id,username,parent_id,is_active")
+      .eq("id", claims.id).maybeSingle(),
+    db.schema("platform").from("role_assignments")
+      .select("role")
+      .eq("user_id", claims.id)
+      .limit(2),
+  ]);
+  const { data: user, error: userError } = userResult;
+  const { data: roleRows, error: roleError } = roleResult;
   if (userError) {
     console.error("Auth actor user lookup failed:", userError.code ?? "unknown");
     return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
   }
   if (!user || !user.is_active) return { error: "USER_NOT_FOUND_OR_DISABLED", status: 401 };
-
-  const { data: roleRows, error: roleError } = await db.schema("platform").from("role_assignments")
-    .select("role")
-    .eq("user_id", user.id)
-    .limit(2);
   if (roleError) {
     console.error("Auth actor role lookup failed:", roleError.code ?? "unknown");
     return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
