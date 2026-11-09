@@ -95,8 +95,8 @@ async function runTestSuite() {
     assert.ok(apiClient.includes('return API_BASE'));
     assert.ok(sharedConfig.includes('[functions.api]'));
     assert.ok(sharedConfig.includes('[functions.aviator-api]'));
+    assert.ok(apiClient.includes('(state|history|bet|cashout)'), 'Frontend API client must route all four Aviator endpoint suffixes to the isolated API');
     for (const route of ['/games/aviator/state', '/games/aviator/history', '/games/aviator/bet', '/games/aviator/cashout']) {
-      assert.ok(apiClient.includes(route), `Frontend API client is missing ${route}`);
       assert.ok(isolatedApi.includes(route), `Isolated Aviator API is missing ${route}`);
     }
   });
