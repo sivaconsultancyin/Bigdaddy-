@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { jwtVerify } from "npm:jose@5.9.6";
+import { applyExplicitCorsOrigin } from "../../../shared/src/cors.ts";
 
 type Claims = { id: string; username: string; role: "OWNER" | "SUPER_ADMIN" | "ADMIN" | "PLAYER"; parentId: string | null };
 
@@ -13,15 +14,13 @@ const json = (body: Record<string, unknown>, status = 200, origin: string | null
   ];
   const native = ["https://localhost", "capacitor://localhost", "ionic://localhost", "http://localhost"];
   const allowed = new Set([...configured, ...defaultOrigins, ...native]);
-  const headers: Record<string, string> = {
+  const headers = applyExplicitCorsOrigin({
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type, idempotency-key",
     "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
-  };
-  if (origin && allowed.has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  }, origin, allowed);
   return new Response(JSON.stringify(body), { status, headers });
 };
 
