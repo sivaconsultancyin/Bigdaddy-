@@ -88,14 +88,14 @@ async function runTestSuite() {
 
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
-    const actualFiles = readdirSync('supabase/migrations').filter((name) => name.endsWith('.sql')).sort();
+    const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
     assert.strictEqual(manifest.appliedLedger.length, 65);
     assert.strictEqual(manifest.exactMatches.length, 21);
     assert.strictEqual(manifest.appliedOnly.length, 44);
     assert.strictEqual(manifest.fileOnly.length, 34);
-    const versions = manifest.repositoryFiles.map((name) => name.slice(0, 14));
-    const duplicates = [...new Set(versions.filter((version, index) => versions.indexOf(version) !== index))].sort();
+    const versions: string[] = (manifest.repositoryFiles as string[]).map((name: string) => name.slice(0, 14));
+    const duplicates = [...new Set(versions.filter((version: string, index: number) => versions.indexOf(version) !== index))].sort();
     assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
   });
 
