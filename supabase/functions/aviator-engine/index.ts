@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { retryTimedOutTick } from "./retry.ts";
 
 const json = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -127,10 +128,18 @@ Deno.serve(async (req: Request) => {
 
   while (Date.now() - started < runForMs) {
     const tickStarted = Date.now();
-    const { data, error } = await db.schema("aviator").rpc(
-      "tick_crash_engine_with_broadcast",
+    const tickAttempt = await retryTimedOutTick(() =>
+      db.schema("aviator").rpc("tick_crash_engine_with_broadcast"),
     );
+    const { data, error } = tickAttempt.result;
     tickLatenciesMs.push(Date.now() - tickStarted);
+    if (tickAttempt.retries > 0) {
+      console.warn("Aviator tick statement timeout recovered", {
+        retries: tickAttempt.retries,
+        attempts: tickAttempt.attempts,
+        elapsedMs: Date.now() - tickStarted,
+      });
+    }
 
     if (error) {
       console.error("Aviator engine RPC failed:", error.code ?? "unknown");
@@ -197,6 +206,7 @@ Deno.serve(async (req: Request) => {
       ticksCompleted: tickLatenciesMs.length,
       tickLatencyMs: summarizeLatencies(tickLatenciesMs),
       actionCounts,
+      tickRetries: tickAttempt.retries,
     }, 503);
   }
 
