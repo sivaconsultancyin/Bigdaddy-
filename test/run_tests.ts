@@ -11,6 +11,7 @@ import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/s
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
+import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
 
 let passed = 0;
 let failed = 0;
@@ -186,6 +187,23 @@ async function runTestSuite() {
     for (const legacy of ['[functions.aviator-api]', '[functions.aviator-wallet-worker]', '[functions.aviator-round-engine]', '[functions.aviator-settlement-worker]']) {
       assert.ok(!sharedConfig.includes(legacy), `Legacy isolated function config must be removed: ${legacy}`);
     }
+  });
+
+  test('Roulette bet retry idempotency is stable and scoped to user, round, and payload', () => {
+    const payload = { bets: [{ type: 'straight', numbers: [7], amount: '100' }] };
+    const operation = buildRouletteBetOperation('user-1', 'round-1', payload);
+    assert.strictEqual(buildRouletteBetOperation('user-1', 'round-1', payload), operation);
+    assert.notStrictEqual(buildRouletteBetOperation('user-2', 'round-1', payload), operation);
+    assert.notStrictEqual(buildRouletteBetOperation('user-1', 'round-2', payload), operation);
+    assert.notStrictEqual(
+      buildRouletteBetOperation('user-1', 'round-1', { bets: [{ type: 'straight', numbers: [7], amount: '200' }] }),
+      operation,
+    );
+    const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
+    const rouletteGame = readFileSync('frontend/src/games/roulette/RouletteGame.tsx', 'utf8');
+    assert.ok(apiClient.includes("this.pendingKey(operation, 'ROULETTE_BET')"));
+    assert.ok(apiClient.includes('this.clearPendingKey(operation)'));
+    assert.ok(rouletteGame.includes('ApiClient.placeRouletteBet(payload, rouletteRound.id, user.id)'));
   });
 
   test('Aviator public broadcast migration redacts crash target until terminal status', () => {
