@@ -4,14 +4,6 @@ import { ApiClient } from '../api/client';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import { isNewerRealtimeEvent, readRealtimeEventCursor, readRunningRealtimeMultiplier, type RealtimeEventCursor } from '../../../shared/src/aviatorRealtime';
 import { SUPABASE_API_BASE, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, hasSupabaseRealtimeConfig } from '../api/supabaseConfig';
-
-// Realtime is disabled safely when local development has no public Supabase config.
-// Production values are injected by the hosting environment at build time.
-const supabaseRealtime = hasSupabaseRealtimeConfig
-  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      realtime: { params: { eventsPerSecond: 10 } },
-    })
-  : null;
 import {
   AndarBaharRound,
   AndarBaharHistoryItem,
@@ -26,6 +18,14 @@ import {
   DiceRoundBet,
   DiceRoundStatus,
 } from '../../../shared/src/types';
+
+// Realtime is disabled safely when local development has no public Supabase config.
+// Production values are injected by the hosting environment at build time.
+const supabaseRealtime = hasSupabaseRealtimeConfig
+  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      realtime: { params: { eventsPerSecond: 10 } },
+    })
+  : null;
 
 export interface RouletteLiveState {
   id: string;
@@ -304,6 +304,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       inFlight = true;
       const pollStartedAt = Date.now();
       try {
+        if (!apiBase) {
+          setApiHealth('offline');
+          setRoundDataStatus('offline');
+          setLastRoundError('Production API is not configured. Set VITE_SUPABASE_URL in the frontend environment.');
+          return;
+        }
         const now = Date.now();
         // Health is checked independently from game state. A healthy process with a
         // stalled game endpoint is reported as degraded, not mistaken for a healthy round feed.
@@ -620,7 +626,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // public topic. Never subscribe to or broadcast wallet, bet, or seed secrets.
     if (supabaseRealtime) {
       const channel = supabaseRealtime
-      .channel('aviator:rounds', { config: { broadcast: { self: false } } })
+        .channel('aviator:rounds', { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'round_state_changed' }, ({ payload }) => {
         if (stopped || disposedRef.current || !payload || typeof payload !== 'object') return;
 
