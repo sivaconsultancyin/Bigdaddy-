@@ -102,6 +102,7 @@ async function runTestSuite() {
     assert.strictEqual(manifest.counts.sharedRepositoryFiles, 58);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
+    // The Dice lifecycle migration remains source-only until isolated DB validation completes.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
     const exactAppliedFiles = new Set(
       (manifest.appliedLedger as Array<{ version: string; name: string }>).map(
