@@ -310,7 +310,9 @@ async function handle(req: Request) {
     if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
     const row = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
-    // Never expose a pre-settlement outcome, even if the database has already\n    // persisted it internally to drive the animation and atomic settlement.\n    const result = row.status === "SETTLED" ? row.result : null;
+    // Never expose a pre-settlement outcome, even if the database has already
+    // persisted it internally to drive the animation and atomic settlement.
+    const result = row.status === "SETTLED" ? row.result : null;
     const current: Record<string, any> = {
       id: row.id, roundNumber: Number(row.round_number),
       status: row.status === "SETTLED" ? "RESULT" : row.status === "RUNNING" ? (code === "roulette" ? "SPINNING" : code === "dice" ? "ROLLING" : code === "dragon_tiger" ? "REVEALING" : "DEALING") : row.status,
