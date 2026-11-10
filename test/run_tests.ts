@@ -142,28 +142,28 @@ async function runTestSuite() {
     assert.strictEqual(untrusted['Vary'], undefined);
   });
 
-  test('Shared and isolated Edge APIs never emit wildcard CORS', () => {
+  test('Canonical Edge API uses explicit CORS and serves Aviator routes', () => {
     const sharedApi = readFileSync('supabase/functions/api/index.ts', 'utf8');
-    const isolatedApi = readFileSync('supabase/functions/aviator-api/index.ts', 'utf8');
+    const aviatorRoutes = readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8');
     assert.ok(sharedApi.includes('https://bigdaddy-frontend.onrender.com'));
-    assert.ok(isolatedApi.includes('https://bigdaddy-frontend.onrender.com'));
     assert.ok(!sharedApi.includes('headers["Access-Control-Allow-Origin"] = "*"'));
-    assert.ok(!isolatedApi.includes('headers["Access-Control-Allow-Origin"] = "*"'));
+    for (const route of ['/games/aviator/state', '/games/aviator/history', '/games/aviator/bet', '/games/aviator/cashout']) {
+      assert.ok(aviatorRoutes.includes(route), `Canonical Aviator API is missing ${route}`);
+    }
   });
 
-  test('Production API routing preserves the shared and isolated Supabase project boundary', () => {
+  test('Production routes every Aviator endpoint to the single configured Supabase API', () => {
     const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
     const sharedConfig = readFileSync('supabase/config.toml', 'utf8');
-    const isolatedApi = readFileSync('supabase/functions/aviator-api/index.ts', 'utf8');
     assert.ok(apiClient.includes('const SUPABASE_API_BASE'));
-    assert.ok(apiClient.includes('const AVIATOR_API_BASE'));
-    assert.ok(apiClient.includes('return AVIATOR_API_BASE'));
-    assert.ok(apiClient.includes('return API_BASE'));
+    assert.ok(apiClient.includes('fetch(`${API_BASE}${endpoint}`'));
+    assert.ok(!apiClient.includes('yrleubhpiqejfvingqfj'));
+    assert.ok(!apiClient.includes('AVIATOR_API_BASE'));
+    assert.ok(!apiClient.includes('VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY'));
     assert.ok(sharedConfig.includes('[functions.api]'));
-    assert.ok(sharedConfig.includes('[functions.aviator-api]'));
-    assert.ok(apiClient.includes('(state|history|bet|cashout)'), 'Frontend API client must route all four Aviator endpoint suffixes to the isolated API');
-    for (const route of ['/games/aviator/state', '/games/aviator/history', '/games/aviator/bet', '/games/aviator/cashout']) {
-      assert.ok(isolatedApi.includes(route), `Isolated Aviator API is missing ${route}`);
+    assert.ok(sharedConfig.includes('[functions.aviator-engine]'));
+    for (const legacy of ['[functions.aviator-api]', '[functions.aviator-wallet-worker]', '[functions.aviator-round-engine]', '[functions.aviator-settlement-worker]']) {
+      assert.ok(!sharedConfig.includes(legacy), `Legacy isolated function config must be removed: ${legacy}`);
     }
   });
 
