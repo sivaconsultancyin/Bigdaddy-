@@ -326,6 +326,67 @@ jobs:
         SQL
 
 
+    - name: Verify wallet transfer fully rolls back on ledger failure
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        CREATE FUNCTION public.ci_reject_ledger_insert()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $function$
+        BEGIN
+          IF NEW.description = 'ci-injected-ledger-failure' THEN
+            RAISE EXCEPTION 'ci_injected_ledger_failure' USING ERRCODE = 'P0001';
+          END IF;
+          RETURN NEW;
+        END;
+        $function$;
+
+        CREATE TRIGGER ci_reject_ledger_insert
+        BEFORE INSERT ON public.ledger_entries
+        FOR EACH ROW EXECUTE FUNCTION public.ci_reject_ledger_insert();
+
+        DO $verify$
+        DECLARE
+          failure_seen boolean := false;
+        BEGIN
+          BEGIN
+            PERFORM public.wallet_transfer_atomic(
+              'wallet-rollback-failure-0001', 'BET_ESCROW_LOCK', 25,
+              '00000000-0000-0000-0000-000000000001',
+              '00000000-0000-0000-0000-000000000002',
+              '{"purpose":"rollback-test"}'::jsonb
+            );
+          EXCEPTION WHEN SQLSTATE 'P0001' THEN
+            failure_seen := true;
+          END;
+
+          IF NOT failure_seen THEN
+            RAISE EXCEPTION 'Injected ledger failure did not abort wallet transfer';
+          END IF;
+
+          IF (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000001') <> 850
+             OR (SELECT balance FROM public.wallets WHERE id='00000000-0000-0000-0000-000000000002') <> 150 THEN
+            RAISE EXCEPTION 'Wallet balances changed despite ledger failure';
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM public.wallet_transactions
+            WHERE idempotency_key='wallet-rollback-failure-0001'
+          ) OR EXISTS (
+            SELECT 1 FROM public.ledger_entries le
+            JOIN public.wallet_transactions wt ON wt.id=le.transaction_id
+            WHERE wt.idempotency_key='wallet-rollback-failure-0001'
+          ) THEN
+            RAISE EXCEPTION 'Partial transaction or ledger rows survived failed wallet transfer';
+          END IF;
+        END
+        $verify$;
+
+        DROP TRIGGER ci_reject_ledger_insert ON public.ledger_entries;
+        DROP FUNCTION public.ci_reject_ledger_insert();
+        SQL
+
+
   validate-schema-cutover:
     runs-on: ubuntu-latest
     services:
