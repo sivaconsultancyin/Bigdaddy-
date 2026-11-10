@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
+import { evaluateGameActivationReadiness } from "./activation.ts";
 import bcrypt from "npm:bcryptjs@2.4.3";
 import { corsHeaders, jsonResponse, signBigDaddyToken, verifyBigDaddyToken, type BigDaddyClaims } from "./bigdaddy-jwt.ts";
 import { handleAviatorApi } from "./aviator.routes.ts";
@@ -268,7 +269,7 @@ async function handle(req: Request) {
     return response({ token, user:data.user, wallet:data.wallet }, 201, origin);
   }
 
-  const gameStateMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/state$/);
+  const gameStateMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/state$/);
   if (req.method === "GET" && gameStateMatch) {
     const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
     // Secondary-game state can include usernames and bet details. Authenticate
@@ -530,7 +531,7 @@ async function handle(req: Request) {
     return response({ message: "TRANSFER_COMPLETED", transactionId, balances: (balances ?? []).map(b => ({ id: b.id, balance: String(b.balance) })) }, 200, origin);
   }
 
-  const activationMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
+  const activationMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
   if (req.method === "POST" && activationMatch) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
     const code = activationMatch[1] === "dragon-tiger" ? "dragon_tiger"
@@ -544,13 +545,26 @@ async function handle(req: Request) {
       .select("id,status,pool_wallet_id").eq("code", code).maybeSingle();
     if (gameError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
+    const { data: gamePool, error: gamePoolError } = await db.schema("platform").from("game_pools")
+      .select("wallet_id").eq("game_code", code).maybeSingle();
+    if (gamePoolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     const { data: pool, error: poolError } = await db.schema("wallet").from("wallets")
-      .select("id,balance").eq("id", game.pool_wallet_id).maybeSingle();
+      .select("id,balance,reserved_balance,wallet_type,game_code").eq("id", game.pool_wallet_id).maybeSingle();
     if (poolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
-    const poolBalance = String(pool?.balance ?? "0");
-    if (!pool || !/^[0-9]+$/.test(poolBalance) || BigInt(poolBalance) <= 0n) {
-      return response({ error: "ALLOCATE_GAME_POOL_TOKENS_FIRST" }, 400, origin);
+    let runtimeRoundStatus: string | null = null;
+    if (code === "aviator") {
+      const { data: runtimeState, error: runtimeError } = await db.schema("aviator").rpc("get_aviator_state_bundle");
+      runtimeRoundStatus = runtimeError ? null : String(runtimeState?.round?.status ?? "");
     }
+    const readiness = evaluateGameActivationReadiness({
+      gameCode: code, catalogWalletId: String(game.pool_wallet_id ?? ""),
+      mappedWalletId: String(gamePool?.wallet_id ?? ""), walletType: String(pool?.wallet_type ?? ""),
+      walletGameCode: String(pool?.game_code ?? ""), balance: String(pool?.balance ?? ""),
+      reservedBalance: String(pool?.reserved_balance ?? ""), runtimeRoundStatus,
+    });
+    if (!readiness.ok) return response({ error: readiness.error }, readiness.status, origin);
+    const poolBalance = String(pool?.balance ?? "0");
+    const availablePoolBalance = readiness.availablePoolBalance;
     const { error: updateError } = await db.schema("platform").from("games")
       .update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", code);
     if (updateError) return response({ error: "GAME_ACTIVATION_FAILED" }, 503, origin);
@@ -576,7 +590,7 @@ async function handle(req: Request) {
       // than reporting failure and encouraging an unsafe repeated allocation.
       console.error("Game activation audit write failed.");
     }
-    return response({ status: "ACTIVE", gameCode: code, poolBalance }, 200, origin);
+    return response({ status: "ACTIVE", gameCode: code, poolBalance, availablePoolBalance }, 200, origin);
   }
 
   if (req.method === "GET" && path === "/games/list") {
@@ -608,17 +622,11 @@ async function handle(req: Request) {
     return response({ transactionId, amount, gameCode }, 200, origin);
   }
 
-  const activate = path.match(/^\/games\/([^/]+)\/activate$/);
-  if (req.method === "POST" && activate) {
+  // Fail closed for every activation path not covered by the explicit production allowlist above.
+  const unsupportedActivation = path.match(/^\/games\/([^/]+)\/activate$/);
+  if (req.method === "POST" && unsupportedActivation) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
-    const gameCode = decodeURIComponent(activate[1]).replace(/-/g, "_");
-    const pool = await db.schema("platform").from("game_pools").select("wallet_id").eq("game_code", gameCode).maybeSingle();
-    if (pool.error || !pool.data) return response({ error: "GAME_POOL_NOT_FOUND" }, 404, origin);
-    const { data: wallet, error: walletError } = await db.schema("wallet").from("wallets").select("balance,reserved_balance").eq("id", pool.data.wallet_id).maybeSingle();
-    if (walletError || !wallet) return response({ error: "GAME_POOL_NOT_FOUND" }, 404, origin);
-    const { error } = await db.schema("platform").from("games").update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", gameCode);
-    if (error) return response({ error: "GAME_ACTIVATION_FAILED" }, 400, origin);
-    return response({ status: "ACTIVE", gameCode, poolBalance: String(wallet.balance), reservedBalance: String(wallet.reserved_balance) }, 200, origin);
+    return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
   }
 
   if (req.method === "GET" && path === "/requests/list") {
