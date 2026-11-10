@@ -501,6 +501,44 @@ async function runTestSuite() {
     assert.strictEqual(result.number, result.rolledNumber);
   });
 
+  test('Dice 1000-round simulation stays within the 1-10 outcome range and balanced distribution', () => {
+    const counts = Array.from({ length: 10 }, () => 0);
+    for (let i = 0; i < 1000; i++) {
+      const result = makeResult('dice', `dice-simulation-seed-${i}`);
+      const number = Number(result.number);
+      assert.ok(Number.isInteger(number) && number >= 1 && number <= 10);
+      counts[number - 1] += 1;
+    }
+    assert.strictEqual(counts.reduce((sum, count) => sum + count, 0), 1000);
+    for (const count of counts) assert.ok(count >= 65 && count <= 135, `unexpected Dice outcome frequency: ${count}`);
+  });
+
+  test('Dice exact-number payout matches the displayed 9x gross rule while reserving 10x liability', () => {
+    assert.strictEqual(payoutMultiplier('dice', { type: '7' }, { number: 7 }), 9);
+    assert.strictEqual(payoutMultiplier('dice', { type: '7' }, { number: 8 }), 0);
+    assert.strictEqual(payoutMultiplier('dice', { type: 'small' }, { number: 5 }), 2);
+    assert.strictEqual(payoutMultiplier('dice', { type: 'big' }, { number: 5 }), 0);
+    assert.strictEqual(maxLiabilityMultiplier('dice', { type: '7' }), 10);
+    assert.strictEqual(maxLiabilityMultiplier('dice', { type: 'odd' }), 2);
+  });
+
+  test('Dice activation requires the full max-bet liability in its mapped game pool', () => {
+    const base = {
+      gameCode: 'dice', catalogWalletId: 'dice-pool', mappedWalletId: 'dice-pool',
+      walletType: 'GAME_POOL', walletGameCode: 'dice', balance: '1000000',
+      reservedBalance: '0', minimumPoolBalance: '1000000',
+    };
+    assert.deepStrictEqual(evaluateGameActivationReadiness(base), {
+      ok: true, availablePoolBalance: '1000000',
+    });
+    const insufficient = evaluateGameActivationReadiness({ ...base, balance: '999999' });
+    assert.strictEqual(insufficient.ok, false);
+    if (!insufficient.ok) assert.strictEqual(insufficient.error, 'DICE_POOL_LIQUIDITY_INSUFFICIENT');
+    const wrongPool = evaluateGameActivationReadiness({ ...base, walletGameCode: 'roulette' });
+    assert.strictEqual(wrongPool.ok, false);
+    if (!wrongPool.ok) assert.strictEqual(wrongPool.error, 'GAME_POOL_IDENTITY_MISMATCH');
+  });
+
   test('Production Dice verifier uses the exact authoritative engine HMAC contract', () => {
     const seed = 'dice-test-seed';
     const expectedHex = createHmac('sha256', seed).update('dice').digest('hex').slice(0, 13);
