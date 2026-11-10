@@ -151,3 +151,12 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 - PRs #131, #133–#141, #143, #146, #147, and #148 have merged with all six CI jobs passing on their final commits.
 - PR #124 and PR #143/#146/#148 document and lock the single-project migration inventory; they do not repair the remaining live migration history drift.
 - PR #140's separate-project grant/index migration is archived; live inspection confirmed its proposed indexes already exist and browser-role EXECUTE is already revoked on `public.rls_auto_enable()`. PR #148 adds an idempotent source-controlled privilege migration for this state.
+
+
+## Operational follow-up — single Supabase project confirmation (2026-11-10)
+
+- The user explicitly approved pausing the former isolated project `yrleubhpiqejfvingqfj` (`Bigdaddy aviator`).
+- Supabase accepted the pause request. A subsequent `list_projects` response returned only the canonical `nzvpuoeibqrpcltrszvr` (`Bigdaddy`) project, still `ACTIVE_HEALTHY`; the former project no longer appeared in the active project list.
+- No project deletion, restore, production DDL, migration repair, wallet/bet/round mutation, or deployment was performed.
+- Treat the canonical project as the sole active target. Do not deploy or restore the former project without a new explicit approval.
+- Migration reconciliation remains blocked pending provenance/effect review and disposable PostgreSQL bootstrap/upgrade evidence. The project pause does not resolve the 65-version migration-ledger drift.
