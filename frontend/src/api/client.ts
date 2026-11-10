@@ -416,10 +416,13 @@ export class ApiClient {
     });
   }
 
-  public static placeDiceBet(payload: { bets: Array<{ type: string; amount: string }> }) {
+  public static placeDiceBet(
+    payload: { bets: Array<{ type: string; amount: string }> },
+    idempotencyKey = 'dice-bet-' + crypto.randomUUID(),
+  ) {
     return this.request('/games/dice/bet', {
       method: 'POST',
-      headers: { 'Idempotency-Key': 'dice-bet-' + crypto.randomUUID() },
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
     });
   }
