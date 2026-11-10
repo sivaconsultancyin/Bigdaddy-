@@ -119,13 +119,13 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 ### Merged and CI-verified
 - **BD-AUD-001 / BD-AUD-002 / BD-AUD-004:** PR #131 blocks the in-memory StorageEngine in production and removes eager production imports of seeded storage. Issue #125 closed.
 - **BD-AUD-010 / BD-AUD-011 / BD-AUD-012 / BD-AUD-013:** PRs #133, #136, #137 and #138 add upstream readiness, streaming/response caps, bounded proxy concurrency, explicit Edge CORS origins, and trusted/untrusted-origin tests. Issue #128 closed.
-- **BD-AUD-003 / BD-AUD-007 (partial):** PR #134 documented the old two-project route map. This PR replaces that obsolete boundary with one canonical shared API, removes the stale browser route to the inactive project, and adds single-project routing regression tests. Issue #126 can be closed after CI passes.
+- **BD-AUD-003 / BD-AUD-007:** PR #148 consolidates Aviator HTTP routing on the single active Supabase project, archives the inactive API/workers/migrations, and adds single-project regression tests. All six CI jobs passed; Issue #126 closed.
 - **BD-AUD-006 (partial):** PR #135 adds disposable PostgreSQL concurrent wallet-transfer/idempotency tests. PR #139 adds worker lease fault/expiry tests. Issue #127 remains open for concurrent Aviator cashout/settlement/refund and rollback-injection coverage.
 - **BD-AUD-008 / BD-AUD-009 (partial):** PR #139 tests lease ownership and expiry. PR #146 adds per-round tick sequence, server timestamps, stale-event rejection, and Realtime lag/reconnect/polling-fallback diagnostics. Sequence-gap counters, missing-terminal-event cases, and mobile/staging E2E remain open.
 
 ### In progress / not applied to production
 - **Legacy isolated Aviator implementation:** the eleven old migrations, four old Edge Functions, and redundant separate security/index candidate are archived under `supabase/archive/legacy-isolated-aviator/`; they are not part of the active CLI or deployment paths.
-- **Migration ledger drift:** Issue #120 remains open. Single-project ledger: 65 applied versions vs 57 active candidate files (21 exact matches, 44 applied-only, 36 file-only, 2 duplicate prefixes). The eleven former isolated-project migrations and one separate security/index candidate are archived outside `supabase/migrations/`. PR #143 and #146 add the inventory manifest and CI guard; this PR removes the abandoned second-project deployment sources. The remaining 65/57 drift is not yet reconciled.
+- **Migration ledger drift:** Issue #120 remains open. Single-project ledger: 65 applied versions vs 58 active candidate files (21 exact matches, 44 applied-only, 37 file-only, 2 duplicate prefixes). The eleven former isolated-project migrations, one separate security/index candidate, and four inactive Edge Functions are archived outside active Supabase CLI paths. PR #143/#146/#148 maintain the inventory manifest and CI guard. The remaining 65/58 drift is not yet reconciled.
 - **Production Phase 1:** Issue #123 remains open for clean bootstrap/upgrade tests, financial reconciliation queries, and additional transaction rollback coverage.
 - **Frontend Vite environment migration:** Issue #144 remains open. Project URLs and publishable-key fallbacks must move to validated build-time environment variables after the Render workspace is confirmed.
 
@@ -133,7 +133,7 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 1. Complete single-project consolidation: route all Aviator HTTP calls through the canonical API and keep abandoned migration/function sources outside active Supabase CLI paths.
 2. Complete API auth, validation, idempotency, and response contract tests on the canonical Aviator routes (BD-AUD-003/007).
-3. Complete both projects' migration effect mapping and fresh-bootstrap/upgrade tests before any production migration push (BD-AUD-005).
+3. Reconcile the single project's 65 applied migration effects against its 58 active source files and run clean-bootstrap/upgrade tests before any production migration push (BD-AUD-005).
 4. Add concurrent Aviator cashout/settlement/refund tests and rollback injection, then run staging end-to-end financial flows (BD-AUD-006).
 5. Complete Realtime sequence-gap/terminal-event coverage and mobile end-to-end validation (BD-AUD-008/009).
 6. Move frontend Supabase URLs and publishable keys to validated Vite environment variables after Render workspace confirmation (BD-AUD-010–013).
@@ -148,6 +148,6 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 ## Related repository work
 
-- PRs #131, #133–#141, #143, and #146 have merged with all six CI jobs passing on their final commits.
-- PR #124 and PR #143/#146 document and lock migration inventories; they do not repair live migration history.
-- PR #140's separate-project grant/index migration is archived; live inspection confirmed its proposed indexes already exist and browser-role EXECUTE is already revoked on `public.rls_auto_enable()`.
+- PRs #131, #133–#141, #143, #146, #147, and #148 have merged with all six CI jobs passing on their final commits.
+- PR #124 and PR #143/#146/#148 document and lock the single-project migration inventory; they do not repair the remaining live migration history drift.
+- PR #140's separate-project grant/index migration is archived; live inspection confirmed its proposed indexes already exist and browser-role EXECUTE is already revoked on `public.rls_auto_enable()`. PR #148 adds an idempotent source-controlled privilege migration for this state.
