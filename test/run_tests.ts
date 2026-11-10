@@ -91,14 +91,14 @@ async function runTestSuite() {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 57);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 58);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
     assert.strictEqual(manifest.counts.sharedAppliedLedger, 65);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 57);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 58);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
-    assert.strictEqual(manifest.counts.sharedFileOnly, 36);
+    assert.strictEqual(manifest.counts.sharedFileOnly, 37);
     assert.strictEqual(manifest.counts.legacyIsolatedAppliedLedgerSnapshot, 7);
     assert.strictEqual(manifest.counts.legacyArchivedMigrationFiles, 12);
     assert.strictEqual(manifest.counts.legacyArchivedFunctionDirectories, 4);
