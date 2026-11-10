@@ -507,6 +507,19 @@ jobs:
     - name: Type-check Aviator engine Edge Function
       run: deno check --config supabase/functions/api/deno.json supabase/functions/aviator-engine/index.ts
 
+  validate-aviator-tick-retry:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Deno (retry transient download failures)
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 https://deno.land/install.sh | sh
+        echo "${HOME}/.deno/bin" >> "${GITHUB_PATH}"
+    - name: Test bounded retry behavior for PostgreSQL statement timeouts
+      run: deno test supabase/functions/aviator-engine/retry_test.ts
+
   validate-aviator-engine-lease:
     runs-on: ubuntu-latest
     services:
