@@ -535,7 +535,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 const sameRunningRound = round.status === 'RUNNING' &&
                   previousMultiplier?.roundId === round.id;
                 const safeMultiplier = sameRunningRound
-                  ? Math.max(incomingMultiplier, previousMultiplier.value)
+                  ? Math.max(incomingMultiplier, previousMultiplier?.value ?? incomingMultiplier)
                   : incomingMultiplier;
                 lastAuthoritativeMultiplierRef.current = {
                   value: safeMultiplier,
