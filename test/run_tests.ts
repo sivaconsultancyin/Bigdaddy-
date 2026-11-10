@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readdirSync, readFileSync } from 'node:fs';
 import { applyExplicitCorsOrigin } from '../shared/src/cors';
-import { isNewerRealtimeEvent, readRealtimeEventCursor } from '../shared/src/aviatorRealtime';
+import { isNewerRealtimeEvent, isNewerRoundSnapshot, readRealtimeEventCursor } from '../shared/src/aviatorRealtime';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
@@ -128,6 +128,18 @@ async function runTestSuite() {
     const versions: string[] = (manifest.repositoryFiles as string[]).map((name: string) => name.slice(0, 14));
     const duplicates = [...new Set(versions.filter((version: string, index: number) => versions.indexOf(version) !== index))].sort();
     assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
+  });
+
+  test('Aviator state snapshots cannot roll the UI back across rounds or lifecycle phases', () => {
+    const roundOneRunning = { id: 'round-1', roundNumber: 1, status: 'RUNNING' };
+    const roundOneCrashed = { id: 'round-1', roundNumber: 1, status: 'CRASHED' };
+    const roundTwoWaiting = { id: 'round-2', roundNumber: 2, status: 'WAITING' };
+    assert.ok(isNewerRoundSnapshot(roundOneRunning, null));
+    assert.ok(isNewerRoundSnapshot(roundOneCrashed, roundOneRunning));
+    assert.ok(!isNewerRoundSnapshot(roundOneRunning, roundOneCrashed));
+    assert.ok(!isNewerRoundSnapshot(roundOneRunning, roundTwoWaiting));
+    assert.ok(isNewerRoundSnapshot(roundTwoWaiting, roundOneCrashed));
+    assert.ok(!isNewerRoundSnapshot({ ...roundTwoWaiting, id: 'old-round' }, roundTwoWaiting));
   });
 
   test('Realtime event cursor parses server time and rejects duplicate or out-of-order ticks', () => {
