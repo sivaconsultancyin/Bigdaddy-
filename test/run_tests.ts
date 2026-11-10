@@ -261,6 +261,14 @@ async function runTestSuite() {
     assert.ok(migration.includes('STALE_WAITING_ROUND_REFUNDED'));
   });
 
+  test('Aviator animation resets multiplier state at round boundaries and WAITING', () => {
+    const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(source.includes("lastAuthoritativeMultiplierRef.current?.roundId !== roundState.id"));
+    assert.ok(source.includes("authoritativeMultiplierRef.current = 1"));
+    assert.ok(source.includes("if (roundState.status === 'WAITING')"));
+    assert.ok(source.includes("setAuthoritativeMultiplier(1)"));
+  });
+
   test('Aviator polling keeps 200ms RUNNING cadence, 1s fallback, and no overlapping requests', () => {
     const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
     assert.ok(source.includes("const intervalMs = running ? 200 : 1000"));
