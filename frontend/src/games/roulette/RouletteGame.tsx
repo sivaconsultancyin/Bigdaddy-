@@ -361,7 +361,7 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
       setTimeout(() => setErrorMessage(null), 3000);
       return;
     }
-    if (user?.role !== UserRole.PLAYER) {
+    if (!user || user.role !== UserRole.PLAYER) {
       setErrorMessage('Only Player accounts can place bets');
       setTimeout(() => setErrorMessage(null), 3000);
       return;
@@ -373,14 +373,13 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
     try {
       const payload = {
         bets: currentBets.map((b) => ({
-          id: b.id,
           type: b.type,
           numbers: b.numbers,
           amount: b.amount.toString(),
         })),
       };
 
-      const res: any = await ApiClient.placeRouletteBet(payload);
+      const res: any = await ApiClient.placeRouletteBet(payload, rouletteRound.id, user.id);
       if (res && res.success) {
         rouletteAudio.playChipSound();
         setPreviousBets([...lockedBets, ...currentBets]);
