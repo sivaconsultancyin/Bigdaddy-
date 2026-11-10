@@ -750,3 +750,33 @@ jobs:
 
     - name: Verify stale-round refunds, fail-closed behavior, and public broadcasts
       run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-recovery-realtime-verify.sql
+
+  validate-aviator-realtime-sequence:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Test monotonic Aviator multiplier event sequence
+        run: bash scripts/db/test-aviator-realtime-sequence.sh
