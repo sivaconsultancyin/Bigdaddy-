@@ -2,8 +2,17 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import { resolveSupabasePublicConfig } from './frontend/src/api/supabaseConfigValidation';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  if (mode === 'production') {
+    // Vite build must stop before emitting a bundle if Render's public config is absent or invalid.
+    resolveSupabasePublicConfig(
+      process.env.VITE_SUPABASE_URL,
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      true,
+    );
+  }
   return {
     plugins: [react(), tailwindcss()],
     resolve: {

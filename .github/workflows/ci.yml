@@ -27,7 +27,17 @@ jobs:
     - name: Execute automated financial & authorization tests
       run: bun run test
 
-    - name: Build frontend application
+    - name: Verify production build fails without public Supabase config
+      run: |
+        if env -u VITE_SUPABASE_URL -u VITE_SUPABASE_PUBLISHABLE_KEY bun run build; then
+          echo "Production build unexpectedly succeeded without required Supabase public config" >&2
+          exit 1
+        fi
+
+    - name: Build frontend application with CI-only public Supabase config
+      env:
+        VITE_SUPABASE_URL: https://ci-project.supabase.co
+        VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_test_key_12345678901234567890
       run: bun run build
 
   validate-schema-migration:
