@@ -198,6 +198,21 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     }
   }, [roundState.id, roundState.status, roundState.rolledNumber]);
 
+  const pendingDiceBetKeysRef = useRef<Map<string, string>>(new Map());
+
+  const submitDiceBets = async (bets: Array<{ type: string; amount: string }>) => {
+    const fingerprint = JSON.stringify(bets);
+    const pendingKeys = pendingDiceBetKeysRef.current;
+    let idempotencyKey = pendingKeys.get(fingerprint);
+    if (!idempotencyKey) {
+      idempotencyKey = `dice-bet-${crypto.randomUUID()}`;
+      pendingKeys.set(fingerprint, idempotencyKey);
+    }
+    const result = await ApiClient.placeDiceBet({ bets }, idempotencyKey);
+    pendingKeys.delete(fingerprint);
+    return result;
+  };
+
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
     setTimeout(() => setNoticeMessage(null), 3000);
@@ -223,9 +238,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     setErrorMessage(null);
 
     try {
-      await ApiClient.placeDiceBet({
-        bets: [{ type, amount: selectedChip.toString() }],
-      });
+      await submitDiceBets([{ type, amount: selectedChip.toString() }]);
 
       setMyBets((prev) => ({
         ...prev,
@@ -260,7 +273,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     }));
 
     try {
-      await ApiClient.placeDiceBet({ bets: betsPayload });
+      await submitDiceBets(betsPayload);
       setMyBets((prev) => {
         const next = { ...prev };
         NUMBERS_1_TO_10.forEach((num) => {
@@ -292,7 +305,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
 
     setIsSubmittingBet(true);
     try {
-      await ApiClient.placeDiceBet({ bets: betsPayload });
+      await submitDiceBets(betsPayload);
       setMyBets((prev) => {
         const next = { ...prev };
         keys.forEach((k) => {
@@ -328,7 +341,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
 
     setIsSubmittingBet(true);
     try {
-      await ApiClient.placeDiceBet({ bets: betsPayload });
+      await submitDiceBets(betsPayload);
       setMyBets(lastRoundBets);
       diceAudio.playChipSound();
       showNotification('మునుపటి రౌండ్ బెట్స్ రిపీట్ చేయబడ్డాయి!');
