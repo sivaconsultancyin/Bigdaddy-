@@ -171,7 +171,7 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
   }
   if (code === 'dice') {
     const number = Number(result.number);
-    if (type === 'number' || /^\d+$/.test(type)) return Number(selection?.value ?? type) === number ? 10 : 0;
+    if (type === 'number' || /^\d+$/.test(type)) return Number(selection?.value ?? type) === number ? 9 : 0;
     if (type === 'odd' || type === 'even') return (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
     if (type === 'small') return number <= 5 ? 2 : 0;
     if (type === 'big') return number >= 6 ? 2 : 0;
@@ -234,7 +234,7 @@ export function validateSelection(code: GameCode, selection: any): boolean {
 
 function publicRound(row: any, code: GameCode) {
   const state = row.state || {};
-  const result = ['RUNNING','RESULT','SETTLED'].includes(row.status) ? row.result : null;
+  const result = ['RESULT','SETTLED'].includes(row.status) ? row.result : null;
   return {
     id: row.id,
     roundNumber: Number(row.round_number),
@@ -459,17 +459,12 @@ async function settleRound(roundId: string, code: GameCode) {
       const playerRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [bet.user_id]);
       if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
       await tx.unsafe("SELECT id FROM wallet.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[poolWalletId, escrowRows[0].id, playerRows[0].id]]);
-      const reservationRows = await tx.unsafe('UPDATE wallet.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id', [poolWalletId, String(bet.reserved_liability)]);
-      if (!reservationRows[0]) throw new Error('GAME_POOL_RESERVATION_INVARIANT_FAILED');
       const multiplier = payoutMultiplier(code, bet.selection, round.result);
       const amount = BigInt(String(bet.bet_amount));
       const gross = multiplier > 0 ? amount * BigInt(multiplier) : 0n;
-      const releaseRows = await tx.unsafe(
-        "SELECT wallet.wallet_transfer_atomic($1,'BET_LOSS_GAME_POOL'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
-        ['AGAME_STAKE_RELEASE_' + bet.id, amount.toString(), escrowRows[0].id, poolWalletId,
-          JSON.stringify({ gameCode: code, roundId, betId: bet.id, settlement: 'stake_to_pool' })],
-      );
       let payoutTxId: string | null = null;
+      // Pay while the reservation still exists: wallet_transfer_atomic requires
+      // reserved pool liability to cover every winning payout.
       if (gross > 0n) {
         const payoutRows = await tx.unsafe(
           "SELECT wallet.wallet_transfer_atomic($1,'BET_WIN_PAYOUT'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
@@ -478,6 +473,13 @@ async function settleRound(roundId: string, code: GameCode) {
         );
         payoutTxId = payoutRows[0].id;
       }
+      const releaseRows = await tx.unsafe(
+        "SELECT wallet.wallet_transfer_atomic($1,'BET_LOSS_GAME_POOL'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
+        ['AGAME_STAKE_RELEASE_' + bet.id, amount.toString(), escrowRows[0].id, poolWalletId,
+          JSON.stringify({ gameCode: code, roundId, betId: bet.id, settlement: 'stake_to_pool' })],
+      );
+      const reservationRows = await tx.unsafe('UPDATE wallet.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id', [poolWalletId, String(bet.reserved_liability)]);
+      if (!reservationRows[0]) throw new Error('GAME_POOL_RESERVATION_INVARIANT_FAILED');
       await tx.unsafe(
         `UPDATE ${schemaFor(code)}.authoritative_game_bets SET status=$1,payout_amount=$2,stake_release_transaction_id=$3,payout_transaction_id=$4,settled_at=now() WHERE id=$5`,
         [gross > 0n ? 'WON' : 'LOST', gross.toString(), releaseRows[0].id, payoutTxId, bet.id],
