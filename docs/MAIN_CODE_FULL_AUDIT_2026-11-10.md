@@ -125,7 +125,7 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 ### In progress / not applied to production
 - **Legacy isolated Aviator implementation:** the eleven old migrations, four old Edge Functions, and redundant separate security/index candidate are archived under `supabase/archive/legacy-isolated-aviator/`; they are not part of the active CLI or deployment paths.
-- **Migration ledger drift:** Issue #120 remains open. Single-project ledger: 65 applied versions vs 58 active candidate files (21 exact matches, 44 applied-only, 37 file-only, 2 duplicate prefixes). The eleven former isolated-project migrations, one separate security/index candidate, and four inactive Edge Functions are archived outside active Supabase CLI paths. PR #143/#146/#148 maintain the inventory manifest and CI guard. The remaining 65/58 drift is not yet reconciled.
+- **Migration ledger drift:** Issue #120 remains open. Single-project ledger: 65 applied versions vs 57 active root migration files (21 exact matches, 44 applied-only, 36 file-only, 2 duplicate prefixes). The eleven former isolated-project migrations, one separate security/index candidate, and four inactive Edge Functions are archived outside active Supabase CLI paths. PR #143/#146/#148 maintain the inventory manifest and CI guard. The remaining 65/58 drift is not yet reconciled.
 - **Production Phase 1:** Issue #123 remains open for clean bootstrap/upgrade tests, financial reconciliation queries, and additional transaction rollback coverage.
 - **Frontend Vite environment migration:** Issue #144 remains open. Project URLs and publishable-key fallbacks must move to validated build-time environment variables after the Render workspace is confirmed.
 
@@ -160,3 +160,34 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 - No project deletion, restore, production DDL, migration repair, wallet/bet/round mutation, or deployment was performed.
 - Treat the canonical project as the sole active target. Do not deploy or restore the former project without a new explicit approval.
 - Migration reconciliation remains blocked pending provenance/effect review and disposable PostgreSQL bootstrap/upgrade evidence. The project pause does not resolve the 65-version migration-ledger drift.
+
+
+## Production recheck addendum — 2026-11-10 (read-only)
+
+### Verified current state
+- Active Supabase project: `nzvpuoeibqrpcltrszvr`, PostgreSQL 17.11, status `ACTIVE_HEALTHY`.
+- Live migration ledger: 65 applied versions. Active root migration files in GitHub main: 57. Exact version+name matches: 21; applied-only: 44; source-only: 36; duplicate version prefixes: `20261021120000` and `20261023160000`.
+- Production catalog: Aviator and Roulette are ACTIVE. Dice, Dragon Tiger and Andar Bahar remain COMING_SOON; their dedicated pool balances are zero. Do not activate or fund them as part of this audit.
+- Read-only database checks found four users, ten wallets, 238 wallet transactions, and 89 Aviator bets at the time of inspection. No row contents or financial mutations were accessed/performed.
+- Supabase security advisor reports one INFO finding: `aviator.engine_worker_lease` has RLS enabled with no policies. Direct SELECT privileges are false for anon, authenticated and service_role, consistent with access through server-side privileged RPCs; do not add a browser policy merely to silence the advisor.
+- Performance advisor reports 46 unused-index INFO notices. These are not grounds for dropping indexes without workload and query-plan evidence.
+- The deployed `aviator-engine` Edge Function entrypoint exactly matches GitHub main at the time of comparison.
+
+### New P1 finding — deployed API Edge Function source drift
+- The deployed Supabase `api` Edge Function is version 36, last updated 2026-10-24.
+- Its deployed `index.ts` is 67,363 characters / 956 lines; current GitHub main `supabase/functions/api/index.ts` is 58,130 characters / 810 lines and imports the separate `aviator.routes.ts` module, which is absent from the deployed function bundle.
+- The deployed Dice verifier still uses the `clientSeed:nonce` HMAC input and first-eight-hex-digit calculation. Current main (fixed by PR #162) uses the authoritative `dice` label and first 13 HMAC hex digits.
+- The deployed CORS code has a wildcard fallback when `BIGDADDY_ALLOWED_ORIGINS` is empty; current main uses an explicit origin allowlist without wildcard fallback.
+- The deployed API retains older inline Aviator bet/cashout/state handlers and older actor lookup logic. These differences may leave security, fairness and performance fixes merged to main inactive in production.
+- Tracked in GitHub issue #163. Production Edge Function deployment is intentionally not performed: it requires a separate reviewed rollout plan and explicit deployment confirmation.
+
+### CI and PR recheck
+- Main commit `c6e383ef8d136b686aefedcedf21377d3e649f34` passed all 7 GitHub Actions jobs, including build/typecheck/tests, Edge Function type checks and targeted PostgreSQL migration/lease/Realtime fixtures.
+- PR #155 (single-project cutover status documentation) was reviewed and merged.
+- PR #152 remains blocked and unmerged. Its reconstructed migration sources have unresolved provenance/effect mismatches; it must not be merged or applied to production until its review gates pass.
+- The Render frontend is a static site and the latest observed deployment was live on commit `7821b852dfeaae2e2f2da0a9d0b8c38148b6abf5`. The frontend now targets the canonical Supabase Edge API directly. The separate Render backend proxy's latest observed live deploy is from 2026-10-24 and is not in the current frontend API request path.
+
+### Audit limitations
+- This recheck used read-only GitHub, Supabase metadata/SQL, Edge Function source, and Render service/deploy metadata.
+- No production Edge Function deployment, Render environment-variable change, migration repair, production DDL, wallet/bet/round mutation, game activation, or financial transaction was performed.
+- The deployed API environment secrets and actual origin allowlist values were not exposed or inspected. The wildcard CORS branch is therefore a code-path risk; whether it is active in the current environment remains unverified.
