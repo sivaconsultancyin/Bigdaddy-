@@ -139,3 +139,25 @@ The former two-project Aviator design has been retired. Eleven migration files t
 Four old Edge Function directories (`aviator-api`, `aviator-round-engine`, `aviator-wallet-worker`, and `aviator-settlement-worker`) were moved under `supabase/archive/legacy-isolated-aviator/functions/`. They are not deployed in the one live project. The active architecture is `supabase/functions/api` plus `supabase/functions/aviator-engine`.
 
 The archive is retained for audit/history only. Never move these files back into active `supabase/migrations/` or `supabase/functions/`, and never deploy them. The remaining 65-applied / 57-source migration drift still requires a controlled, SQL-effect-based reconciliation before any production `db push`.
+
+
+## Follow-up reconciliation update — 2026-11-10
+
+A fresh read-only inventory of the single active project (`nzvpuoeibqrpcltrszvr`) confirms 65 applied ledger entries and 57 active root migration files after removing one duplicate legacy source file from the active CLI path.
+
+### Confirmed findings
+
+- `20261025110000_shared_aviator_wallet_operations.sql` had no applied ledger row and its SQL body was identical to the already-applied `20261025053037_shared_aviator_wallet_operations.sql`. The duplicate copy is now retained under `supabase/archive/legacy-isolated-aviator/migrations/`, not in the active migration directory.
+- Active migration inventory is now 57 files: 21 exact version/name matches and 36 source-only files. Of the 36, 27 have a same-name applied ledger candidate with a different timestamp; the remaining 9 have no same-name applied row. These are candidates, not proof of SQL-effect equivalence.
+- The two duplicate timestamp prefixes remain unresolved: `20261021120000` and `20261023160000`. They must not be renamed until their SQL effects and applied ledger mapping are reviewed.
+- The live database has 23,150 Aviator rounds. The `aviator.game_rounds.multiplier_tick_seq` column is absent, while `aviator.tick_crash_engine_with_broadcast()` and `aviator.tick_crash_engine()` exist. The live broadcast wrapper currently has no tick sequence in its payload.
+- `20261110120000_aviator_realtime_event_sequence.sql` is therefore a genuine pending migration candidate, not an already-applied effect. It adds the sequence column and replaces the wrapper. A dedicated isolated PostgreSQL 16 CI test has been added to verify monotonic sequence values, payload shape, and that non-running ticks do not emit events.
+- `20261110130000_harden_rls_auto_enable_grants.sql` is source-controlled, but the same browser-role EXECUTE revocation was already present in production during the earlier read-only inspection. It does not require production DDL.
+
+### CI test added
+
+`scripts/db/test-aviator-realtime-sequence.sh` provisions synthetic PostgreSQL fixtures, applies only the sequence migration to that disposable database, and checks two running ticks produce sequence values 1 and 2, with no event or sequence increment for a non-running tick. The workflow runs this as a separate PostgreSQL-backed job.
+
+### Still blocked by safety gate
+
+The 27 same-name/different-version candidates and 9 differently named/no-name candidates still need exact historical SQL recovery and live-object comparison. The clean bootstrap and current-ledger upgrade replay have not yet been completed. Duplicate prefixes remain in place. No production DDL, migration repair, migration-history update, or financial data mutation was performed.
