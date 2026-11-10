@@ -81,29 +81,8 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     if (wsDiceLiveBets) setLiveBets(wsDiceLiveBets);
   }, [wsDiceLiveBets]);
 
-  // Robust HTTP polling fallback (every 1.5s) to guarantee single continuous multiplayer room
-  const pollServerState = useCallback(async () => {
-    try {
-      const res = await ApiClient.getDiceState();
-      if (res && res.round) {
-        setRoundState(res.round);
-      }
-      if (res && res.history) {
-        setHistory(res.history);
-      }
-      if (res && res.allBets) {
-        setLiveBets(res.allBets);
-      }
-    } catch {
-      // Ignore polling transient errors
-    }
-  }, []);
-
-  useEffect(() => {
-    pollServerState();
-    const pollInterval = setInterval(pollServerState, 1500);
-    return () => clearInterval(pollInterval);
-  }, [pollServerState]);
+  // Shared WebSocketContext owns the single active-game poller and its
+  // non-overlapping 1s fallback; do not start a second Dice state poller here.
 
   // Sound toggle sync
   useEffect(() => {
