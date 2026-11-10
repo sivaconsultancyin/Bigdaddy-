@@ -27,7 +27,10 @@ jobs:
     - name: Execute automated financial & authorization tests
       run: bun run test
 
-    - name: Build frontend application
+    - name: Build frontend application with CI-only public Supabase config
+      env:
+        VITE_SUPABASE_URL: https://ci-project.supabase.co
+        VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_test_key_12345678901234567890
       run: bun run build
 
   validate-schema-migration:
