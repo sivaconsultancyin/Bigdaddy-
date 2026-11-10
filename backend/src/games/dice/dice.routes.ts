@@ -92,25 +92,14 @@ diceRouter.post('/roll', authenticateJWT, async (req: AuthenticatedRequest, res:
 
 // POST /api/games/dice/verify (Independent Provably Fair Verification)
 diceRouter.post('/verify', (req, res: Response) => {
-  const { serverSeed, clientSeed = 'client-seed-live', nonce } = req.body;
-  if (!serverSeed || nonce === undefined) {
-    return res.status(400).json({ error: 'Missing verification parameters' });
+  const serverSeed = typeof req.body?.serverSeed === 'string' ? req.body.serverSeed : '';
+  if (!serverSeed || serverSeed.length > 1024) {
+    return res.status(400).json({ error: 'INVALID_VERIFICATION_PARAMETERS' });
   }
 
-  const nonceNum = parseInt(nonce, 10);
-  const hmac = crypto.createHmac('sha256', serverSeed);
-  hmac.update(`${clientSeed}:${nonceNum}`);
-  const hash = hmac.digest('hex');
-  const subHash = hash.substring(0, 8);
-  const intVal = parseInt(subHash, 16);
-  const calculatedRoll = (intVal % 10) + 1; // 1 to 10
+  const hash = crypto.createHmac('sha256', serverSeed).update('dice').digest('hex');
+  const calculatedRoll = Number(BigInt('0x' + hash.slice(0, 13)) % 10n) + 1;
   const serverSeedHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
 
-  return res.json({
-    serverSeed,
-    serverSeedHash,
-    clientSeed,
-    nonce: nonceNum,
-    calculatedRoll,
-  });
+  return res.json({ serverSeedHash, calculatedRoll });
 });
