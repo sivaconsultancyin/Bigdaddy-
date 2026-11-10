@@ -142,6 +142,28 @@ async function runTestSuite() {
     assert.ok(!isNewerRoundSnapshot({ ...roundTwoWaiting, id: 'old-round' }, roundTwoWaiting));
   });
 
+  test('50 consecutive simulated Aviator rounds preserve lifecycle order and reject prior-round events', () => {
+    let current: { id: string; roundNumber: number; status: string } | null = null;
+    for (let roundNumber = 1; roundNumber <= 50; roundNumber++) {
+      const id = `round-${roundNumber}`;
+      for (const status of ['WAITING', 'RUNNING', 'CRASHED', 'SETTLED']) {
+        const next = { id, roundNumber, status };
+        assert.ok(isNewerRoundSnapshot(next, current), `Round ${roundNumber} should accept ${status}`);
+        current = next;
+      }
+      if (roundNumber > 1) {
+        assert.ok(
+          !isNewerRoundSnapshot(
+            { id: `round-${roundNumber - 1}`, roundNumber: roundNumber - 1, status: 'RUNNING' },
+            current,
+          ),
+          `Round ${roundNumber} must reject a late event from the previous round`,
+        );
+      }
+      assert.deepStrictEqual(current, { id, roundNumber, status: 'SETTLED' });
+    }
+  });
+
   test('Realtime event cursor parses server time and rejects duplicate or out-of-order ticks', () => {
     const first = {
       id: 'round-1',
