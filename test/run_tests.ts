@@ -11,6 +11,7 @@ import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/s
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
+import { evaluateGameActivationReadiness } from '../supabase/functions/api/activation';
 
 let passed = 0;
 let failed = 0;
@@ -188,18 +189,30 @@ async function runTestSuite() {
     }
   });
 
-  test('Game activation uses an explicit allowlist, available pool balance, and Aviator runtime readiness', () => {
+  test('Game activation readiness rejects zero/over-reserved pools and mismatched mappings', () => {
+    const base = {
+      gameCode: 'aviator',
+      catalogWalletId: 'pool-1',
+      mappedWalletId: 'pool-1',
+      walletType: 'GAME_POOL',
+      walletGameCode: 'aviator',
+      balance: '1000',
+      reservedBalance: '100',
+      runtimeRoundStatus: 'WAITING',
+    };
+    assert.deepStrictEqual(evaluateGameActivationReadiness(base), { ok: true, availablePoolBalance: '900' });
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, balance: '0', reservedBalance: '0' }).error, 'ALLOCATE_GAME_POOL_TOKENS_FIRST');
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, balance: '100', reservedBalance: '100' }).error, 'ALLOCATE_GAME_POOL_TOKENS_FIRST');
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, balance: '50', reservedBalance: '100' }).error, 'GAME_POOL_LIABILITY_MISMATCH');
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, mappedWalletId: 'pool-2' }).error, 'GAME_POOL_MAPPING_MISMATCH');
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, walletType: 'PLAYER' }).error, 'GAME_POOL_IDENTITY_MISMATCH');
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, walletGameCode: 'roulette' }).error, 'GAME_POOL_IDENTITY_MISMATCH');
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, runtimeRoundStatus: null }).error, 'AVIATOR_RUNTIME_UNAVAILABLE');
+    assert.strictEqual(evaluateGameActivationReadiness({ ...base, gameCode: 'teen_patti' }).error, 'GAME_NOT_AVAILABLE_IN_PRODUCTION');
     const source = readFileSync('supabase/functions/api/index.ts', 'utf8');
     const guarded = source.slice(source.indexOf('const activationMatch'), source.indexOf('if (req.method === "GET" && path === "/games/list")'));
     assert.ok(guarded.includes('(aviator|roulette|dice|dragon-tiger|andar-bahar)'));
-    assert.ok(guarded.includes('from("game_pools")'));
-    assert.ok(guarded.includes('pool.wallet_type !== "GAME_POOL"'));
-    assert.ok(guarded.includes('pool.game_code !== code'));
-    assert.ok(guarded.includes('reserved_balance'));
-    assert.ok(guarded.includes('poolReservedBalance > totalPoolBalance'));
-    assert.ok(guarded.includes('availablePoolBalance <= 0n'));
-    assert.ok(guarded.includes('get_aviator_state_bundle'));
-    assert.ok(guarded.includes('AVIATOR_RUNTIME_UNAVAILABLE'));
+    assert.ok(guarded.includes('evaluateGameActivationReadiness'));
     const fallbackStart = source.indexOf('const unsupportedActivation');
     const fallbackEnd = source.indexOf('if (req.method === "GET" && path === "/requests/list")', fallbackStart);
     const fallback = source.slice(fallbackStart, fallbackEnd);
