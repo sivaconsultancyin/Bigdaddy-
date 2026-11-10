@@ -22,7 +22,7 @@ export function resolveSupabasePublicConfig(
   keyValue: string | undefined,
   production: boolean,
 ): SupabasePublicConfig {
-  const rawUrl = (urlValue ?? "").trim().replace(/\\/+$/, "");
+  const rawUrl = (urlValue ?? "").trim().replace(/\/+$/, "");
   const publishableKey = (keyValue ?? "").trim();
   if (!rawUrl || !publishableKey) {
     if (production) throw new Error("SUPABASE_PUBLIC_CONFIG_MISSING");
