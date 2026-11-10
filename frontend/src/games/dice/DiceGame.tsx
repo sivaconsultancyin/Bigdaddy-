@@ -201,7 +201,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
   const pendingDiceBetKeysRef = useRef<Map<string, string>>(new Map());
 
   const submitDiceBets = async (bets: Array<{ type: string; amount: string }>) => {
-    const fingerprint = JSON.stringify(bets);
+    const fingerprint = JSON.stringify({ roundId: roundState.id, bets });
     const pendingKeys = pendingDiceBetKeysRef.current;
     let idempotencyKey = pendingKeys.get(fingerprint);
     if (!idempotencyKey) {
