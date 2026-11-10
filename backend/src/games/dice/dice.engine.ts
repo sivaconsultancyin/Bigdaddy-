@@ -131,7 +131,6 @@ export class DiceEngine {
   // --- 2. ROLLING PHASE ---
   private startRollingPhase() {
     if (this.timer) clearTimeout(this.timer);
-    this.simBetTimeouts.forEach((t) => clearTimeout(t));
 
     this.currentRound.status = DiceRoundStatus.ROLLING;
     this.currentRound.rolledNumber = null;
@@ -291,7 +290,7 @@ export class DiceEngine {
       targetWalletId: SYSTEM_WALLETS.DICE_POOL,
       amount: totalRequested.toString(),
       type: TransactionType.BET_ESCROW_LOCK,
-      idempotencyKey: `dice-live-bet-${params.userId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      idempotencyKey: `dice-live-bet-${params.userId}-${crypto.randomUUID()}`,
       description: `Lucky 10 Dice Bet - Round #${this.currentRound.roundNumber}`,
       metadata: { roundNumber: this.currentRound.roundNumber, betsCount: params.bets.length },
     });
