@@ -127,7 +127,7 @@ The wallet source candidate `20261021120000_protect_reserved_wallet_balances.sql
 ## Updated completion status
 
 - Source inventory and count assertions are now covered by a stronger automated test in PR #151.
-- All PostgreSQL-backed CI fixtures are being moved to PostgreSQL 17, matching production; PR #151 is open pending CI.
+- All PostgreSQL-backed CI fixtures now run on PostgreSQL 17, matching production. PR #151 merged as `70f9ab36f2141b7613490b9f1fe82aece882a7d7`; all 7 CI jobs passed, including build/tests, schema migration, schema cutover, Edge Functions, Aviator lease, recovery/Realtime, and tick-sequence tests.
 - Exact applied SQL recovery is still incomplete for many of the 44 applied-only ledger rows. GitHub commit search found some historical implementation commits, but did not recover the exact original migration files for the full applied ledger.
 - The current root migration directory is **not yet a safe clean-bootstrap sequence**. It contains source-only historical copies, one known incompatible shared-pool migration, duplicate timestamp prefixes, and a pending Realtime sequence migration.
 - No current-ledger upgrade replay can be declared safe until the historical SQL mapping is complete and the replay has been executed against a disposable copy with synthetic data.
