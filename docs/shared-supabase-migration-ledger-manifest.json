@@ -618,7 +618,6 @@
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025053037_shared_aviator_wallet_operations.sql",
-    "20261025110000_shared_aviator_wallet_operations.sql",
     "20261107192153_aviator_scheduler_guard_security_performance.sql",
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
@@ -721,7 +720,6 @@
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025053037_shared_aviator_wallet_operations.sql",
-    "20261025110000_shared_aviator_wallet_operations.sql",
     "20261107192153_aviator_scheduler_guard_security_performance.sql",
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
@@ -1135,6 +1133,7 @@
   },
   "legacyArchivedMigrationFiles": [
     "20261025090000_aviator_isolated_schema.sql",
+    "20261025110000_shared_aviator_wallet_operations.sql",
     "20261025130000_aviator_round_lifecycle.sql",
     "20261025150000_aviator_bet_intent_outbox.sql",
     "20261025160000_fix_aviator_bet_intent_idempotency.sql",
