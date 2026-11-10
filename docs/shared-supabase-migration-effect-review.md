@@ -92,3 +92,13 @@ The following live function objects and signatures were confirmed present. MD5 v
 ## Production impact
 
 This pass performed read-only catalog queries only. No production DDL, migration-history updates, wallet/bet/round/settlement mutations, or scheduler changes were made.
+
+
+## Additional live/source SQL comparisons (read-only, 2026-11-10)
+
+The following checks compare the normalized PL/pgSQL function bodies in the source files with the live `pg_get_functiondef` output. Equality here confirms the function body currently deployed, but does not by itself prove that every statement in the migration file (ACLs, comments, triggers, transaction wrappers, or other functions) is identical to the historical applied migration.
+
+- `20261021190000_add_authoritative_game_bet_rpc.sql`: the live bodies of `platform.place_authoritative_game_bets_atomic(text,uuid,jsonb,text)` and `platform.resolve_token_request_atomic(uuid,uuid,text,text)` both match the source bodies exactly after whitespace normalization. This is strong evidence that the key RPC bodies from the source candidate are present in production. The applied ledger row is still named/versioned `20261021115840_add_authoritative_game_bet_and_request_rpcs`; recover the original applied migration before changing filenames or history.
+- `20261021193000_add_atomic_user_creation_rpcs.sql`: the live bodies of `platform.create_user_atomic(uuid,text,text,text,user_role_enum,bigint)` and `platform.register_referral_atomic(text,text,text,text)` both match the source bodies exactly after whitespace normalization. The applied ledger row is `20261021120305_add_atomic_user_creation_rpcs`. Do not replay this later-timestamp source copy.
+- Live `aviator.place_crash_bet_atomic`, `aviator.cashout_crash_bet_atomic`, and `aviator.settle_crash_round_atomic` all use the hardened `pg_catalog, pg_temp` search path. The live bet function also rejects idempotency keys longer than 119 characters; the cashout function enforces its 96-character limit. These checks support the expected effects of the search-path and key-length hardening candidates, but exact historical SQL comparison remains open.
+- `20261021120000_protect_reserved_wallet_balances.sql` does **not** have a body identical to the current live `wallet.wallet_transfer_atomic`; the current live body is longer. The adjacent `20261021120000_wallet_transfer_api_boundary.sql` wrapper body also does not match the current live implementation. Treat these as historical revisions superseded by later wallet changes, not as proof that either source file can be replayed.
