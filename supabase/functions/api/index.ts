@@ -3,7 +3,7 @@ import { evaluateGameActivationReadiness } from "./activation.ts";
 import bcrypt from "npm:bcryptjs@2.4.3";
 import { corsHeaders, jsonResponse, signBigDaddyToken, verifyBigDaddyToken, type BigDaddyClaims } from "./bigdaddy-jwt.ts";
 import { handleAviatorApi } from "./aviator.routes.ts";
-import { applyExplicitCorsOrigin } from "../../../shared/src/cors.ts";
+import { applyExplicitCorsOrigin } from "./cors.ts";
 
 type Role = "OWNER" | "SUPER_ADMIN" | "ADMIN" | "PLAYER";
 type Actor = BigDaddyClaims & { parentId: string | null };
