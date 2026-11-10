@@ -15,7 +15,7 @@ const DEFAULT_RETRY_DELAYS_MS = [100, 250, 500] as const;
  * specific failure is safe. Other errors are returned immediately.
  */
 export async function retryTimedOutTick<T>(
-  tick: () => Promise<TickRpcResult<T>>,
+  tick: () => PromiseLike<TickRpcResult<T>>,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) =>
     new Promise((resolve) => setTimeout(resolve, milliseconds)),
   retryDelaysMs: readonly number[] = DEFAULT_RETRY_DELAYS_MS,
