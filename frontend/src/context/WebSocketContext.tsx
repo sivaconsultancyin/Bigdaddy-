@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { useAuth } from './AuthContext';
 import { ApiClient } from '../api/client';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
-import { isNewerRealtimeEvent, readRealtimeEventCursor, readRunningRealtimeMultiplier, type RealtimeEventCursor } from '../../../shared/src/aviatorRealtime';
+import { isNewerRealtimeEvent, isNewerRoundSnapshot, readRealtimeEventCursor, readRunningRealtimeMultiplier, type RealtimeEventCursor } from '../../../shared/src/aviatorRealtime';
 import { SUPABASE_API_BASE, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, hasSupabaseRealtimeConfig } from '../api/supabaseConfig';
 import {
   AndarBaharRound,
@@ -136,6 +136,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     crashMultiplier?: number;
   }>({ status: 'WAITING' });
   const roundStateRef = useRef(roundState);
+  const latestObservedRoundRef = useRef<{ id?: string; roundNumber?: number; status: 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED' } | null>(null);
   roundStateRef.current = roundState;
   const [recentHistory, setRecentHistory] = useState<Array<{ roundNumber: number; crashMultiplier: number }>>([]);
 
@@ -504,21 +505,46 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           if (key === 'aviator') {
             if (data.round) {
               const round = data.round;
-              setRoundState({
+              // A poll may have started before a Realtime transition and finish after
+              // it. Never let that stale snapshot roll the client back to an older
+              // round or an earlier lifecycle phase.
+              const incomingRound = {
                 id: round.id,
-                roundNumber: round.roundNumber,
-                status: round.status,
-                startTime: round.startedAt ? new Date(round.startedAt).getTime() - serverClockOffsetMs : undefined,
-                crashMultiplier: round.crashMultiplier ?? undefined,
-              });
-              // The API computes the live multiplier and caps it at the committed
-              // crash point. Never extrapolate on the client: doing so can show 1.50x
-              // even when the authoritative round crashed at 1.14x.
-              const authoritativeMultiplier = ['CRASHED', 'SETTLED'].includes(round.status)
-                ? round.crashMultiplier ?? round.multiplier ?? 1
-                : round.multiplier ?? 1;
-              setAuthoritativeMultiplier(Number(authoritativeMultiplier));
-              refreshWalletForResult('aviator', round);
+                roundNumber: Number(round.roundNumber),
+                status: round.status as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED',
+              };
+              const currentRound = latestObservedRoundRef.current ?? roundStateRef.current;
+              if (isNewerRoundSnapshot(incomingRound, currentRound)) {
+                latestObservedRoundRef.current = incomingRound;
+                setRoundState({
+                  id: round.id,
+                  roundNumber: round.roundNumber,
+                  status: round.status,
+                  startTime: round.startedAt ? new Date(round.startedAt).getTime() - serverClockOffsetMs : undefined,
+                  crashMultiplier: round.crashMultiplier ?? undefined,
+                });
+                // The API computes the live multiplier and caps it at the committed
+                // crash point. Never extrapolate on the client. Within a RUNNING
+                // round, retain the highest authoritative tick already observed.
+                const incomingMultiplier = Number(
+                  ['CRASHED', 'SETTLED'].includes(round.status)
+                    ? round.crashMultiplier ?? round.multiplier ?? 1
+                    : round.multiplier ?? 1,
+                );
+                const previousMultiplier = lastAuthoritativeMultiplierRef.current;
+                const sameRunningRound = round.status === 'RUNNING' &&
+                  previousMultiplier?.roundId === round.id;
+                const safeMultiplier = sameRunningRound
+                  ? Math.max(incomingMultiplier, previousMultiplier.value)
+                  : incomingMultiplier;
+                lastAuthoritativeMultiplierRef.current = {
+                  value: safeMultiplier,
+                  at: Date.now(),
+                  roundId: round.id,
+                };
+                setAuthoritativeMultiplier(safeMultiplier);
+                refreshWalletForResult('aviator', round);
+              }
             }
             if (Array.isArray(data.history)) {
               // History is durable: merge by round number so a transient empty/stale
@@ -660,33 +686,33 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const validStatus = ['WAITING', 'RUNNING', 'CRASHED', 'SETTLED'].includes(eventStatus ?? '');
 
         if (eventRoundId && validStatus) {
-          const currentRoundNumber = Number(roundStateRef.current.roundNumber ?? 0);
-          if (!Number.isFinite(eventRoundNumber) || eventRoundNumber >= currentRoundNumber) {
-            setRoundState((current) => {
-              const currentNumber = Number(current.roundNumber ?? 0);
-              const statusRank: Record<'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED', number> = {
-                WAITING: 0, RUNNING: 1, CRASHED: 2, SETTLED: 3,
-              };
-              const incomingStatus = eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED';
-              if (Number.isFinite(eventRoundNumber) && eventRoundNumber < currentNumber) return current;
-              if (current.id === eventRoundId && statusRank[incomingStatus] < statusRank[current.status]) return current;
-              return {
-                id: eventRoundId,
-                roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : current.roundNumber,
-                status: eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED',
-                startTime: payload.startedAt ? new Date(String(payload.startedAt)).getTime() : current.startTime,
-                // Public lifecycle events may include the crash target only after
-                // the round has ended. Never copy a hidden target into RUNNING UI state.
-                crashMultiplier: ['CRASHED', 'SETTLED'].includes(eventStatus ?? '') &&
-                  Number.isFinite(Number(payload.crashMultiplier))
-                  ? Number(payload.crashMultiplier)
-                  : current.crashMultiplier,
-              };
-            });
+          const incomingRound = {
+            id: eventRoundId,
+            roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : undefined,
+            status: eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED',
+          };
+          const currentRound = latestObservedRoundRef.current ?? roundStateRef.current;
+          if (isNewerRoundSnapshot(incomingRound, currentRound)) {
+            latestObservedRoundRef.current = incomingRound;
+            setRoundState((current) => ({
+              id: eventRoundId,
+              roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : current.roundNumber,
+              status: eventStatus as 'WAITING' | 'RUNNING' | 'CRASHED' | 'SETTLED',
+              startTime: payload.startedAt ? new Date(String(payload.startedAt)).getTime() : current.startTime,
+              // Public lifecycle events may include the crash target only after
+              // the round has ended. Never copy a hidden target into RUNNING UI state.
+              crashMultiplier: ['CRASHED', 'SETTLED'].includes(eventStatus ?? '') &&
+                Number.isFinite(Number(payload.crashMultiplier))
+                ? Number(payload.crashMultiplier)
+                : current.crashMultiplier,
+            }));
           }
         }
 
         if (eventRoundId && validMultiplier && eventStatus === 'RUNNING') {
+          // Ignore a late tick from a previous round even when the database event
+          // sequence is unavailable during migration reconciliation.
+          if (latestObservedRoundRef.current?.id !== eventRoundId) return;
           const previous = lastAuthoritativeMultiplierRef.current;
           if (!previous || previous.roundId !== eventRoundId || eventMultiplier >= previous.value) {
             lastAuthoritativeMultiplierRef.current = { value: eventMultiplier, at: Date.now(), roundId: eventRoundId };
