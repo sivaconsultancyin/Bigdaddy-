@@ -125,7 +125,7 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 ### In progress / not applied to production
 - **Legacy isolated Aviator implementation:** the eleven old migrations, four old Edge Functions, and redundant separate security/index candidate are archived under `supabase/archive/legacy-isolated-aviator/`; they are not part of the active CLI or deployment paths.
-- **Migration ledger drift:** Issue #120 remains open. Single-project ledger: 65 applied versions vs 57 active root migration files (21 exact matches, 44 applied-only, 36 file-only, 2 duplicate prefixes). The eleven former isolated-project migrations, one separate security/index candidate, and four inactive Edge Functions are archived outside active Supabase CLI paths. PR #143/#146/#148 maintain the inventory manifest and CI guard. The remaining 65/58 drift is not yet reconciled.
+- **Migration ledger drift:** Issue #120 remains open. Single-project ledger: 65 applied versions vs 57 active root migration files (21 exact matches, 44 applied-only, 36 file-only, 2 duplicate prefixes). The eleven former isolated-project migrations, one separate security/index candidate, and four inactive Edge Functions are archived outside active Supabase CLI paths. PR #143/#146/#148 maintain the inventory manifest and CI guard. The remaining 65/57 drift is not yet reconciled.
 - **Production Phase 1:** Issue #123 remains open for clean bootstrap/upgrade tests, financial reconciliation queries, and additional transaction rollback coverage.
 - **Frontend Vite environment migration:** Issue #144 remains open. Project URLs and publishable-key fallbacks must move to validated build-time environment variables after the Render workspace is confirmed.
 
