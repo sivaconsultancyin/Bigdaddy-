@@ -126,6 +126,8 @@ Deno.serve(async (req: Request) => {
   const actionCounts: Record<string, number> = {};
   let totalTickRetries = 0;
   let lastAction: unknown = null;
+  let diceTickFailures = 0;
+  let lastDiceAction: unknown = null;
 
   while (Date.now() - started < runForMs) {
     const tickStarted = Date.now();
@@ -153,6 +155,8 @@ Deno.serve(async (req: Request) => {
         ticksCompleted: tickLatenciesMs.length - 1,
         tickLatencyMs: summarizeLatencies(tickLatenciesMs.slice(0, -1)),
         tickRetries: totalTickRetries,
+        diceTickFailures,
+        lastDiceAction,
       }, 503);
     }
 
@@ -162,6 +166,17 @@ Deno.serve(async (req: Request) => {
         ? String((lastAction as { action: unknown }).action)
         : "unknown";
     actionCounts[action] = (actionCounts[action] ?? 0) + 1;
+
+    // The existing leased worker also advances Dice. The Dice RPC is independently
+    // serialized in PostgreSQL and is a no-op while Dice remains COMING_SOON.
+    // Keep Dice failures isolated so they cannot stop the Aviator engine.
+    const diceTick = await db.schema("dice").rpc("advance_round");
+    if (diceTick.error) {
+      diceTickFailures += 1;
+      console.error("Dice engine RPC failed:", diceTick.error.code ?? "unknown");
+    } else {
+      lastDiceAction = diceTick.data ?? null;
+    }
 
     if (Date.now() >= nextHeartbeatAt) {
       const heartbeat = await db.schema("aviator").rpc(
@@ -222,6 +237,8 @@ Deno.serve(async (req: Request) => {
       ticksCompleted: tickLatenciesMs.length,
       tickLatencyMs: summarizeLatencies(tickLatenciesMs),
       actionCounts,
+      diceTickFailures,
+      lastDiceAction,
     }, 200);
   }
 
@@ -235,5 +252,7 @@ Deno.serve(async (req: Request) => {
     actionCounts,
     tickRetries: totalTickRetries,
     lastAction,
+    diceTickFailures,
+    lastDiceAction,
   });
 });
