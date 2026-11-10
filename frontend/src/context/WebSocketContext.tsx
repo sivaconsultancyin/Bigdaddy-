@@ -3,12 +3,7 @@ import { useAuth } from './AuthContext';
 import { ApiClient } from '../api/client';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import { isNewerRealtimeEvent, readRealtimeEventCursor, readRunningRealtimeMultiplier, type RealtimeEventCursor } from '../../../shared/src/aviatorRealtime';
-
-const SUPABASE_REALTIME_URL = 'https://nzvpuoeibqrpcltrszvr.supabase.co';
-const SUPABASE_REALTIME_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_3StQxumtXcMHvM9i3bTldw_e1toL-FR';
-const supabaseRealtime = createClient(SUPABASE_REALTIME_URL, SUPABASE_REALTIME_KEY, {
-  realtime: { params: { eventsPerSecond: 10 } },
-});
+import { SUPABASE_API_BASE, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, hasSupabaseRealtimeConfig } from '../api/supabaseConfig';
 import {
   AndarBaharRound,
   AndarBaharHistoryItem,
@@ -23,6 +18,14 @@ import {
   DiceRoundBet,
   DiceRoundStatus,
 } from '../../../shared/src/types';
+
+// Realtime is disabled safely when local development has no public Supabase config.
+// Production values are injected by the hosting environment at build time.
+const supabaseRealtime = hasSupabaseRealtimeConfig
+  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      realtime: { params: { eventsPerSecond: 10 } },
+    })
+  : null;
 
 export interface RouletteLiveState {
   id: string;
@@ -259,7 +262,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       pollingActiveRef.current = false;
     };
     disposedRef.current = false;
-    const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
+    const apiBase = import.meta.env.PROD ? SUPABASE_API_BASE : (import.meta.env.VITE_API_BASE_URL || '/api');
     // Aviator is served by the same canonical Supabase Edge API as every other game.
     // Do not retain a second-project URL or publishable-key fallback in the client.
     const scheduleNextPoll = (pollStartedAt: number) => {
@@ -301,6 +304,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       inFlight = true;
       const pollStartedAt = Date.now();
       try {
+        if (!apiBase) {
+          setApiHealth('offline');
+          setRoundDataStatus('offline');
+          setLastRoundError('Production API is not configured. Set VITE_SUPABASE_URL in the frontend environment.');
+          return;
+        }
         const now = Date.now();
         // Health is checked independently from game state. A healthy process with a
         // stalled game endpoint is reported as degraded, not mistaken for a healthy round feed.
@@ -615,8 +624,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // The database broadcasts only safe public round lifecycle fields on this
     // public topic. Never subscribe to or broadcast wallet, bet, or seed secrets.
-    const channel = supabaseRealtime
-      .channel('aviator:rounds', { config: { broadcast: { self: false } } })
+    if (supabaseRealtime) {
+      const channel = supabaseRealtime
+        .channel('aviator:rounds', { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'round_state_changed' }, ({ payload }) => {
         if (stopped || disposedRef.current || !payload || typeof payload !== 'object') return;
 
@@ -715,7 +725,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           else void poll();
         }
       });
-    realtimeChannelRef.current = channel;
+      realtimeChannelRef.current = channel;
+    }
     void poll();
   };
 
@@ -731,7 +742,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       for (const controller of pollAbortControllersRef.current) controller.abort();
       pollAbortControllersRef.current.clear();
-      if (realtimeChannelRef.current) {
+      if (realtimeChannelRef.current && supabaseRealtime) {
         void supabaseRealtime.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
       }
