@@ -12,7 +12,7 @@ BEGIN
     RAISE EXCEPTION 'service_role grant was unexpectedly removed';
   END IF;
   IF to_regclass('aviator.idx_game_bets_round') IS NULL
-     OR to_regclass('aviator.idx_game_settlements_round') IS NULL THEN
+     OR to_regclass('aviator.idx_game_settlements_round_id') IS NULL THEN
     RAISE EXCEPTION 'Aviator round foreign-key indexes are missing';
   END IF;
   IF NOT EXISTS (
