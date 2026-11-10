@@ -1,5 +1,6 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 import { SUPABASE_API_BASE } from './supabaseConfig';
+import { buildRouletteBetOperation } from './idempotency';
 
 // Production API is served directly by the configured canonical Supabase Edge Function.
 // The function strips the /functions/v1/api prefix and routes /auth, /games, /wallet, etc.
@@ -330,12 +331,23 @@ export class ApiClient {
     });
   }
 
-  public static placeRouletteBet(payload: { bets: Array<{ type: string; numbers: number[]; amount: string }> }) {
-    return this.request('/games/roulette/bet', {
+  public static async placeRouletteBet(
+    payload: { bets: Array<{ type: string; numbers: number[]; amount: string }> },
+    roundId: string,
+    userId: string,
+  ) {
+    // Keep the key stable while the server outcome is uncertain. If the server
+    // committed but the response was lost, retrying the same intent replays the
+    // original bet instead of locking the player's stake a second time.
+    const operation = buildRouletteBetOperation(userId, roundId, payload);
+    const idempotencyKey = await this.pendingKey(operation, 'ROULETTE_BET');
+    const result = await this.request('/games/roulette/bet', {
       method: 'POST',
-      headers: { 'Idempotency-Key': 'roulette-bet-' + crypto.randomUUID() },
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
     });
+    this.clearPendingKey(operation);
+    return result;
   }
 
   // Teen Patti Royal
