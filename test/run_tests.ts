@@ -198,6 +198,23 @@ async function runTestSuite() {
     assert.ok(source.includes("scheduleNextPoll(pollStartedAt)"));
   });
 
+  test('Aviator state polling uses the canonical shared Supabase API only', () => {
+    const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(source.includes('const requestBase = apiBase;'));
+    assert.ok(!source.includes('yrleubhpiqejfvingqfj'));
+    assert.ok(!source.includes('VITE_AVIATOR_API_BASE_URL'));
+    assert.ok(!source.includes('VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY'));
+  });
+
+  test('Realtime telemetry counts missing tick sequences and rejected stale events', () => {
+    const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(source.includes('realtimeSequenceGapCount: number;'));
+    assert.ok(source.includes('realtimeStaleEventCount: number;'));
+    assert.ok(source.includes('setRealtimeStaleEventCount((count) => count + 1)'));
+    assert.ok(source.includes('eventCursor.tickSequence - previousCursor.tickSequence - 1'));
+    assert.ok(source.includes('realtimeSequenceGapCount,\n        realtimeStaleEventCount,'));
+  });
+
   test('Aviator multiplier resets when the authoritative round ID changes', () => {
     const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
     assert.ok(source.includes('roundState.id !== animatedRoundIdRef.current'));
