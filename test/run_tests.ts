@@ -109,7 +109,7 @@ async function runTestSuite() {
     assert.deepStrictEqual(manifest.sharedFileOnly, sourceOnlyFiles);
     const appliedNames = new Set((manifest.appliedOnly as Array<{ name: string }>).map((entry) => entry.name));
     const sameNameDifferentVersion = sourceOnlyFiles.filter((name: string) =>
-      appliedNames.has(name.replace(/^\\d{14}_/, '').replace(/\\.sql$/, '')),
+      appliedNames.has(name.replace(/^\d{14}_/, '').replace(/\.sql$/, '')),
     );
     assert.strictEqual(sameNameDifferentVersion.length, 27);
     assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 9);
