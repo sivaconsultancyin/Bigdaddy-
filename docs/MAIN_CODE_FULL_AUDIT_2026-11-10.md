@@ -12,21 +12,21 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 ## Findings
 
-### P0 — Release blockers / immediate containment
+### Historical P0 findings — resolved for the current deployment path (PR #131)
 
 #### BD-AUD-001 — Legacy wallet routes still perform financial operations against process-local in-memory storage
 - File: `backend/src/routes/wallet.routes.ts`
 - Evidence: wallet read, ledger, recipient lookup, transfer and `executeTransfer` all call `db.*` from `backend/src/db/storage`; transfer idempotency key is generated from `Date.now()`.
 - Impact: if these routes are mounted/reachable in any deployed server mode, balances and ledger are not durable/shared across instances; restart or multiple instances can diverge. A timestamp-derived key is not a client-stable retry key, so retries can double-submit.
-- Recommendation: remove or hard-disable legacy financial routes in production; route all wallet mutations through authenticated PostgreSQL RPCs with client-provided idempotency keys and transactionally enforced hierarchy/available-balance checks. Add an integration test proving this route cannot be reached in production.
-- Validation needed: enumerate every mounted route in both server entry points and test deployed route map.
+- Recommendation: keep this legacy router unmounted or remove it; all production wallet mutations must remain on authenticated PostgreSQL RPCs.
+- Status: PR #131 blocks the in-memory StorageEngine in production and removes eager production imports. The active Render service runs `render-proxy.ts` (Supabase Edge API proxy); `server.ts` mounts only the production routers and does not mount this legacy wallet router. This is not currently reachable through the verified production route map.
 
 #### BD-AUD-002 — Development StorageEngine seeds known demo accounts and passwords
 - File: `backend/src/db/storage.ts`
 - Evidence: constructor seeds owner, super-admin, admin and player records with predictable usernames/emails and literal passwords before bcrypt hashing.
 - Impact: dangerous if the in-memory engine is accidentally used in production, shared demo credentials are exposed, and test/demo identities can be mistaken for live accounts.
-- Recommendation: remove seeded credentials from production code paths; seed only disposable test fixtures with random credentials. Fail startup if production can instantiate the in-memory storage engine. Rotate any credentials if these defaults were ever enabled on a reachable deployment.
-- Validation needed: verify production build and route graph never import/use seeded storage for financial/auth paths.
+- Recommendation: keep demo seed credentials isolated to disposable development/test fixtures and never import the in-memory store in production.
+- Status: PR #131 blocks production use of the StorageEngine and removes eager production imports. The active Render proxy does not mount the Express in-memory routes; no evidence of these demo credentials being reachable in the current production path was found. Keep the source cleanup as a maintenance task, not a current P0.
 
 ### P1 — High risk
 
@@ -40,13 +40,12 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 #### BD-AUD-004 — Legacy direct wallet transfer does not use a stable caller idempotency key
 - File: `backend/src/routes/wallet.routes.ts`
 - Evidence: `idempotencyKey: TRANSFER_<sender>_<recipient>_<Date.now()>`.
-- Impact: network retries produce new keys; duplicate transfers are possible if this route is live and the client retries after a timeout.
-- Recommendation: require and validate `Idempotency-Key`; persist request fingerprint and result atomically; reject same key with a different sender/recipient/amount; test concurrent duplicate submissions.
-- Note: this is a distinct concrete defect within the legacy in-memory path and is covered by BD-AUD-001's containment recommendation.
+- Impact: network retries would produce new keys if this legacy route were mounted.
+- Status: the route is not mounted by the verified production entry points; PR #131 contains the production StorageEngine guard. The production wallet path uses the Supabase/PostgreSQL idempotent RPCs. Retain a source-level cleanup/test task, but this is not a current production transfer path.
 
 #### BD-AUD-005 — Shared Supabase migration ledger and repository migration files are materially out of sync
 - File: `docs/shared-supabase-migration-ledger-reconciliation.md`
-- Evidence from the documented read-only snapshot (2026-11-09): 65 applied ledger entries vs 55 SQL files; 21 exact version+name matches; 44 applied entries without an exact filename match; 34 repository files not represented by an exact applied version+name; two duplicate version prefixes.
+- Evidence from the documented read-only snapshot (2026-11-09): 65 applied ledger entries vs 57 active root migration files; 21 exact version+name matches; 44 applied entries without an exact filename match; 36 repository files not represented by an exact applied version+name; two duplicate version prefixes.
 - Impact: a normal migration push may attempt already-applied effects or apply migrations in an unsafe order; financial schema/function behavior may diverge.
 - Recommendation: do not run `supabase db push`, migration repair, or manual production DDL until a row-by-row source/effect reconciliation and restore-tested rollback plan are approved. Resolve duplicate timestamps and test clean bootstrap plus upgrade-from-live-ledger in disposable PostgreSQL.
 - Status: already documented in merged PR #124; remains an operational blocker until reconciled.
@@ -60,9 +59,8 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 #### BD-AUD-007 — Two Aviator API implementations create potential contract and authorization drift
 - Files: `supabase/functions/api/aviator.routes.ts`, `supabase/functions/aviator-api/index.ts`.
-- Evidence: both implement Aviator bet/state paths; the dedicated function independently verifies JWT and queries the shared auth project, while the general API uses a separate actor resolver and authenticated atomic RPC path.
-- Impact: clients may hit different implementations depending on URL/configuration, with different idempotency constraints and response behavior.
-- Recommendation: choose one canonical API and route all clients through it; if both are required, extract shared contract fixtures and run identical auth, validation, idempotency and response tests against both.
+- Evidence: the historical dedicated `aviator-api` implementation was archived by PR #148; the active function inventory contains the canonical `api` and `aviator-engine` functions, not a separately deployed `aviator-api`. No `aviator-api` requests appeared in the last 24-hour function-edge logs.
+- Status: canonical routing was consolidated by PR #148. The remaining live deployment drift between deployed `api` version 36 and current main is separately tracked in #163.
 
 #### BD-AUD-008 — Aviator worker failure paths need explicit lease-release/expiry observability tests
 - File: `supabase/functions/aviator-engine/index.ts`
@@ -82,27 +80,19 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 #### BD-AUD-010 — Realtime client configuration is hard-coded to a specific Supabase project
 - File: `frontend/src/context/WebSocketContext.tsx`
-- Evidence: Realtime URL and fallback publishable key are literal constants.
-- Impact: staging/fork/local environments can silently subscribe to the production project; project migration requires code changes.
-- Recommendation: use validated Vite environment variables for URL and publishable key, fail clearly when absent, and ensure only publishable keys are shipped to browsers.
+- Status: resolved in main by PR #133 and the single-project cutover. `frontend/src/api/supabaseConfig.ts` now reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; hard-coded project/key fallbacks are no longer present. Issue #144 remains open only for confirming the Render build environment variables and live API/Realtime behavior.
 
 #### BD-AUD-011 — Proxy health/readiness endpoints report process health, not upstream readiness
 - File: `render-proxy.ts`
-- Evidence: `/health` always returns status ok and `/ready` returns ready with configured upstream string without checking upstream connectivity.
-- Impact: Render may mark the proxy healthy while Supabase Edge API is unavailable; monitoring can miss user-facing outages.
-- Recommendation: keep liveness separate; make readiness perform a bounded, non-mutating upstream health check and return 503 on dependency failure. Avoid exposing sensitive upstream configuration in public responses.
+- Status: resolved in main by PR #136. `/health` is liveness; `/ready` performs a bounded, non-mutating Supabase Edge API health request and returns 503 when the upstream is unavailable. The deployed Render proxy's last observed live deploy remains older than current main and is not in the frontend's active request path.
 
 #### BD-AUD-012 — API proxy buffers complete upstream responses and permits 40-second requests
 - File: `render-proxy.ts`
-- Evidence: upstream response is fully buffered with `arrayBuffer()`; timeout is 40 seconds.
-- Impact: large responses consume memory per request and long waits can tie up proxy resources during incidents.
-- Recommendation: stream response bodies where supported, cap request/response sizes, set endpoint-specific timeouts and add concurrency/rate limits on sensitive endpoints.
+- Status: resolved in main by PR #137. The proxy streams upstream response bodies, enforces a response-size cap, and bounds concurrent requests. The deployed Render proxy's observed live version is older than current main; the frontend currently calls Supabase Edge API directly.
 
 #### BD-AUD-013 — CORS defaults to wildcard when explicit allowed origins are absent
 - File: `supabase/functions/api/index.ts`
-- Evidence: if `BIGDADDY_ALLOWED_ORIGINS` is empty, Access-Control-Allow-Origin is `*`.
-- Impact: any browser origin can make cross-origin requests; CORS is not authorization, but a strict production origin allowlist reduces exposure and accidental embedding.
-- Recommendation: require a non-empty production origin allowlist and fail production configuration validation if absent. Keep native app origins explicitly documented.
+- Status: resolved in current main by PR #138; the canonical API uses an explicit origin allowlist without wildcard fallback. The deployed Supabase `api` v36 source still contains a conditional wildcard fallback when `BIGDADDY_ALLOWED_ORIGINS` is empty; that deployment-source mismatch is tracked in P1 issue #163. Whether the deployed fallback is active is unverified because environment values were not inspected.
 
 ## Positive controls observed
 
@@ -117,23 +107,23 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 ## Remediation status (rechecked 2026-11-10)
 
 ### Merged and CI-verified
-- **BD-AUD-001 / BD-AUD-002 / BD-AUD-004:** PR #131 blocks the in-memory StorageEngine in production and removes eager production imports of seeded storage. Issue #125 closed.
-- **BD-AUD-010 / BD-AUD-011 / BD-AUD-012 / BD-AUD-013:** PRs #133, #136, #137 and #138 add upstream readiness, streaming/response caps, bounded proxy concurrency, explicit Edge CORS origins, and trusted/untrusted-origin tests. Issue #128 closed.
-- **BD-AUD-003 / BD-AUD-007:** PR #148 consolidates Aviator HTTP routing on the single active Supabase project, archives the inactive API/workers/migrations, and adds single-project regression tests. All six CI jobs passed; Issue #126 closed.
+- **BD-AUD-001 / BD-AUD-002 / BD-AUD-004:** PR #131 blocks the in-memory StorageEngine in production and removes eager production imports of seeded storage. Current Render/Express route-map inspection confirms the legacy wallet router is not mounted in the active production path.
+- **BD-AUD-010 / BD-AUD-011 / BD-AUD-012 / BD-AUD-013:** PRs #133, #136, #137 and #138 add environment-based frontend config, upstream readiness, streaming/response caps, bounded proxy concurrency, and explicit Edge CORS origins. Current main is hardened; the deployed API source drift remains in #163 and Render env verification remains in #144.
+- **BD-AUD-003 / BD-AUD-007:** PR #148 consolidates Aviator HTTP routing on the single active Supabase project, archives the inactive API/workers/migrations, and adds single-project regression tests. The deployed `api` function is still stale relative to current main; see #163.
 - **BD-AUD-006 (partial):** PR #135 adds disposable PostgreSQL concurrent wallet-transfer/idempotency tests. PR #139 adds worker lease fault/expiry tests. Issue #127 remains open for concurrent Aviator cashout/settlement/refund and rollback-injection coverage.
 - **BD-AUD-008 / BD-AUD-009 (partial):** PR #139 tests lease ownership and expiry. PR #146 adds per-round tick sequence, server timestamps, stale-event rejection, and Realtime lag/reconnect/polling-fallback diagnostics. Sequence-gap counters, missing-terminal-event cases, and mobile/staging E2E remain open.
 
 ### In progress / not applied to production
 - **Legacy isolated Aviator implementation:** the eleven old migrations, four old Edge Functions, and redundant separate security/index candidate are archived under `supabase/archive/legacy-isolated-aviator/`; they are not part of the active CLI or deployment paths.
 - **Migration ledger drift:** Issue #120 remains open. Single-project ledger: 65 applied versions vs 57 active root migration files (21 exact matches, 44 applied-only, 36 file-only, 2 duplicate prefixes). The eleven former isolated-project migrations, one separate security/index candidate, and four inactive Edge Functions are archived outside active Supabase CLI paths. PR #143/#146/#148 maintain the inventory manifest and CI guard. The remaining 65/57 drift is not yet reconciled.
-- **Production Phase 1:** Issue #123 remains open for clean bootstrap/upgrade tests, financial reconciliation queries, and additional transaction rollback coverage.
-- **Frontend Vite environment migration:** Issue #144 remains open. Project URLs and publishable-key fallbacks must move to validated build-time environment variables after the Render workspace is confirmed.
+- **Production Phase 1:** Issues #120 and #127 remain open for clean bootstrap/upgrade tests, migration provenance, concurrent financial flows, and rollback injection.
+- **Frontend Vite environment:** the code migration is complete; issue #144 remains open until Render's `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are independently confirmed and live API/Realtime behavior is tested.
 
 ## Recommended remediation order
 
 1. Complete single-project consolidation: route all Aviator HTTP calls through the canonical API and keep abandoned migration/function sources outside active Supabase CLI paths.
 2. Complete API auth, validation, idempotency, and response contract tests on the canonical Aviator routes (BD-AUD-003/007).
-3. Reconcile the single project's 65 applied migration effects against its 58 active source files and run clean-bootstrap/upgrade tests before any production migration push (BD-AUD-005).
+3. Reconcile the single project's 65 applied migration effects against its 57 active source files and run clean-bootstrap/upgrade tests before any production migration push (BD-AUD-005).
 4. Add concurrent Aviator cashout/settlement/refund tests and rollback injection, then run staging end-to-end financial flows (BD-AUD-006).
 5. Complete Realtime sequence-gap/terminal-event coverage and mobile end-to-end validation (BD-AUD-008/009).
 6. Move frontend Supabase URLs and publishable keys to validated Vite environment variables after Render workspace confirmation (BD-AUD-010–013).
@@ -143,7 +133,7 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 - Static code review only; the complete 216-file tree was inventoried, and key production/runtime files were inspected, but not every line of every file was exhaustively reviewed.
 - No production login, bet, cashout, settlement, wallet transfer, or refund was executed.
 - No live database DDL, migration repair, schema mutation, or financial data change was performed.
-- No Render deployment logs, Supabase live function logs, full database catalog, backup restore, or mobile end-to-end session was verified in this audit.
+- Render service/deploy metadata and Supabase live function logs were inspected; selected schemas/tables and aggregate financial invariants were checked read-only. Full Render deployment logs, a complete database catalog export, backup restore, and mobile end-to-end session remain unverified.
 - Findings about route reachability must be confirmed against the deployed Render start command and deployed Supabase function configuration before declaring a specific legacy endpoint externally exploitable.
 
 ## Related repository work
@@ -191,3 +181,19 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 - This recheck used read-only GitHub, Supabase metadata/SQL, Edge Function source, and Render service/deploy metadata.
 - No production Edge Function deployment, Render environment-variable change, migration repair, production DDL, wallet/bet/round mutation, game activation, or financial transaction was performed.
 - The deployed API environment secrets and actual origin allowlist values were not exposed or inspected. The wildcard CORS branch is therefore a code-path risk; whether it is active in the current environment remains unverified.
+
+
+## Additional production recheck — 2026-11-10
+
+### New findings and fixes
+- #165 / PR #166: Roulette bet retries previously generated a new idempotency key after an ambiguous network failure. PR #166 implements a persisted, stable key scoped to user + round + canonical payload; all 7 CI jobs passed. Merge is held because the Render frontend auto-deploys from main and requires separate confirmation.
+- #167: one production Aviator tick timed out in `realtime.send` while inserting into `realtime.messages` (SQLSTATE 57014), followed by an engine RPC failure and continuation 503. The worker lease is currently valid with a fresh heartbeat. Track timeout/backpressure/fault-injection work in #167.
+- #168 / PR #169: the Aviator activation route was omitted from the explicit funded-pool guard and fell through to a generic activation path. PR #169 adds an explicit allowlist, verifies catalog/game-pool/wallet identity, requires positive available balance after reservations, checks the current Aviator round state, and fails closed for unknown games. Its current CI run is in progress; no production activation was performed.
+- #163: deployed Supabase `api` version 36 (last updated 2026-10-24) differs materially from current main. No API 5xx responses were observed in the last 24-hour log window, but production source parity remains unresolved.
+- Read-only financial invariants passed: total minted equals aggregate wallet balances; wallet balances match ledger-derived balances; Aviator reserved balance matches pending maximum liability; settled bets have settlement rows; the only single-entry transaction is the expected initial supply credit.
+- The only open code PRs intended for main at this recheck are #152 (blocked migration restoration), #166 (CI passed, deployment gate), and #169 (activation guard, CI pending). PR #155 and #164 were merged; isolated-project PR #123 was closed as obsolete.
+
+### Remaining release blockers
+- Migration ledger/source drift remains 65 applied versions vs 57 active root migration files (21 exact matches, 44 applied-only, 36 source-only, two duplicate prefixes); PR #152 is not safe to merge.
+- Production API deployment parity (#163), financial integration/concurrency/rollback tests (#127), and staging/mobile end-to-end evidence remain outstanding.
+- No production Edge Function deployment, Render environment-variable change, migration repair, production DDL, wallet/bet/round mutation, game activation, or financial transaction was performed.
