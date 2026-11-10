@@ -424,7 +424,7 @@ export class ApiClient {
     });
   }
 
-  public static verifyDiceRoll(payload: { serverSeed: string; clientSeed: string; nonce: number }) {
+  public static verifyDiceRoll(payload: { serverSeed: string }) {
     return this.request('/games/dice/verify', {
       method: 'POST',
       body: JSON.stringify(payload),
