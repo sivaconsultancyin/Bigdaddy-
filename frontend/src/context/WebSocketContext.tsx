@@ -58,6 +58,8 @@ interface WebSocketContextType {
   lastRealtimeEventAt: number | null;
   realtimeEventLagMs: number | null;
   realtimeEventCount: number;
+  realtimeSequenceGapCount: number;
+  realtimeStaleEventCount: number;
   pollingFallbackCount: number;
   realtimeReconnectCount: number;
   multiplier: number;
@@ -107,6 +109,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastRealtimeEventAt, setLastRealtimeEventAt] = useState<number | null>(null);
   const [realtimeEventLagMs, setRealtimeEventLagMs] = useState<number | null>(null);
   const [realtimeEventCount, setRealtimeEventCount] = useState(0);
+  const [realtimeSequenceGapCount, setRealtimeSequenceGapCount] = useState(0);
+  const [realtimeStaleEventCount, setRealtimeStaleEventCount] = useState(0);
   const [pollingFallbackCount, setPollingFallbackCount] = useState(0);
   const [realtimeReconnectCount, setRealtimeReconnectCount] = useState(0);
   const lastRealtimeEventCursorRef = useRef<RealtimeEventCursor | null>(null);
@@ -256,8 +260,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     disposedRef.current = false;
     const apiBase = import.meta.env.PROD ? 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
-    const aviatorApiBase = import.meta.env.VITE_AVIATOR_API_BASE_URL || 'https://yrleubhpiqejfvingqfj.supabase.co/functions/v1/aviator-api';
-    const aviatorApiKey = import.meta.env.VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_ld4nm-c1SKFdDeTOh31HkA_5KPAZSSy';
+    // Aviator is served by the same canonical Supabase Edge API as every other game.
+    // Do not retain a second-project URL or publishable-key fallback in the client.
     const scheduleNextPoll = (pollStartedAt: number) => {
       if (stopped || disposedRef.current) return;
       const running = roundStateRef.current.status === 'RUNNING';
@@ -406,9 +410,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               emitDiagnostic({ outcome: 'error', error: 'AUTH_REQUIRED', httpStatus: null, latencyMs: Math.round(performance.now() - started), pollingGapMs: previousStart === null ? null : Math.round(started - previousStart), receivedAt: null });
               return { key, data: null, error: 'AUTH_REQUIRED', receivedAt: null };
             }
-            const requestBase = key === 'aviator' ? aviatorApiBase : apiBase;
+            const requestBase = apiBase;
             const requestHeaders: Record<string, string> = { Accept: 'application/json', Authorization: `Bearer ${token}` };
-            if (key === 'aviator' && aviatorApiKey) requestHeaders.apikey = aviatorApiKey;
             const response = await fetch(requestBase + path + (key === 'aviator' ? `?request_id=${encodeURIComponent(requestId)}` : ''), {
               cache: 'no-store',
               headers: requestHeaders,
@@ -621,7 +624,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // authenticated state endpoint remains the fallback for missed events
         // and the source for user-specific wallet/bet data.
         const eventCursor = readRealtimeEventCursor(payload);
-        if (eventCursor && !isNewerRealtimeEvent(payload, lastRealtimeEventCursorRef.current)) return;
+        const previousCursor = lastRealtimeEventCursorRef.current;
+        if (eventCursor && !isNewerRealtimeEvent(payload, previousCursor)) {
+          setRealtimeStaleEventCount((count) => count + 1);
+          return;
+        }
+        if (eventCursor && previousCursor && eventCursor.roundId === previousCursor.roundId &&
+            eventCursor.tickSequence > previousCursor.tickSequence + 1) {
+          setRealtimeSequenceGapCount((count) => count + eventCursor.tickSequence - previousCursor.tickSequence - 1);
+        }
         if (eventCursor) lastRealtimeEventCursorRef.current = eventCursor;
         const receivedAt = Date.now();
         lastRealtimeEventAtRef.current = receivedAt;
@@ -789,6 +800,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         lastRealtimeEventAt,
         realtimeEventLagMs,
         realtimeEventCount,
+        realtimeSequenceGapCount,
+        realtimeStaleEventCount,
         pollingFallbackCount,
         realtimeReconnectCount,
         multiplier,
