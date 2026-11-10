@@ -102,7 +102,7 @@ async function runTestSuite() {
     assert.strictEqual(manifest.counts.sharedRepositoryFiles, 58);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
-    assert.strictEqual(manifest.counts.sharedFileOnly, 36);
+    assert.strictEqual(manifest.counts.sharedFileOnly, 37);
     const exactAppliedFiles = new Set(
       (manifest.appliedLedger as Array<{ version: string; name: string }>).map(
         (entry) => `${entry.version}_${entry.name}.sql`,
