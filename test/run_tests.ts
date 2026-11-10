@@ -201,14 +201,18 @@ async function runTestSuite() {
       runtimeRoundStatus: 'WAITING',
     };
     assert.deepStrictEqual(evaluateGameActivationReadiness(base), { ok: true, availablePoolBalance: '900' });
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, balance: '0', reservedBalance: '0' }).error, 'ALLOCATE_GAME_POOL_TOKENS_FIRST');
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, balance: '100', reservedBalance: '100' }).error, 'ALLOCATE_GAME_POOL_TOKENS_FIRST');
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, balance: '50', reservedBalance: '100' }).error, 'GAME_POOL_LIABILITY_MISMATCH');
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, mappedWalletId: 'pool-2' }).error, 'GAME_POOL_MAPPING_MISMATCH');
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, walletType: 'PLAYER' }).error, 'GAME_POOL_IDENTITY_MISMATCH');
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, walletGameCode: 'roulette' }).error, 'GAME_POOL_IDENTITY_MISMATCH');
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, runtimeRoundStatus: null }).error, 'AVIATOR_RUNTIME_UNAVAILABLE');
-    assert.strictEqual(evaluateGameActivationReadiness({ ...base, gameCode: 'teen_patti' }).error, 'GAME_NOT_AVAILABLE_IN_PRODUCTION');
+    const errorFor = (input: Parameters<typeof evaluateGameActivationReadiness>[0]) => {
+      const result = evaluateGameActivationReadiness(input);
+      return result.ok ? null : result.error;
+    };
+    assert.strictEqual(errorFor({ ...base, balance: '0', reservedBalance: '0' }), 'ALLOCATE_GAME_POOL_TOKENS_FIRST');
+    assert.strictEqual(errorFor({ ...base, balance: '100', reservedBalance: '100' }), 'ALLOCATE_GAME_POOL_TOKENS_FIRST');
+    assert.strictEqual(errorFor({ ...base, balance: '50', reservedBalance: '100' }), 'GAME_POOL_LIABILITY_MISMATCH');
+    assert.strictEqual(errorFor({ ...base, mappedWalletId: 'pool-2' }), 'GAME_POOL_MAPPING_MISMATCH');
+    assert.strictEqual(errorFor({ ...base, walletType: 'PLAYER' }), 'GAME_POOL_IDENTITY_MISMATCH');
+    assert.strictEqual(errorFor({ ...base, walletGameCode: 'roulette' }), 'GAME_POOL_IDENTITY_MISMATCH');
+    assert.strictEqual(errorFor({ ...base, runtimeRoundStatus: null }), 'AVIATOR_RUNTIME_UNAVAILABLE');
+    assert.strictEqual(errorFor({ ...base, gameCode: 'teen_patti' }), 'GAME_NOT_AVAILABLE_IN_PRODUCTION');
     const source = readFileSync('supabase/functions/api/index.ts', 'utf8');
     const guarded = source.slice(source.indexOf('const activationMatch'), source.indexOf('if (req.method === "GET" && path === "/games/list")'));
     assert.ok(guarded.includes('(aviator|roulette|dice|dragon-tiger|andar-bahar)'));
