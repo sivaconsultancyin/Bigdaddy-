@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { createHmac } from 'crypto';
 import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -426,6 +427,19 @@ async function runTestSuite() {
     const result = makeResult('dice', 'dice-test-seed');
     assert.ok(Number(result.number) >= 1 && Number(result.number) <= 10);
     assert.strictEqual(result.number, result.rolledNumber);
+  });
+
+  test('Production Dice verifier uses the exact authoritative engine HMAC contract', () => {
+    const seed = 'dice-test-seed';
+    const expectedHex = createHmac('sha256', seed).update('dice').digest('hex').slice(0, 13);
+    const expected = Number(BigInt('0x' + expectedHex) % 10n) + 1;
+    const actual = makeResult('dice', seed).number;
+    const edgeSource = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    assert.strictEqual(actual, expected);
+    assert.ok(edgeSource.includes('encoder.encode("dice")'));
+    assert.ok(edgeSource.includes('hmacHex.slice(0, 13)'));
+    assert.ok(edgeSource.includes('BigInt(`0x${hmacHex.slice(0, 13)}`) % 10n'));
+    assert.ok(edgeSource.includes('encoder.encode("dice")'));
   });
 
   test('Authoritative Dragon Tiger reveals two server-dealt cards and winner', () => {
