@@ -288,6 +288,15 @@ async function handle(req: Request) {
         round: null, history: [], bets: [], allBets: [],
       }, 200, origin);
     }
+    // Dice lifecycle is advanced by the shared authoritative worker and on state reads
+    // as a recovery path, so a missed worker tick cannot strand a round.
+    if (code === "dice") {
+      const { error: lifecycleError } = await db.schema("dice").rpc("advance_round");
+      if (lifecycleError) {
+        console.error("Dice lifecycle advance failed:", lifecycleError.code ?? "unknown");
+        return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     // Roulette's durable lifecycle is advanced only by this server-side RPC.
     // It creates persisted rounds and settles expired rounds in one database transaction.
     if (code === "roulette") {
@@ -310,7 +319,7 @@ async function handle(req: Request) {
       serverSeedHash: row.server_seed_hash, revealedServerSeed: row.status === "SETTLED" ? row.server_seed : null,
     };
     if (code === "roulette") { current.spinEndsAt = row.status === "RUNNING" && row.state?.spinStartedAt ? new Date(row.state.spinStartedAt).getTime() + 1500 : current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
-    if (code === "dice") { current.rolledNumber = result?.number ?? null; current.numberBetsAmount = {}; }
+    if (code === "dice") { current.rolledNumber = row.status === "SETTLED" ? result?.number ?? null : null; current.numberBetsAmount = {}; }
     if (code === "dragon_tiger") { current.dragonCard = result?.dragonCard ?? null; current.tigerCard = result?.tigerCard ?? null; current.winner = result?.winner ?? null; current.dragonBetAmount = "0"; current.tigerBetAmount = "0"; current.tieBetAmount = "0"; }
     if (code === "andar_bahar") { current.jokerCard = result?.jokerCard ?? null; current.dealCards = result?.dealCards ?? []; current.winningSide = result?.winner ?? null; current.winningCard = result?.dealCards?.[Math.max(0,(result?.dealCards?.length ?? 1)-1)]?.card ?? null; current.totalCardsDealt = result?.totalCardsDealt ?? 0; current.firstSide = "bahar"; current.andarBetAmount = "0"; current.baharBetAmount = "0"; }
     const { data: bets, error: betsError } = await db.schema(code).from("authoritative_game_bets").select("id,user_id,bet_amount,selection,status,payout_amount").eq("round_id", row.id).order("created_at", { ascending: false }).limit(100);
@@ -538,11 +547,11 @@ async function handle(req: Request) {
       : activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
     // Roulette now has a persisted PostgreSQL round lifecycle and atomic settlement.
     // Keep games without a verified production engine blocked.
-    if (code !== "aviator" && code !== "roulette") {
+    if (code !== "aviator" && code !== "roulette" && code !== "dice") {
       return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
     }
     const { data: game, error: gameError } = await db.schema("platform").from("games")
-      .select("id,status,pool_wallet_id").eq("code", code).maybeSingle();
+      .select("id,status,pool_wallet_id,min_bet,max_bet").eq("code", code).maybeSingle();
     if (gameError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
     const { data: gamePool, error: gamePoolError } = await db.schema("platform").from("game_pools")
@@ -561,6 +570,7 @@ async function handle(req: Request) {
       mappedWalletId: String(gamePool?.wallet_id ?? ""), walletType: String(pool?.wallet_type ?? ""),
       walletGameCode: String(pool?.game_code ?? ""), balance: String(pool?.balance ?? ""),
       reservedBalance: String(pool?.reserved_balance ?? ""), runtimeRoundStatus,
+      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : undefined,
     });
     if (!readiness.ok) return response({ error: readiness.error }, readiness.status, origin);
     const poolBalance = String(pool?.balance ?? "0");
@@ -568,6 +578,19 @@ async function handle(req: Request) {
     const { error: updateError } = await db.schema("platform").from("games")
       .update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", code);
     if (updateError) return response({ error: "GAME_ACTIVATION_FAILED" }, 503, origin);
+    // Smoke-test Dice's durable lifecycle before confirming activation. The
+    // first persisted betting round must exist before the game is considered ready.
+    if (code === "dice") {
+      const { data: runtimeState, error: runtimeError } = await db.schema("dice").rpc("advance_round");
+      if (runtimeError || !runtimeState || runtimeState.gameStateUnavailable || !runtimeState.round?.id ||
+          !["BETTING", "RUNNING"].includes(String(runtimeState.round.status))) {
+        await db.schema("platform").from("games").update({
+          status: game.status, updated_at: new Date().toISOString(),
+        }).eq("code", code);
+        console.error("Dice activation runtime check failed:", runtimeError?.code ?? "unavailable");
+        return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     // Smoke-test Roulette's durable lifecycle before confirming activation. If the
     // lifecycle RPC is missing or cannot create/read the first round, roll back a
     // newly activated game instead of leaving the UI advertising a broken game.
@@ -707,6 +730,15 @@ async function handle(req: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
     const bets = Array.isArray(body.bets) ? body.bets : [body];
     if (!bets.length || bets.length > 20 || bets.some((b:any) => !positiveAmount(b?.amount))) return response({ error: "INVALID_BET" }, 400, origin);
+    if (code === "dice") {
+      const allowedDiceTypes = /^(?:[1-9]|10|small|big|even|odd)$/;
+      const invalidSelection = bets.some((b: any) => {
+        const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
+          ? b.selection : b;
+        return !allowedDiceTypes.test(String(selection?.type ?? "").toLowerCase());
+      });
+      if (invalidSelection) return response({ error: "INVALID_DICE_SELECTION" }, 400, origin);
+    }
     const key = req.headers.get("idempotency-key")?.trim() || String(body.idempotencyKey ?? "");
     if (key.length < 8 || key.length > 110 || !/^[A-Za-z0-9_-]+$/.test(key)) return response({ error: "IDEMPOTENCY_KEY_REQUIRED" }, 400, origin);
     const { data, error } = await db.schema("platform").rpc("place_authoritative_game_bets_atomic", {
