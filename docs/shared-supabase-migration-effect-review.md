@@ -133,3 +133,24 @@ The wallet source candidate `20261021120000_protect_reserved_wallet_balances.sql
 - No current-ledger upgrade replay can be declared safe until the historical SQL mapping is complete and the replay has been executed against a disposable copy with synthetic data.
 
 No production DDL, migration repair, or financial data changes were performed during this pass.
+
+
+## Production verification of additional historical effects (pass 3, read-only)
+
+Additional catalog checks found the following intended effects currently present:
+
+- `20261021100000_prepare_game_schema_isolation.sql`: all eight runtime schemas exist (`platform`, `wallet`, `aviator`, `roulette`, `dice`, `dragon_tiger`, `andar_bahar`, `teen_patti`). Client roles `anon` and `authenticated` lack schema USAGE; `service_role` has USAGE.
+- `20261021110000_harden_wallet_transfer_idempotency.sql` and `20261021120000_protect_reserved_wallet_balances.sql`: the live `wallet.wallet_transfer_atomic` contains reserved-balance checks, exact idempotency handling, and the current token-supply invariant. Its body differs from the older source candidate, so the current function must not be replaced by replaying those historical files.
+- `20261021130000_move_platform_wallet_aviator_tables.sql` and `20261021140000_split_authoritative_games_by_schema.sql`: four expected public compatibility views exist; the platform catalog has five games with five distinct non-null pool-wallet IDs. The eight runtime schemas and their access boundaries are present. Do not rerun schema cutover files against production.
+- `20261021160000_add_system_health_events.sql`: `platform.system_health_events` exists and RLS is enabled. Policy/index/grant equivalence is not yet fully inventoried.
+- `20261021163700_fix_wallet_token_supply_invariant.sql`: live wallet transfer function contains the `TOKEN_SUPPLY_INVARIANT_VIOLATED` guard.
+- `20261021200000_expose_backend_schemas_to_postgrest.sql`: the `authenticator` role's stored PostgREST configuration includes `platform,wallet,aviator,roulette,dice,dragon_tiger,andar_bahar` in `pgrst.db_schemas`.
+- `20261023100000_reduce_aviator_round_cooldown_to_4_seconds.sql`: live `aviator.tick_crash_engine()` has a post-settlement cooldown check using `seconds_since_end < 4`. A first check for a literal `interval '4 seconds'` was too narrow; the actual live implementation uses a numeric elapsed-seconds field.
+- `20261023110000_allow_concurrent_aviator_cashouts.sql` and `20261023120000_harden_concurrent_aviator_cashout_timing.sql`: live cashout uses `FOR SHARE`, revalidates after wallet locking, and uses `clock_timestamp()` for the post-wait timing check.
+- `20261023140000_roulette_escrow_stake_settlement.sql`: live `roulette.advance_round()` contains stake refunds for winning bets, loss transfers from escrow to pool, and net profit payouts.
+- `20261023150000_roulette_persist_spin_phase.sql`: live Roulette persists `state.spinStartedAt` and waits 1500 milliseconds before settlement. The earlier string check for a literal `SPINNING` status was too narrow; the actual persisted phase is represented by `RUNNING` plus the timestamp.
+- `20261023160000_aviator_cashout_single_authenticated_rpc.sql`: the live authenticated cashout RPC exists and includes account-active, single-role, claimed-role, and PLAYER-only checks.
+- `20261023170000_roulette_hash_integer_overflow.sql`: live Roulette result generation uses bigint arithmetic for the SHA-256-derived integer.
+- `20261023190000_aviator_realtime_broadcast.sql` and `20261109090000_aviator_realtime_and_recovery_hardening.sql`: the public round broadcast function and trigger exist; the stale-WAITING recovery function exists and has the fail-closed refund-blocked path.
+
+These checks materially improve the effect map, but do not recover the exact original SQL for the 44 applied-only ledger versions. They also do not establish every policy, index, trigger, ACL, and data-transform statement for each migration. The source files are historical evidence, not an executable replay plan.
