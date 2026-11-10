@@ -13,6 +13,7 @@ import { evaluateGameActivationReadiness } from '../supabase/functions/api/activ
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
 import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
+import { resolveSupabasePublicConfig } from '../frontend/src/api/supabaseConfigValidation';
 
 let passed = 0;
 let failed = 0;
@@ -168,6 +169,16 @@ async function runTestSuite() {
     for (const route of ['/games/aviator/state', '/games/aviator/history', '/games/aviator/bet', '/games/aviator/cashout']) {
       assert.ok(aviatorRoutes.includes(route), `Canonical Aviator API is missing ${route}`);
     }
+  });
+
+  test('Supabase public config requires valid HTTPS URL and publishable key in production', () => {
+    const valid = resolveSupabasePublicConfig('https://example.supabase.co/', 'sb_publishable_123456789012345678901234', true);
+    assert.strictEqual(valid.url, 'https://example.supabase.co');
+    assert.strictEqual(valid.hasRealtime, true);
+    assert.throws(() => resolveSupabasePublicConfig('', 'sb_publishable_123456789012345678901234', true), /SUPABASE_PUBLIC_CONFIG_MISSING/);
+    assert.throws(() => resolveSupabasePublicConfig('http://example.supabase.co', 'sb_publishable_123456789012345678901234', true), /SUPABASE_URL_INVALID/);
+    assert.throws(() => resolveSupabasePublicConfig('https://example.supabase.co', 'service_role_secret', true), /SUPABASE_PUBLISHABLE_KEY_INVALID/);
+    assert.deepStrictEqual(resolveSupabasePublicConfig('', '', false), { url: '', publishableKey: '', hasRealtime: false });
   });
 
   test('Production routes every Aviator endpoint to the single configured Supabase API', () => {
