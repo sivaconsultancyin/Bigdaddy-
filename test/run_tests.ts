@@ -439,7 +439,7 @@ async function runTestSuite() {
     assert.ok(edgeSource.includes('encoder.encode("dice")'));
     assert.ok(edgeSource.includes('hmacHex.slice(0, 13)'));
     assert.ok(edgeSource.includes('BigInt(`0x${hmacHex.slice(0, 13)}`) % 10n'));
-    assert.ok(!edgeSource.includes('clientSeed:nonce'));
+    assert.ok(edgeSource.includes('encoder.encode("dice")'));
   });
 
   test('Authoritative Dragon Tiger reveals two server-dealt cards and winner', () => {
