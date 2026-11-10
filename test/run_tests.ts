@@ -188,6 +188,22 @@ async function runTestSuite() {
     }
   });
 
+  test('Game activation uses an explicit allowlist, available pool balance, and Aviator runtime readiness', () => {
+    const source = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const guarded = source.slice(source.indexOf('const activationMatch'), source.indexOf('if (req.method === "GET" && path === "/games/list")'));
+    assert.ok(guarded.includes('(aviator|roulette|dice|dragon-tiger|andar-bahar)'));
+    assert.ok(guarded.includes('reserved_balance'));
+    assert.ok(guarded.includes('poolReservedBalance > totalPoolBalance'));
+    assert.ok(guarded.includes('availablePoolBalance <= 0n'));
+    assert.ok(guarded.includes('get_aviator_state_bundle'));
+    assert.ok(guarded.includes('AVIATOR_RUNTIME_UNAVAILABLE'));
+    const fallbackStart = source.indexOf('const unsupportedActivation');
+    const fallbackEnd = source.indexOf('if (req.method === "GET" && path === "/requests/list")', fallbackStart);
+    const fallback = source.slice(fallbackStart, fallbackEnd);
+    assert.ok(fallback.includes('GAME_NOT_AVAILABLE_IN_PRODUCTION'));
+    assert.ok(!fallback.includes('.update({ status: "ACTIVE"'));
+  });
+
   test('Aviator public broadcast migration redacts crash target until terminal status', () => {
     const migration = readFileSync('supabase/migrations/20261109090000_aviator_realtime_and_recovery_hardening.sql', 'utf8');
     assert.ok(migration.replace(/\s+/g, ' ').includes("CASE WHEN new.status::text IN ('CRASHED', 'SETTLED')"));
