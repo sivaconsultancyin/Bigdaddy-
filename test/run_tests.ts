@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readdirSync, readFileSync } from 'node:fs';
 import { applyExplicitCorsOrigin } from '../shared/src/cors';
-import { isNewerRealtimeEvent, readRealtimeEventCursor } from '../shared/src/aviatorRealtime';
+import { isNewerRealtimeEvent, isNewerRoundSnapshot, readRealtimeEventCursor } from '../shared/src/aviatorRealtime';
 import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
@@ -130,6 +130,40 @@ async function runTestSuite() {
     assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
   });
 
+  test('Aviator state snapshots cannot roll the UI back across rounds or lifecycle phases', () => {
+    const roundOneRunning = { id: 'round-1', roundNumber: 1, status: 'RUNNING' };
+    const roundOneCrashed = { id: 'round-1', roundNumber: 1, status: 'CRASHED' };
+    const roundTwoWaiting = { id: 'round-2', roundNumber: 2, status: 'WAITING' };
+    assert.ok(isNewerRoundSnapshot(roundOneRunning, null));
+    assert.ok(isNewerRoundSnapshot(roundOneCrashed, roundOneRunning));
+    assert.ok(!isNewerRoundSnapshot(roundOneRunning, roundOneCrashed));
+    assert.ok(!isNewerRoundSnapshot(roundOneRunning, roundTwoWaiting));
+    assert.ok(isNewerRoundSnapshot(roundTwoWaiting, roundOneCrashed));
+    assert.ok(!isNewerRoundSnapshot({ ...roundTwoWaiting, id: 'old-round' }, roundTwoWaiting));
+  });
+
+  test('50 consecutive simulated Aviator rounds preserve lifecycle order and reject prior-round events', () => {
+    let current: { id: string; roundNumber: number; status: string } | null = null;
+    for (let roundNumber = 1; roundNumber <= 50; roundNumber++) {
+      const id = `round-${roundNumber}`;
+      for (const status of ['WAITING', 'RUNNING', 'CRASHED', 'SETTLED']) {
+        const next = { id, roundNumber, status };
+        assert.ok(isNewerRoundSnapshot(next, current), `Round ${roundNumber} should accept ${status}`);
+        current = next;
+      }
+      if (roundNumber > 1) {
+        assert.ok(
+          !isNewerRoundSnapshot(
+            { id: `round-${roundNumber - 1}`, roundNumber: roundNumber - 1, status: 'RUNNING' },
+            current,
+          ),
+          `Round ${roundNumber} must reject a late event from the previous round`,
+        );
+      }
+      assert.deepStrictEqual(current, { id, roundNumber, status: 'SETTLED' });
+    }
+  });
+
   test('Realtime event cursor parses server time and rejects duplicate or out-of-order ticks', () => {
     const first = {
       id: 'round-1',
@@ -225,6 +259,14 @@ async function runTestSuite() {
     assert.ok(migration.includes('aviator.recover_stale_waiting_rounds(120)'));
     assert.ok(migration.includes('STALE_WAITING_REFUND_BLOCKED'));
     assert.ok(migration.includes('STALE_WAITING_ROUND_REFUNDED'));
+  });
+
+  test('Aviator animation resets multiplier state at round boundaries and WAITING', () => {
+    const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(source.includes("lastAuthoritativeMultiplierRef.current?.roundId !== roundState.id"));
+    assert.ok(source.includes("authoritativeMultiplierRef.current = 1"));
+    assert.ok(source.includes("if (roundState.status === 'WAITING')"));
+    assert.ok(source.includes("setAuthoritativeMultiplier(1)"));
   });
 
   test('Aviator polling keeps 200ms RUNNING cadence, 1s fallback, and no overlapping requests', () => {
