@@ -2,7 +2,7 @@ name: BigDaddy Casino CI
 
 on:
   push:
-    branches: [ main, master, feat/aviator-isolated-backend ]
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
 
@@ -536,7 +536,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y postgresql-client
 
-    - name: Create isolated Aviator lease and Realtime fixtures
+    - name: Create Aviator lease and Realtime fixtures
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
         CREATE ROLE anon NOLOGIN;
@@ -610,8 +610,8 @@ jobs:
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063705_aviator_multiplier_realtime_broadcast.sql
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110120000_aviator_realtime_event_sequence.sql
 
-    - name: Verify canonical Aviator grants, indexes, and event trigger
-      run: psql -v ON_ERROR_STOP=1 -f scripts/db/isolated-aviator-security-verify.sql
+    - name: Verify Aviator grants, indexes, and event trigger
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-security-verify.sql
 
     - name: Verify single-worker lease, heartbeat, handoff, and multiplier broadcast
       run: |
@@ -742,7 +742,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y postgresql-client
 
-    - name: Create isolated Aviator recovery and Realtime fixtures
+    - name: Create Aviator recovery and Realtime fixtures
       run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-recovery-realtime-fixture.sql
 
     - name: Apply Aviator recovery and Realtime hardening migration
