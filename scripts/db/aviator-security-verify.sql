@@ -11,8 +11,8 @@ BEGIN
   IF NOT has_function_privilege('service_role', 'public.rls_auto_enable()', 'EXECUTE') THEN
     RAISE EXCEPTION 'service_role grant was unexpectedly removed';
   END IF;
-  IF to_regclass('aviator.game_bets_round_id_idx') IS NULL
-     OR to_regclass('aviator.game_settlements_round_id_idx') IS NULL THEN
+  IF to_regclass('aviator.idx_game_bets_round') IS NULL
+     OR to_regclass('aviator.idx_game_settlements_round_id') IS NULL THEN
     RAISE EXCEPTION 'Aviator round foreign-key indexes are missing';
   END IF;
   IF NOT EXISTS (

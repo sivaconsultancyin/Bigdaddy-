@@ -1,47 +1,52 @@
-# BigDaddy production API and project boundary
+# BigDaddy production API and Supabase project
 
-Snapshot verified on 2026-11-10 using the repository source and read-only Supabase project inspection.
+Snapshot verified on 2026-11-10 using the repository source and read-only inspection of Supabase project `nzvpuoeibqrpcltrszvr`.
 
-## Shared BigDaddy project
+## Canonical production project
 
-- Project ref: \`nzvpuoeibqrpcltrszvr\`
-- Canonical general API: \`https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api\`
-- The frontend routes login, wallet, account, and non-Aviator game requests to this API in production.
-- The Render proxy's default upstream is also this API, but the frontend's production API client currently calls Supabase directly.
-- The shared project currently has the \`api\` Edge Function active. Its general API handler also contains Aviator route code, but the browser client does not select it for the four isolated Aviator endpoints.
+- Project ref: `nzvpuoeibqrpcltrszvr`
+- Canonical API: `https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api`
+- Canonical Aviator engine: `supabase/functions/aviator-engine`
+- Aviator HTTP routes are part of the same `api` Edge Function in `supabase/functions/api/aviator.routes.ts`.
+- The frontend sends login, wallet, account, all game, and Aviator state/history/bet/cashout requests to the same `API_BASE`.
+- The Render proxy's default upstream is also the same `/functions/v1/api` endpoint. The production frontend currently calls Supabase directly.
 
-## Isolated Aviator project
+## Verified live inventory
 
-- Project ref: \`yrleubhpiqejfvingqfj\`
-- Project name/region: \`Bigdaddy aviator\`, \`ap-northeast-1\`
-- Canonical Aviator API: \`https://yrleubhpiqejfvingqfj.supabase.co/functions/v1/aviator-api\`
-- The frontend routes \`/games/aviator/state\`, \`history\`, \`bet\`, and \`cashout\` to this API.
-- Read-only function inventory verified these active functions in the isolated project: \`aviator-api\`, \`aviator-wallet-worker\`, \`aviator-round-engine\`, and \`aviator-settlement-worker\`.
+Read-only inspection on 2026-11-10 found:
+- Active Edge Functions include `api` and `aviator-engine`; no separate `aviator-api`, wallet-outbox worker, round-engine, or settlement-worker is deployed.
+- Live Aviator tables are `aviator.game_rounds`, `aviator.game_bets`, `aviator.game_settlements`, and `aviator.engine_worker_lease`.
+- The current implementation uses shared wallet transactions and atomic RPCs. It does not use the archived isolated-project `aviator.wallet_operations` outbox model.
+- The active `bigdaddy-aviator-engine` Cron job is configured in the same project.
+- The live database contained existing round history. Do not drop/recreate the Aviator schema or replay the archived migrations.
 
 ## Routing contract
 
-\`frontend/src/api/client.ts\` is the client-side routing authority:
+`frontend/src/api/client.ts` is the browser routing authority. All endpoints, including:
+- `/games/aviator/state`
+- `/games/aviator/history`
+- `/games/aviator/bet`
+- `/games/aviator/cashout`
 
-- Production non-Aviator endpoints use the shared BigDaddy API.
-- The four Aviator endpoints above use the isolated Aviator API and its project publishable key.
-- Realtime multiplier subscriptions in \`frontend/src/context/WebSocketContext.tsx\` use the shared project's Realtime endpoint.
+must use the same `API_BASE`. No `VITE_AVIATOR_API_BASE_URL`, old project ref, or separate Aviator publishable key should remain in the runtime client.
 
-These are intentionally separate Supabase projects, not a duplicate deployment of one function. Do not delete \`supabase/functions/aviator-api\`, remove its function config, or run a blanket deployment against the wrong project. Any deployment of isolated Aviator functions must explicitly target the isolated project ref.
+The active function config should contain `[functions.api]` and `[functions.aviator-engine]`, not the abandoned isolated function entries. Legacy sources are retained under `supabase/archive/legacy-isolated-aviator/` for audit/history only and must never be deployed.
 
 ## Migration directory safety
 
-The root `supabase/migrations/` directory currently mixes shared-project SQL with eleven isolated-Aviator migration files. The shared project has 65 applied ledger versions; the isolated project has seven. Do not run a blanket `supabase db push` against either project until both ledgers and the per-project deployment workflow are reconciled. See `docs/shared-supabase-migration-ledger-reconciliation.md` and `supabase/aviator-migrations/README.md`.
+The root `supabase/migrations/` directory now contains only the 57 candidate files for the single configured project. Eleven old isolated-project migrations and one separate security/index candidate have been moved outside the active CLI directory. The live project ledger has 65 applied entries; only 21 have an exact version+name source match, 44 applied entries have no exact file match, and 36 active source files are not represented by an exact applied version+name. Two duplicate version prefixes remain.
+
+Do **not** run `supabase db push`, `migration repair`, or a blanket production deployment until the 65-entry live ledger and 57 source files are reconciled by SQL effect and tested against a disposable PostgreSQL database. See `docs/shared-supabase-migration-ledger-reconciliation.md`.
 
 ## Other server entry points
 
-- \`package.json\` starts \`render-proxy.ts\`.
-- \`render-proxy.ts\` forwards to the shared \`/functions/v1/api\` endpoint.
-- \`server.ts\` is a separate Express/PostgreSQL implementation with persistent production routers and a worker process. It is not the package's configured start entry point.
-- The legacy in-memory wallet router is not mounted by \`server.ts\`'s production router list; \`StorageEngine\` now fails closed in production (see PR #131).
+- `package.json` starts `render-proxy.ts`.
+- `render-proxy.ts` forwards to the same canonical `/functions/v1/api` endpoint.
+- `server.ts` is a separate Express/PostgreSQL implementation and is not the package's configured start entry point.
+- The legacy in-memory wallet router is not mounted by the production router list; `StorageEngine` fails closed in production (see PR #131).
 
 ## Operational cautions
 
-- Do not consolidate the two Supabase projects without a reviewed migration, wallet-operation, worker, and latency plan.
-- Do not change Edge API CORS behavior until the live \`BIGDADDY_ALLOWED_ORIGINS\` secret is verified; the browser calls the shared Edge API directly in production.
-- The client currently has project URLs and fallback publishable keys in source. Track migration to validated Vite environment variables separately; never place service-role keys in browser variables.
-- This document records routing as inspected on the date above; re-check deployed function inventories and Render service configuration before any deployment change.
+- Do not deploy the archived isolated Aviator functions or migrations.
+- The frontend still has a hard-coded canonical Supabase URL; migration to validated Vite build-time environment variables remains tracked separately. Never place service-role keys in browser variables.
+- No live migration, schema change, wallet balance change, bet settlement, round mutation, or scheduler change was made during this source-code reconciliation.

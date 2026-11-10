@@ -2,7 +2,7 @@ name: BigDaddy Casino CI
 
 on:
   push:
-    branches: [ main, master, feat/aviator-isolated-backend ]
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
 
@@ -536,7 +536,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y postgresql-client
 
-    - name: Create isolated Aviator lease and Realtime fixtures
+    - name: Create Aviator lease and Realtime fixtures
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
         CREATE ROLE anon NOLOGIN;
@@ -586,6 +586,9 @@ jobs:
           round_id uuid NOT NULL REFERENCES aviator.game_rounds(id)
         );
 
+        CREATE INDEX idx_game_bets_round ON aviator.game_bets(round_id);
+        CREATE INDEX idx_game_settlements_round_id ON aviator.game_settlements(round_id);
+
         CREATE TABLE public.rls_trigger_invocations(id bigserial PRIMARY KEY);
         CREATE FUNCTION public.rls_auto_enable()
         RETURNS event_trigger LANGUAGE plpgsql SECURITY DEFINER AS $function$
@@ -598,8 +601,8 @@ jobs:
           ON ddl_command_end EXECUTE FUNCTION public.rls_auto_enable();
         SQL
 
-    - name: Apply isolated Aviator security migration
-      run: psql -v ON_ERROR_STOP=1 -f supabase/aviator-migrations/20261110100000_harden_aviator_grants_and_fk_indexes.sql
+    - name: Apply canonical RLS auto-enable privilege migration
+      run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110130000_harden_rls_auto_enable_grants.sql
 
     - name: Apply Aviator lease and Realtime migrations
       run: |
@@ -607,8 +610,8 @@ jobs:
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108063705_aviator_multiplier_realtime_broadcast.sql
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110120000_aviator_realtime_event_sequence.sql
 
-    - name: Verify isolated Aviator grants, indexes, and event trigger
-      run: psql -v ON_ERROR_STOP=1 -f scripts/db/isolated-aviator-security-verify.sql
+    - name: Verify Aviator grants, indexes, and event trigger
+      run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-security-verify.sql
 
     - name: Verify single-worker lease, heartbeat, handoff, and multiplier broadcast
       run: |
@@ -739,7 +742,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y postgresql-client
 
-    - name: Create isolated Aviator recovery and Realtime fixtures
+    - name: Create Aviator recovery and Realtime fixtures
       run: psql -v ON_ERROR_STOP=1 -f scripts/db/aviator-recovery-realtime-fixture.sql
 
     - name: Apply Aviator recovery and Realtime hardening migration

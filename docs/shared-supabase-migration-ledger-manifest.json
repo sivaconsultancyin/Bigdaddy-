@@ -3,18 +3,21 @@
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
     "sharedAppliedLedger": 65,
-    "sharedRepositoryFiles": 57,
+    "sharedRepositoryFiles": 58,
     "sharedExactVersionNameMatches": 21,
     "sharedAppliedOnly": 44,
-    "sharedFileOnly": 36,
+    "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
-    "isolatedAppliedLedger": 7,
-    "isolatedRepositoryFiles": 11,
+    "isolatedAppliedLedger": 0,
+    "isolatedRepositoryFiles": 0,
     "isolatedExactVersionNameMatches": 0,
-    "isolatedSameNameDifferentVersion": 7,
-    "isolatedFileOnly": 4,
-    "isolatedNewMigrationFiles": 1,
-    "totalSupabaseMigrationFiles": 68
+    "isolatedSameNameDifferentVersion": 0,
+    "isolatedFileOnly": 0,
+    "isolatedNewMigrationFiles": 0,
+    "totalSupabaseMigrationFiles": 58,
+    "legacyIsolatedAppliedLedgerSnapshot": 7,
+    "legacyArchivedMigrationFiles": 12,
+    "legacyArchivedFunctionDirectories": 4
   },
   "appliedLedger": [
     {
@@ -615,23 +618,13 @@
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025053037_shared_aviator_wallet_operations.sql",
-    "20261025090000_aviator_isolated_schema.sql",
     "20261025110000_shared_aviator_wallet_operations.sql",
-    "20261025130000_aviator_round_lifecycle.sql",
-    "20261025150000_aviator_bet_intent_outbox.sql",
-    "20261025160000_fix_aviator_bet_intent_idempotency.sql",
-    "20261025170000_aviator_wallet_outbox_liability.sql",
-    "20261025180000_aviator_state_only_funded_bets.sql",
-    "20261025190000_aviator_wallet_outbox_worker.sql",
-    "20261025200000_aviator_wait_for_bet_funding.sql",
-    "20261025210000_aviator_server_fair_round_engine.sql",
-    "20261025220000_aviator_payout_settlement_worker.sql",
-    "20261025230000_aviator_payout_liability_cap.sql",
     "20261107192153_aviator_scheduler_guard_security_performance.sql",
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -669,13 +662,14 @@
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025110000_shared_aviator_wallet_operations.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
   "duplicateVersionPrefixes": [
     "20261021120000",
     "20261023160000"
   ],
-  "scopeNote": "The root supabase/migrations directory currently mixes shared-project and isolated-Aviator migration sources. Do not run blanket db push to either project until the deployment path and histories are reconciled.",
+  "scopeNote": "The repository targets one live Supabase project only (nzvpuoeibqrpcltrszvr). The abandoned two-project Aviator migration/function sources are preserved under supabase/archive/legacy-isolated-aviator and are not active CLI paths. Do not run blanket db push until the 65-entry production ledger and remaining source-only files are reconciled by SQL effect.",
   "sharedProjectFiles": [
     "20261018000000_initial_schema.sql",
     "20261018110227_atomic_wallet_transfer.sql",
@@ -733,21 +727,10 @@
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
-  "isolatedProjectFiles": [
-    "20261025090000_aviator_isolated_schema.sql",
-    "20261025130000_aviator_round_lifecycle.sql",
-    "20261025150000_aviator_bet_intent_outbox.sql",
-    "20261025160000_fix_aviator_bet_intent_idempotency.sql",
-    "20261025170000_aviator_wallet_outbox_liability.sql",
-    "20261025180000_aviator_state_only_funded_bets.sql",
-    "20261025190000_aviator_wallet_outbox_worker.sql",
-    "20261025200000_aviator_wait_for_bet_funding.sql",
-    "20261025210000_aviator_server_fair_round_engine.sql",
-    "20261025220000_aviator_payout_settlement_worker.sql",
-    "20261025230000_aviator_payout_liability_cap.sql"
-  ],
+  "isolatedProjectFiles": [],
   "sharedExactMatches": [
     {
       "version": "20261018110227",
@@ -1069,83 +1052,106 @@
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025110000_shared_aviator_wallet_operations.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
-  "isolatedAppliedLedger": [
-    {
-      "version": "20261025052246",
-      "name": "aviator_isolated_schema"
-    },
-    {
-      "version": "20261025053328",
-      "name": "aviator_round_lifecycle"
-    },
-    {
-      "version": "20261025053515",
-      "name": "aviator_bet_intent_outbox"
-    },
-    {
-      "version": "20261025053551",
-      "name": "fix_aviator_bet_intent_idempotency"
-    },
-    {
-      "version": "20261025053631",
-      "name": "aviator_wallet_outbox_liability"
-    },
-    {
-      "version": "20261025065000",
-      "name": "aviator_payout_settlement_worker"
-    },
-    {
-      "version": "20261025065635",
-      "name": "aviator_payout_liability_cap"
-    }
-  ],
-  "isolatedNameMatches": [
-    {
-      "version": "20261025052246",
-      "name": "aviator_isolated_schema",
-      "file": "20261025090000_aviator_isolated_schema.sql"
-    },
-    {
-      "version": "20261025053328",
-      "name": "aviator_round_lifecycle",
-      "file": "20261025130000_aviator_round_lifecycle.sql"
-    },
-    {
-      "version": "20261025053515",
-      "name": "aviator_bet_intent_outbox",
-      "file": "20261025150000_aviator_bet_intent_outbox.sql"
-    },
-    {
-      "version": "20261025053551",
-      "name": "fix_aviator_bet_intent_idempotency",
-      "file": "20261025160000_fix_aviator_bet_intent_idempotency.sql"
-    },
-    {
-      "version": "20261025053631",
-      "name": "aviator_wallet_outbox_liability",
-      "file": "20261025170000_aviator_wallet_outbox_liability.sql"
-    },
-    {
-      "version": "20261025065000",
-      "name": "aviator_payout_settlement_worker",
-      "file": "20261025220000_aviator_payout_settlement_worker.sql"
-    },
-    {
-      "version": "20261025065635",
-      "name": "aviator_payout_liability_cap",
-      "file": "20261025230000_aviator_payout_liability_cap.sql"
-    }
-  ],
-  "isolatedFileOnly": [
+  "legacyIsolatedSnapshot": {
+    "appliedLedger": [
+      {
+        "version": "20261025052246",
+        "name": "aviator_isolated_schema"
+      },
+      {
+        "version": "20261025053328",
+        "name": "aviator_round_lifecycle"
+      },
+      {
+        "version": "20261025053515",
+        "name": "aviator_bet_intent_outbox"
+      },
+      {
+        "version": "20261025053551",
+        "name": "fix_aviator_bet_intent_idempotency"
+      },
+      {
+        "version": "20261025053631",
+        "name": "aviator_wallet_outbox_liability"
+      },
+      {
+        "version": "20261025065000",
+        "name": "aviator_payout_settlement_worker"
+      },
+      {
+        "version": "20261025065635",
+        "name": "aviator_payout_liability_cap"
+      }
+    ],
+    "nameMatches": [
+      {
+        "version": "20261025052246",
+        "name": "aviator_isolated_schema",
+        "file": "20261025090000_aviator_isolated_schema.sql"
+      },
+      {
+        "version": "20261025053328",
+        "name": "aviator_round_lifecycle",
+        "file": "20261025130000_aviator_round_lifecycle.sql"
+      },
+      {
+        "version": "20261025053515",
+        "name": "aviator_bet_intent_outbox",
+        "file": "20261025150000_aviator_bet_intent_outbox.sql"
+      },
+      {
+        "version": "20261025053551",
+        "name": "fix_aviator_bet_intent_idempotency",
+        "file": "20261025160000_fix_aviator_bet_intent_idempotency.sql"
+      },
+      {
+        "version": "20261025053631",
+        "name": "aviator_wallet_outbox_liability",
+        "file": "20261025170000_aviator_wallet_outbox_liability.sql"
+      },
+      {
+        "version": "20261025065000",
+        "name": "aviator_payout_settlement_worker",
+        "file": "20261025220000_aviator_payout_settlement_worker.sql"
+      },
+      {
+        "version": "20261025065635",
+        "name": "aviator_payout_liability_cap",
+        "file": "20261025230000_aviator_payout_liability_cap.sql"
+      }
+    ],
+    "fileOnly": [
+      "20261025180000_aviator_state_only_funded_bets.sql",
+      "20261025190000_aviator_wallet_outbox_worker.sql",
+      "20261025200000_aviator_wait_for_bet_funding.sql",
+      "20261025210000_aviator_server_fair_round_engine.sql"
+    ],
+    "exactMatches": [],
+    "newMigrationFiles": [
+      "20261110100000_harden_aviator_grants_and_fk_indexes.sql"
+    ]
+  },
+  "legacyArchivedMigrationFiles": [
+    "20261025090000_aviator_isolated_schema.sql",
+    "20261025130000_aviator_round_lifecycle.sql",
+    "20261025150000_aviator_bet_intent_outbox.sql",
+    "20261025160000_fix_aviator_bet_intent_idempotency.sql",
+    "20261025170000_aviator_wallet_outbox_liability.sql",
     "20261025180000_aviator_state_only_funded_bets.sql",
     "20261025190000_aviator_wallet_outbox_worker.sql",
     "20261025200000_aviator_wait_for_bet_funding.sql",
-    "20261025210000_aviator_server_fair_round_engine.sql"
-  ],
-  "isolatedExactMatches": [],
-  "isolatedNewMigrationFiles": [
+    "20261025210000_aviator_server_fair_round_engine.sql",
+    "20261025220000_aviator_payout_settlement_worker.sql",
+    "20261025230000_aviator_payout_liability_cap.sql",
     "20261110100000_harden_aviator_grants_and_fk_indexes.sql"
+  ],
+  "legacyArchivedFunctionDirectories": [
+    "aviator-api",
+    "aviator-round-engine",
+    "aviator-settlement-worker",
+    "aviator-wallet-worker"
   ]
 }

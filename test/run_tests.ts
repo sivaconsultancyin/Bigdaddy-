@@ -91,21 +91,21 @@ async function runTestSuite() {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 68);
-    assert.deepStrictEqual(
-      [...(manifest.sharedProjectFiles as string[]), ...(manifest.isolatedProjectFiles as string[])].sort(),
-      actualFiles,
-    );
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 58);
+    assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
+    assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
     assert.strictEqual(manifest.counts.sharedAppliedLedger, 65);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 57);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 58);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
-    assert.strictEqual(manifest.counts.sharedFileOnly, 36);
-    assert.strictEqual(manifest.counts.isolatedAppliedLedger, 7);
-    assert.strictEqual(manifest.counts.isolatedRepositoryFiles, 11);
-    assert.strictEqual(manifest.counts.isolatedExactVersionNameMatches, 0);
-    assert.strictEqual(manifest.counts.isolatedSameNameDifferentVersion, 7);
-    assert.strictEqual(manifest.counts.isolatedFileOnly, 4);
+    assert.strictEqual(manifest.counts.sharedFileOnly, 37);
+    assert.strictEqual(manifest.counts.legacyIsolatedAppliedLedgerSnapshot, 7);
+    assert.strictEqual(manifest.counts.legacyArchivedMigrationFiles, 12);
+    assert.strictEqual(manifest.counts.legacyArchivedFunctionDirectories, 4);
+    const archivedMigrations = (readdirSync('supabase/archive/legacy-isolated-aviator/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
+    assert.deepStrictEqual(archivedMigrations, [...(manifest.legacyArchivedMigrationFiles as string[])].sort());
+    const archivedFunctions = (readdirSync('supabase/archive/legacy-isolated-aviator/functions') as string[]).sort();
+    assert.deepStrictEqual(archivedFunctions, [...(manifest.legacyArchivedFunctionDirectories as string[])].sort());
     const versions: string[] = (manifest.repositoryFiles as string[]).map((name: string) => name.slice(0, 14));
     const duplicates = [...new Set(versions.filter((version: string, index: number) => versions.indexOf(version) !== index))].sort();
     assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
@@ -142,28 +142,28 @@ async function runTestSuite() {
     assert.strictEqual(untrusted['Vary'], undefined);
   });
 
-  test('Shared and isolated Edge APIs never emit wildcard CORS', () => {
+  test('Canonical Edge API uses explicit CORS and serves Aviator routes', () => {
     const sharedApi = readFileSync('supabase/functions/api/index.ts', 'utf8');
-    const isolatedApi = readFileSync('supabase/functions/aviator-api/index.ts', 'utf8');
+    const aviatorRoutes = readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8');
     assert.ok(sharedApi.includes('https://bigdaddy-frontend.onrender.com'));
-    assert.ok(isolatedApi.includes('https://bigdaddy-frontend.onrender.com'));
     assert.ok(!sharedApi.includes('headers["Access-Control-Allow-Origin"] = "*"'));
-    assert.ok(!isolatedApi.includes('headers["Access-Control-Allow-Origin"] = "*"'));
+    for (const route of ['/games/aviator/state', '/games/aviator/history', '/games/aviator/bet', '/games/aviator/cashout']) {
+      assert.ok(aviatorRoutes.includes(route), `Canonical Aviator API is missing ${route}`);
+    }
   });
 
-  test('Production API routing preserves the shared and isolated Supabase project boundary', () => {
+  test('Production routes every Aviator endpoint to the single configured Supabase API', () => {
     const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
     const sharedConfig = readFileSync('supabase/config.toml', 'utf8');
-    const isolatedApi = readFileSync('supabase/functions/aviator-api/index.ts', 'utf8');
     assert.ok(apiClient.includes('const SUPABASE_API_BASE'));
-    assert.ok(apiClient.includes('const AVIATOR_API_BASE'));
-    assert.ok(apiClient.includes('return AVIATOR_API_BASE'));
-    assert.ok(apiClient.includes('return API_BASE'));
+    assert.ok(apiClient.includes('fetch(`${API_BASE}${endpoint}`'));
+    assert.ok(!apiClient.includes('yrleubhpiqejfvingqfj'));
+    assert.ok(!apiClient.includes('AVIATOR_API_BASE'));
+    assert.ok(!apiClient.includes('VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY'));
     assert.ok(sharedConfig.includes('[functions.api]'));
-    assert.ok(sharedConfig.includes('[functions.aviator-api]'));
-    assert.ok(apiClient.includes('(state|history|bet|cashout)'), 'Frontend API client must route all four Aviator endpoint suffixes to the isolated API');
-    for (const route of ['/games/aviator/state', '/games/aviator/history', '/games/aviator/bet', '/games/aviator/cashout']) {
-      assert.ok(isolatedApi.includes(route), `Isolated Aviator API is missing ${route}`);
+    assert.ok(sharedConfig.includes('[functions.aviator-engine]'));
+    for (const legacy of ['[functions.aviator-api]', '[functions.aviator-wallet-worker]', '[functions.aviator-round-engine]', '[functions.aviator-settlement-worker]']) {
+      assert.ok(!sharedConfig.includes(legacy), `Legacy isolated function config must be removed: ${legacy}`);
     }
   });
 
