@@ -126,7 +126,7 @@ async function readAuthoritativeState(db: SupabaseClient, code: string) {
   const { data: rounds, error } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
   if (error || !rounds?.length) return { gameStateUnavailable: true };
   const round = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
-  return { round: { id: round.id, roundNumber: Number(round.round_number), status: round.status, bettingEndsAt: new Date(round.betting_closes_at).getTime(), openedAt: new Date(round.opened_at).getTime(), result: ["RUNNING","RESULT","SETTLED"].includes(round.status) ? round.result : null, serverSeedHash: round.server_seed_hash, revealedServerSeed: round.status === "SETTLED" ? round.server_seed : null } };
+  return { round: { id: round.id, roundNumber: Number(round.round_number), status: round.status, bettingEndsAt: new Date(round.betting_closes_at).getTime(), openedAt: new Date(round.opened_at).getTime(), result: round.status === "SETTLED" ? round.result : null, serverSeedHash: round.server_seed_hash, revealedServerSeed: round.status === "SETTLED" ? round.server_seed : null } };
 }
 
 async function handle(req: Request) {
@@ -310,7 +310,9 @@ async function handle(req: Request) {
     if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
     const row = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
-    const result = ["RUNNING","RESULT","SETTLED"].includes(row.status) ? row.result : null;
+    // Never expose a pre-settlement outcome, even if the database has already
+    // persisted it internally to drive the animation and atomic settlement.
+    const result = row.status === "SETTLED" ? row.result : null;
     const current: Record<string, any> = {
       id: row.id, roundNumber: Number(row.round_number),
       status: row.status === "SETTLED" ? "RESULT" : row.status === "RUNNING" ? (code === "roulette" ? "SPINNING" : code === "dice" ? "ROLLING" : code === "dragon_tiger" ? "REVEALING" : "DEALING") : row.status,
