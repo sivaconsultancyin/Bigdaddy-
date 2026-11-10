@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
+import { evaluateGameActivationReadiness } from "./activation.ts";
 import bcrypt from "npm:bcryptjs@2.4.3";
 import { corsHeaders, jsonResponse, signBigDaddyToken, verifyBigDaddyToken, type BigDaddyClaims } from "./bigdaddy-jwt.ts";
 import { handleAviatorApi } from "./aviator.routes.ts";
@@ -546,36 +547,28 @@ async function handle(req: Request) {
     if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
     const { data: gamePool, error: gamePoolError } = await db.schema("platform").from("game_pools")
       .select("wallet_id").eq("game_code", code).maybeSingle();
-    if (gamePoolError || !gamePool || gamePool.wallet_id !== game.pool_wallet_id) {
-      return response({ error: "GAME_POOL_MAPPING_MISMATCH" }, 409, origin);
-    }
+    if (gamePoolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     const { data: pool, error: poolError } = await db.schema("wallet").from("wallets")
       .select("id,balance,reserved_balance,wallet_type,game_code").eq("id", game.pool_wallet_id).maybeSingle();
     if (poolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
-    if (!pool || pool.wallet_type !== "GAME_POOL" || pool.game_code !== code) {
-      return response({ error: "GAME_POOL_IDENTITY_MISMATCH" }, 409, origin);
-    }
-    const poolBalance = String(pool.balance ?? "0");
-    const reservedBalance = String(pool.reserved_balance ?? "0");
-    if (!/^[0-9]+$/.test(poolBalance) || !/^[0-9]+$/.test(reservedBalance)) {
-      return response({ error: "GAME_POOL_BALANCE_INVALID" }, 503, origin);
-    }
-    const totalPoolBalance = BigInt(poolBalance);
-    const poolReservedBalance = BigInt(reservedBalance);
-    if (poolReservedBalance > totalPoolBalance) {
-      return response({ error: "GAME_POOL_LIABILITY_MISMATCH" }, 409, origin);
-    }
-    const availablePoolBalance = totalPoolBalance - poolReservedBalance;
-    if (availablePoolBalance <= 0n) {
-      return response({ error: "ALLOCATE_GAME_POOL_TOKENS_FIRST" }, 400, origin);
-    }
+    let runtimeRoundStatus: string | null = null;
     if (code === "aviator") {
       const { data: runtimeState, error: runtimeError } = await db.schema("aviator").rpc("get_aviator_state_bundle");
-      const runtimeRound = runtimeState?.round;
-      if (runtimeError || !runtimeRound?.id || !["WAITING", "RUNNING"].includes(String(runtimeRound.status))) {
-        return response({ error: "AVIATOR_RUNTIME_UNAVAILABLE" }, 503, origin);
-      }
+      runtimeRoundStatus = runtimeError ? null : String(runtimeState?.round?.status ?? "");
     }
+    const readiness = evaluateGameActivationReadiness({
+      gameCode: code,
+      catalogWalletId: String(game.pool_wallet_id ?? ""),
+      mappedWalletId: String(gamePool?.wallet_id ?? ""),
+      walletType: String(pool?.wallet_type ?? ""),
+      walletGameCode: String(pool?.game_code ?? ""),
+      balance: String(pool?.balance ?? ""),
+      reservedBalance: String(pool?.reserved_balance ?? ""),
+      runtimeRoundStatus,
+    });
+    if (!readiness.ok) return response({ error: readiness.error }, readiness.status, origin);
+    const poolBalance = String(pool?.balance ?? "0");
+    const availablePoolBalance = readiness.availablePoolBalance;
     const { error: updateError } = await db.schema("platform").from("games")
       .update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", code);
     if (updateError) return response({ error: "GAME_ACTIVATION_FAILED" }, 503, origin);
@@ -601,7 +594,7 @@ async function handle(req: Request) {
       // than reporting failure and encouraging an unsafe repeated allocation.
       console.error("Game activation audit write failed.");
     }
-    return response({ status: "ACTIVE", gameCode: code, poolBalance, availablePoolBalance: availablePoolBalance.toString() }, 200, origin);
+    return response({ status: "ACTIVE", gameCode: code, poolBalance, availablePoolBalance }, 200, origin);
   }
 
   if (req.method === "GET" && path === "/games/list") {
