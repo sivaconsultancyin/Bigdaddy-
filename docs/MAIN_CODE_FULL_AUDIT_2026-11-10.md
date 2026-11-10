@@ -30,14 +30,14 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 ### P1 — High risk
 
-#### BD-AUD-003 — Multiple backend execution paths make route/data-source consistency difficult to guarantee
+#### BD-AUD-003 — Deployed Supabase API source is behind current main
 - Files: `render-proxy.ts`, `server.ts`, `supabase/functions/api/index.ts`, `supabase/functions/api/aviator.routes.ts`, `supabase/functions/aviator-engine/index.ts`.
 - Evidence: package start script runs `tsx render-proxy.ts`; the active Render backend service is the Supabase Edge proxy, while the frontend now calls the canonical Supabase API directly. `server.ts` is not the Render start entrypoint and mounts only the production routers. The historical standalone `aviator-api` function was archived by PR #148 and had no requests in the last 24-hour Edge logs. The remaining live divergence is concrete: deployed Supabase `api` version 36 (last updated 2026-10-24) differs materially from current main and lacks the `aviator.routes.ts` bundle.
 - Impact: security, fairness-verification, authentication, idempotency, and response-contract changes merged into main may not yet be active in the deployed API.
 - Recommendation: maintain one canonical production API, reconcile/deploy the current main source only after a reviewed rollout/rollback plan, and add a release parity check that records deployed function version/source commit.
 - Status: the historical multiple-API concern was addressed by PR #148; current deployed-source drift is tracked in P1 issue #163. The old Render proxy deployment is not in the current frontend request path.
 
-#### BD-AUD-004 — Legacy direct wallet transfer does not use a stable caller idempotency key
+#### BD-AUD-004 — Dormant legacy wallet transfer uses a timestamp-derived retry key
 - File: `backend/src/routes/wallet.routes.ts`
 - Evidence: `idempotencyKey: TRANSFER_<sender>_<recipient>_<Date.now()>`.
 - Impact: network retries would produce new keys if this legacy route were mounted.
@@ -57,7 +57,7 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 - Recommendation: add disposable PostgreSQL integration tests for wallet transfer, bet funding/outbox, cashout, settlement, refunds, token-supply invariant, duplicate/concurrent requests, worker lease handoff, and rollback. Add deployed Edge API smoke tests using synthetic accounts in staging.
 - Validation needed: run CI and capture the exact workflow results; no successful full test run is asserted by this audit.
 
-#### BD-AUD-007 — Two Aviator API implementations create potential contract and authorization drift
+#### BD-AUD-007 — Historical standalone Aviator API was consolidated by PR #148
 - Files: `supabase/functions/api/aviator.routes.ts`, `supabase/functions/aviator-api/index.ts`.
 - Evidence: the historical dedicated `aviator-api` implementation was archived by PR #148; the active function inventory contains the canonical `api` and `aviator-engine` functions, not a separately deployed `aviator-api`. No `aviator-api` requests appeared in the last 24-hour function-edge logs.
 - Status: canonical routing was consolidated by PR #148. The remaining live deployment drift between deployed `api` version 36 and current main is separately tracked in #163.
