@@ -58,6 +58,8 @@ interface WebSocketContextType {
   lastRealtimeEventAt: number | null;
   realtimeEventLagMs: number | null;
   realtimeEventCount: number;
+  realtimeSequenceGapCount: number;
+  realtimeStaleEventCount: number;
   pollingFallbackCount: number;
   realtimeReconnectCount: number;
   multiplier: number;
@@ -107,6 +109,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastRealtimeEventAt, setLastRealtimeEventAt] = useState<number | null>(null);
   const [realtimeEventLagMs, setRealtimeEventLagMs] = useState<number | null>(null);
   const [realtimeEventCount, setRealtimeEventCount] = useState(0);
+  const [realtimeSequenceGapCount, setRealtimeSequenceGapCount] = useState(0);
+  const [realtimeStaleEventCount, setRealtimeStaleEventCount] = useState(0);
   const [pollingFallbackCount, setPollingFallbackCount] = useState(0);
   const [realtimeReconnectCount, setRealtimeReconnectCount] = useState(0);
   const lastRealtimeEventCursorRef = useRef<RealtimeEventCursor | null>(null);
@@ -621,7 +625,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // authenticated state endpoint remains the fallback for missed events
         // and the source for user-specific wallet/bet data.
         const eventCursor = readRealtimeEventCursor(payload);
-        if (eventCursor && !isNewerRealtimeEvent(payload, lastRealtimeEventCursorRef.current)) return;
+        const previousCursor = lastRealtimeEventCursorRef.current;
+        if (eventCursor && !isNewerRealtimeEvent(payload, previousCursor)) {
+          setRealtimeStaleEventCount((count) => count + 1);
+          return;
+        }
+        if (eventCursor && previousCursor && eventCursor.roundId === previousCursor.roundId &&
+            eventCursor.tickSequence > previousCursor.tickSequence + 1) {
+          setRealtimeSequenceGapCount((count) => count + eventCursor.tickSequence - previousCursor.tickSequence - 1);
+        }
         if (eventCursor) lastRealtimeEventCursorRef.current = eventCursor;
         const receivedAt = Date.now();
         lastRealtimeEventAtRef.current = receivedAt;
@@ -789,6 +801,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         lastRealtimeEventAt,
         realtimeEventLagMs,
         realtimeEventCount,
+        realtimeSequenceGapCount,
+        realtimeStaleEventCount,
         pollingFallbackCount,
         realtimeReconnectCount,
         multiplier,
