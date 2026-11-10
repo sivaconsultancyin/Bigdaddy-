@@ -530,7 +530,7 @@ async function handle(req: Request) {
     return response({ message: "TRANSFER_COMPLETED", transactionId, balances: (balances ?? []).map(b => ({ id: b.id, balance: String(b.balance) })) }, 200, origin);
   }
 
-  const activationMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
+  const activationMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
   if (req.method === "POST" && activationMatch) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
     const code = activationMatch[1] === "dragon-tiger" ? "dragon_tiger"
@@ -545,11 +545,28 @@ async function handle(req: Request) {
     if (gameError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
     const { data: pool, error: poolError } = await db.schema("wallet").from("wallets")
-      .select("id,balance").eq("id", game.pool_wallet_id).maybeSingle();
+      .select("id,balance,reserved_balance").eq("id", game.pool_wallet_id).maybeSingle();
     if (poolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     const poolBalance = String(pool?.balance ?? "0");
-    if (!pool || !/^[0-9]+$/.test(poolBalance) || BigInt(poolBalance) <= 0n) {
+    const reservedBalance = String(pool?.reserved_balance ?? "0");
+    if (!pool || !/^[0-9]+$/.test(poolBalance) || !/^[0-9]+$/.test(reservedBalance)) {
+      return response({ error: "GAME_POOL_BALANCE_INVALID" }, 503, origin);
+    }
+    const totalPoolBalance = BigInt(poolBalance);
+    const poolReservedBalance = BigInt(reservedBalance);
+    if (poolReservedBalance > totalPoolBalance) {
+      return response({ error: "GAME_POOL_LIABILITY_MISMATCH" }, 409, origin);
+    }
+    const availablePoolBalance = totalPoolBalance - poolReservedBalance;
+    if (availablePoolBalance <= 0n) {
       return response({ error: "ALLOCATE_GAME_POOL_TOKENS_FIRST" }, 400, origin);
+    }
+    if (code === "aviator") {
+      const { data: runtimeState, error: runtimeError } = await db.schema("aviator").rpc("get_aviator_state_bundle");
+      const runtimeRound = runtimeState?.round;
+      if (runtimeError || !runtimeRound?.id || !["WAITING", "RUNNING"].includes(String(runtimeRound.status))) {
+        return response({ error: "AVIATOR_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
     }
     const { error: updateError } = await db.schema("platform").from("games")
       .update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", code);
@@ -576,7 +593,7 @@ async function handle(req: Request) {
       // than reporting failure and encouraging an unsafe repeated allocation.
       console.error("Game activation audit write failed.");
     }
-    return response({ status: "ACTIVE", gameCode: code, poolBalance }, 200, origin);
+    return response({ status: "ACTIVE", gameCode: code, poolBalance, availablePoolBalance: availablePoolBalance.toString() }, 200, origin);
   }
 
   if (req.method === "GET" && path === "/games/list") {
@@ -608,17 +625,11 @@ async function handle(req: Request) {
     return response({ transactionId, amount, gameCode }, 200, origin);
   }
 
-  const activate = path.match(/^\/games\/([^/]+)\/activate$/);
-  if (req.method === "POST" && activate) {
+  // Fail closed for every activation path not covered by the explicit production allowlist above.
+  const unsupportedActivation = path.match(/^\/games\/([^/]+)\/activate$/);
+  if (req.method === "POST" && unsupportedActivation) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
-    const gameCode = decodeURIComponent(activate[1]).replace(/-/g, "_");
-    const pool = await db.schema("platform").from("game_pools").select("wallet_id").eq("game_code", gameCode).maybeSingle();
-    if (pool.error || !pool.data) return response({ error: "GAME_POOL_NOT_FOUND" }, 404, origin);
-    const { data: wallet, error: walletError } = await db.schema("wallet").from("wallets").select("balance,reserved_balance").eq("id", pool.data.wallet_id).maybeSingle();
-    if (walletError || !wallet) return response({ error: "GAME_POOL_NOT_FOUND" }, 404, origin);
-    const { error } = await db.schema("platform").from("games").update({ status: "ACTIVE", updated_at: new Date().toISOString() }).eq("code", gameCode);
-    if (error) return response({ error: "GAME_ACTIVATION_FAILED" }, 400, origin);
-    return response({ status: "ACTIVE", gameCode, poolBalance: String(wallet.balance), reservedBalance: String(wallet.reserved_balance) }, 200, origin);
+    return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
   }
 
   if (req.method === "GET" && path === "/requests/list") {
