@@ -373,7 +373,6 @@ export const RouletteGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackTo
     try {
       const payload = {
         bets: currentBets.map((b) => ({
-          id: b.id,
           type: b.type,
           numbers: b.numbers,
           amount: b.amount.toString(),
