@@ -169,8 +169,12 @@ async function runTestSuite() {
 
   test('Production routes every Aviator endpoint to the single configured Supabase API', () => {
     const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
+    const supabaseConfig = readFileSync('frontend/src/api/supabaseConfig.ts', 'utf8');
     const sharedConfig = readFileSync('supabase/config.toml', 'utf8');
-    assert.ok(apiClient.includes('const SUPABASE_API_BASE'));
+    assert.ok(supabaseConfig.includes('import.meta.env.VITE_SUPABASE_URL'));
+    assert.ok(supabaseConfig.includes('import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY'));
+    assert.ok(supabaseConfig.includes('${SUPABASE_URL}/functions/v1/api'));
+    assert.ok(apiClient.includes('const API_BASE'));
     assert.ok(apiClient.includes('fetch(`${API_BASE}${endpoint}`'));
     assert.ok(!apiClient.includes('yrleubhpiqejfvingqfj'));
     assert.ok(!apiClient.includes('AVIATOR_API_BASE'));
