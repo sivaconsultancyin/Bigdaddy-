@@ -192,6 +192,9 @@ async function runTestSuite() {
     const source = readFileSync('supabase/functions/api/index.ts', 'utf8');
     const guarded = source.slice(source.indexOf('const activationMatch'), source.indexOf('if (req.method === "GET" && path === "/games/list")'));
     assert.ok(guarded.includes('(aviator|roulette|dice|dragon-tiger|andar-bahar)'));
+    assert.ok(guarded.includes('from("game_pools")'));
+    assert.ok(guarded.includes('pool.wallet_type !== "GAME_POOL"'));
+    assert.ok(guarded.includes('pool.game_code !== code'));
     assert.ok(guarded.includes('reserved_balance'));
     assert.ok(guarded.includes('poolReservedBalance > totalPoolBalance'));
     assert.ok(guarded.includes('availablePoolBalance <= 0n'));
