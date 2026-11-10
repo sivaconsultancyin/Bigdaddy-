@@ -1047,7 +1047,6 @@
     "20261023160000_roulette_bet_validation.sql",
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
-    "20261025110000_shared_aviator_wallet_operations.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql"
