@@ -1185,6 +1185,13 @@
         "reason": "Read-only grant inspection showed browser-role EXECUTE already revoked; source is useful for reproducibility but does not require production DDL."
       }
     ],
-    "safety": "No production migration history, DDL, wallet, bet, round, settlement, or scheduler data was changed."
+    "safety": "No production migration history, DDL, wallet, bet, round, settlement, or scheduler data was changed.",
+    "poolArchitecture": {
+      "observedPlatformGames": 5,
+      "distinctPlatformGamePoolWallets": 5,
+      "publicGamesRelation": "updatable compatibility view over platform.games",
+      "publicGamePoolsRelation": "updatable compatibility view over platform.game_pools",
+      "pendingFileRisk": "20261020140000_shared_game_pool.sql issues ALTER TABLE against public.game_pools, which is currently a view. It is an old shared-pool migration candidate, not a safe pending production migration. The applied ledger has a historical use_one_shared_game_pool entry at 20261020034914; later schema cutover restored dedicated per-game pool pointers. Reconcile its source filename to the applied history only after exact historical SQL mapping."
+    }
   }
 }
