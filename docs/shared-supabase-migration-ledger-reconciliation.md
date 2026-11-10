@@ -161,3 +161,8 @@ A fresh read-only inventory of the single active project (`nzvpuoeibqrpcltrszvr`
 ### Still blocked by safety gate
 
 The 27 same-name/different-version candidates and 9 differently named/no-name candidates still need exact historical SQL recovery and live-object comparison. The clean bootstrap and current-ledger upgrade replay have not yet been completed. Duplicate prefixes remain in place. No production DDL, migration repair, migration-history update, or financial data mutation was performed.
+
+
+### Additional migration replay hazard found
+
+The source-only `20261020140000_shared_game_pool.sql` is a historical migration candidate, not safe to replay at its current timestamp. Its first statement uses `ALTER TABLE public.game_pools`, but the live `public.game_pools` relation is now an updatable compatibility view over `platform.game_pools`; `public.games` is likewise a view over `platform.games`. The live catalog has five game rows with five distinct pool-wallet IDs, preserving per-game pool isolation. The later schema-cutover migration explicitly restores dedicated non-Aviator pool pointers. The applied ledger already has the historical `use_one_shared_game_pool` entry at version `20261020034914`; the source file must be mapped to its historical applied version after exact SQL provenance review, never run as a new migration.
