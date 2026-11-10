@@ -693,7 +693,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           };
           const currentRound = latestObservedRoundRef.current ?? roundStateRef.current;
           if (isNewerRoundSnapshot(incomingRound, currentRound)) {
+            const isRoundChange = currentRound?.id !== eventRoundId;
             latestObservedRoundRef.current = incomingRound;
+            if (isRoundChange) {
+              // Realtime lifecycle events can announce a new round before its first
+              // state poll. Clear the previous round's terminal multiplier immediately.
+              lastAuthoritativeMultiplierRef.current = {
+                value: 1,
+                at: Date.now(),
+                roundId: eventRoundId,
+              };
+              setAuthoritativeMultiplier(1);
+            }
             setRoundState((current) => ({
               id: eventRoundId,
               roundNumber: Number.isFinite(eventRoundNumber) ? eventRoundNumber : current.roundNumber,
@@ -788,9 +799,25 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       animatedRoundIdRef.current = roundState.id;
       displayedMultiplierRef.current = 1.0;
       setMultiplier(1.0);
+      // If this round was not already initialized by its API/Realtime payload,
+      // never reuse the previous round's multiplier as the new round's target.
+      if (roundState.id && lastAuthoritativeMultiplierRef.current?.roundId !== roundState.id) {
+        lastAuthoritativeMultiplierRef.current = {
+          value: 1,
+          at: Date.now(),
+          roundId: roundState.id,
+        };
+        authoritativeMultiplierRef.current = 1;
+        setAuthoritativeMultiplier(1);
+      }
     }
 
-    const terminal = roundState.status === 'CRASHED' || roundState.status === 'SETTLED' || roundState.status === 'WAITING';
+    if (roundState.status === 'WAITING') {
+      displayedMultiplierRef.current = 1.0;
+      setMultiplier(1.0);
+      return;
+    }
+    const terminal = roundState.status === 'CRASHED' || roundState.status === 'SETTLED';
     if (terminal) {
       displayedMultiplierRef.current = authoritativeMultiplierRef.current;
       setMultiplier(authoritativeMultiplierRef.current);
