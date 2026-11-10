@@ -3,10 +3,10 @@
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
     "sharedAppliedLedger": 65,
-    "sharedRepositoryFiles": 58,
+    "sharedRepositoryFiles": 57,
     "sharedExactVersionNameMatches": 21,
     "sharedAppliedOnly": 44,
-    "sharedFileOnly": 37,
+    "sharedFileOnly": 36,
     "sharedDuplicateVersionPrefixes": 2,
     "isolatedAppliedLedger": 0,
     "isolatedRepositoryFiles": 0,
@@ -14,9 +14,9 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 58,
+    "totalSupabaseMigrationFiles": 57,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
-    "legacyArchivedMigrationFiles": 12,
+    "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
   },
   "appliedLedger": [
@@ -660,7 +660,6 @@
     "20261023160000_roulette_bet_validation.sql",
     "20261023170000_roulette_hash_integer_overflow.sql",
     "20261023190000_aviator_realtime_broadcast.sql",
-    "20261025110000_shared_aviator_wallet_operations.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql"
@@ -1153,5 +1152,40 @@
     "aviator-round-engine",
     "aviator-settlement-worker",
     "aviator-wallet-worker"
-  ]
+  ],
+  "reconciliationFindings": {
+    "snapshotDate": "2026-11-10",
+    "sourceOnlySameNameCandidates": 27,
+    "sourceOnlyWithoutSameNameAppliedRow": 9,
+    "duplicateActiveVersionPrefixes": [
+      "20261021120000",
+      "20261023160000"
+    ],
+    "archivedDuplicate": {
+      "file": "20261025110000_shared_aviator_wallet_operations.sql",
+      "archivedPath": "supabase/archive/legacy-isolated-aviator/migrations/20261025110000_shared_aviator_wallet_operations.sql",
+      "reason": "SQL body is identical to the already-applied 20261025053037 shared_aviator_wallet_operations migration; the second copy is a no-op duplicate in the active CLI path."
+    },
+    "productionChecks": {
+      "projectRef": "nzvpuoeibqrpcltrszvr",
+      "liveRoundCount": 23150,
+      "multiplierTickSequenceColumnPresent": false,
+      "tickCrashEngineWithBroadcastPresent": true,
+      "baseTickFunctionPresent": true,
+      "rlsAutoEnableBrowserExecuteRevoked": true
+    },
+    "pendingReview": [
+      {
+        "file": "20261110120000_aviator_realtime_event_sequence.sql",
+        "classification": "genuinely pending candidate",
+        "reason": "Live aviator.game_rounds lacks multiplier_tick_seq; live broadcast wrapper exists but does not emit tickSequence. Must pass isolated PostgreSQL test before production deployment."
+      },
+      {
+        "file": "20261110130000_harden_rls_auto_enable_grants.sql",
+        "classification": "effect already present in production",
+        "reason": "Read-only grant inspection showed browser-role EXECUTE already revoked; source is useful for reproducibility but does not require production DDL."
+      }
+    ],
+    "safety": "No production migration history, DDL, wallet, bet, round, settlement, or scheduler data was changed."
+  }
 }
