@@ -99,6 +99,21 @@ async function runTestSuite() {
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
     assert.strictEqual(manifest.counts.sharedFileOnly, 36);
+    const exactAppliedFiles = new Set(
+      (manifest.appliedLedger as Array<{ version: string; name: string }>).map(
+        (entry) => `${entry.version}_${entry.name}.sql`,
+      ),
+    );
+    const sourceOnlyFiles = actualFiles.filter((name: string) => !exactAppliedFiles.has(name)).sort();
+    assert.deepStrictEqual(sourceOnlyFiles, [...(manifest.fileOnly as string[])].sort());
+    assert.deepStrictEqual(manifest.sharedFileOnly, sourceOnlyFiles);
+    const appliedNames = new Set((manifest.appliedOnly as Array<{ name: string }>).map((entry) => entry.name));
+    const sameNameDifferentVersion = sourceOnlyFiles.filter((name: string) =>
+      appliedNames.has(name.replace(/^\d{14}_/, '').replace(/\.sql$/, '')),
+    );
+    assert.strictEqual(sameNameDifferentVersion.length, 27);
+    assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 9);
+    assert.ok(!sourceOnlyFiles.includes('20261025110000_shared_aviator_wallet_operations.sql'));
     assert.strictEqual(manifest.counts.legacyIsolatedAppliedLedgerSnapshot, 7);
     assert.strictEqual(manifest.counts.legacyArchivedMigrationFiles, 13);
     assert.strictEqual(manifest.counts.legacyArchivedFunctionDirectories, 4);

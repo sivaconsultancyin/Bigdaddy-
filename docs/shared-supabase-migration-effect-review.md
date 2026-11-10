@@ -102,3 +102,34 @@ The following checks compare the normalized PL/pgSQL function bodies in the sour
 - `20261021193000_add_atomic_user_creation_rpcs.sql`: the live bodies of `platform.create_user_atomic(uuid,text,text,text,user_role_enum,bigint)` and `platform.register_referral_atomic(text,text,text,text)` both match the source bodies exactly after whitespace normalization. The applied ledger row is `20261021120305_add_atomic_user_creation_rpcs`. Do not replay this later-timestamp source copy.
 - Live `aviator.place_crash_bet_atomic`, `aviator.cashout_crash_bet_atomic`, and `aviator.settle_crash_round_atomic` all use the hardened `pg_catalog, pg_temp` search path. The live bet function also rejects idempotency keys longer than 119 characters; the cashout function enforces its 96-character limit. These checks support the expected effects of the search-path and key-length hardening candidates, but exact historical SQL comparison remains open.
 - `20261021120000_protect_reserved_wallet_balances.sql` does **not** have a body identical to the current live `wallet.wallet_transfer_atomic`; the current live body is longer. The adjacent `20261021120000_wallet_transfer_api_boundary.sql` wrapper body also does not match the current live implementation. Treat these as historical revisions superseded by later wallet changes, not as proof that either source file can be replayed.
+
+
+## Additional production effect verification (pass 2, read-only)
+
+The following source-only candidates have their intended effect visible in the current production catalog. This is **effect evidence**, not proof that the exact original applied SQL was recovered. These files must not be replayed as new migrations.
+
+| Source candidate | Production evidence | Classification |
+|---|---|---|
+| `20261021165000_harden_aviator_cashout_idempotency.sql` | Live `aviator.cashout_crash_bet_atomic` contains `INVALID_CASHOUT_IDEMPOTENCY_KEY` and enforces the 96-character caller-key limit. | Effect present; original applied SQL not recovered. |
+| `20261021171000_limit_aviator_bet_idempotency_key_length.sql` | Live `aviator.place_crash_bet_atomic` enforces the 119-character caller-key limit. | Effect present; original applied SQL not recovered. |
+| `20261021173000_validate_aviator_bet_user_and_round.sql` | Live `aviator.place_crash_bet_atomic` contains the `USER_AND_ROUND_REQUIRED` guard. | Effect present; original applied SQL not recovered. |
+| `20261021175000_harden_aviator_bet_function_search_path.sql` | Live Aviator bet function has `search_path=pg_catalog, pg_temp`. | Effect present; original applied SQL not recovered. |
+| `20261021180000_harden_aviator_cashout_settlement_search_path.sql` | Live cashout and round-settlement functions both have `search_path=pg_catalog, pg_temp`. | Effect present; original applied SQL not recovered. |
+| `20261021160000_add_system_health_events.sql` | Live `platform.system_health_events` exists and has RLS enabled. | Table/RLS effect present; full columns, policies, indexes, and grants still need comparison. |
+
+Two additional source candidates have stronger function-level evidence:
+
+- `20261021190000_add_authoritative_game_bet_rpc.sql` (one of the 9 no-same-name candidates): both `platform.place_authoritative_game_bets_atomic` and `platform.resolve_token_request_atomic` bodies match the current production definitions after whitespace normalization. Both functions have ACLs that deny `anon` and `authenticated` while allowing `service_role`. This is strong deployed-effect evidence for the two RPCs and their execution boundary, but the original applied SQL at ledger version `20261021115840_add_authoritative_game_bet_and_request_rpcs` has not been recovered.
+- `20261021193000_add_atomic_user_creation_rpcs.sql` (one of the 27 same-name candidates): both `platform.create_user_atomic` and `platform.register_referral_atomic` bodies match production after whitespace normalization. Their live ACLs also deny `anon` and `authenticated` and allow `service_role`. The applied ledger row is `20261021120305_add_atomic_user_creation_rpcs`. Preserve the current source as evidence; do not replay it.
+
+The wallet source candidate `20261021120000_protect_reserved_wallet_balances.sql` remains a superseded historical revision: its function body does not match the current live `wallet.wallet_transfer_atomic` body. The live body is longer and must not be overwritten by replaying this file.
+
+## Updated completion status
+
+- Source inventory and count assertions are now covered by a stronger automated test in PR #151.
+- All PostgreSQL-backed CI fixtures are being moved to PostgreSQL 17, matching production; PR #151 is open pending CI.
+- Exact applied SQL recovery is still incomplete for many of the 44 applied-only ledger rows. GitHub commit search found some historical implementation commits, but did not recover the exact original migration files for the full applied ledger.
+- The current root migration directory is **not yet a safe clean-bootstrap sequence**. It contains source-only historical copies, one known incompatible shared-pool migration, duplicate timestamp prefixes, and a pending Realtime sequence migration.
+- No current-ledger upgrade replay can be declared safe until the historical SQL mapping is complete and the replay has been executed against a disposable copy with synthetic data.
+
+No production DDL, migration repair, or financial data changes were performed during this pass.
