@@ -66,8 +66,6 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
 
   // Verify Modal State
   const [verifyServerSeed, setVerifyServerSeed] = useState<string>('');
-  const [verifyClientSeed, setVerifyClientSeed] = useState<string>('client-seed-live');
-  const [verifyNonce, setVerifyNonce] = useState<number>(1);
   const [verifyResult, setVerifyResult] = useState<number | null>(null);
 
   // Keep WebSocket sync in local state
@@ -348,11 +346,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
   // Handle Verify Roll
   const handleVerify = async () => {
     try {
-      const res = await ApiClient.verifyDiceRoll({
-        serverSeed: verifyServerSeed,
-        clientSeed: verifyClientSeed,
-        nonce: verifyNonce,
-      });
+      const res = await ApiClient.verifyDiceRoll({ serverSeed: verifyServerSeed });
       setVerifyResult(res.calculatedRoll);
     } catch (e: any) {
       setErrorMessage(e.message || 'Verification error');
@@ -1042,22 +1036,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
                 onChange={(e) => setVerifyServerSeed(e.target.value)}
                 className="w-full p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 font-mono text-[10px] text-zinc-200"
               />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="Client Seed"
-                  value={verifyClientSeed}
-                  onChange={(e) => setVerifyClientSeed(e.target.value)}
-                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 font-mono text-[10px] text-zinc-200"
-                />
-                <input
-                  type="number"
-                  placeholder="Round / Nonce"
-                  value={verifyNonce}
-                  onChange={(e) => setVerifyNonce(parseInt(e.target.value) || 1)}
-                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 font-mono text-[10px] text-zinc-200"
-                />
-              </div>
+              <p className="text-[10px] text-zinc-500">The revealed server seed is checked using the same HMAC-SHA256 rule used by the production Dice engine.</p>
 
               <button
                 onClick={handleVerify}
