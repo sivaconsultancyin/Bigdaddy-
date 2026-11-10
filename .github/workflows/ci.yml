@@ -334,10 +334,7 @@ jobs:
         LANGUAGE plpgsql
         AS $function$
         BEGIN
-          IF NEW.description = 'ci-injected-ledger-failure' THEN
-            RAISE EXCEPTION 'ci_injected_ledger_failure' USING ERRCODE = 'P0001';
-          END IF;
-          RETURN NEW;
+          RAISE EXCEPTION 'ci_injected_ledger_failure' USING ERRCODE = 'P0001';
         END;
         $function$;
 
