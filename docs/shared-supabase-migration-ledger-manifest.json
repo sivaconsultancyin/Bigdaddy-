@@ -3,10 +3,10 @@
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
     "sharedAppliedLedger": 65,
-    "sharedRepositoryFiles": 57,
+    "sharedRepositoryFiles": 58,
     "sharedExactVersionNameMatches": 21,
     "sharedAppliedOnly": 44,
-    "sharedFileOnly": 36,
+    "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
     "isolatedAppliedLedger": 0,
     "isolatedRepositoryFiles": 0,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 57,
+    "totalSupabaseMigrationFiles": 58,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 12,
     "legacyArchivedFunctionDirectories": 4
@@ -623,7 +623,8 @@
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -661,7 +662,8 @@
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025110000_shared_aviator_wallet_operations.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
   "duplicateVersionPrefixes": [
     "20261021120000",
@@ -725,7 +727,8 @@
     "20261108063629_aviator_engine_worker_lease.sql",
     "20261108063705_aviator_multiplier_realtime_broadcast.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -1049,7 +1052,8 @@
     "20261023190000_aviator_realtime_broadcast.sql",
     "20261025110000_shared_aviator_wallet_operations.sql",
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
-    "20261110120000_aviator_realtime_event_sequence.sql"
+    "20261110120000_aviator_realtime_event_sequence.sql",
+    "20261110130000_harden_rls_auto_enable_grants.sql"
   ],
   "legacyIsolatedSnapshot": {
     "appliedLedger": [
