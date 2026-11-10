@@ -6,7 +6,7 @@ Read-only snapshot rechecked on 2026-11-10. The only active production target is
 
 - Applied ledger entries: **65**
 - Active SQL files physically in `supabase/migrations/`: **57**
-- Legacy isolated-Aviator migration files preserved outside the active directory: **12**
+- Legacy isolated-Aviator migration files preserved outside the active directory: **13**
 - Total SQL files physically in the active `supabase/migrations/` directory: **57**
 - Exact version + name matches: **21**
 - Applied ledger entries with no exact file match: **44**
