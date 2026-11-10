@@ -544,12 +544,20 @@ async function handle(req: Request) {
       .select("id,status,pool_wallet_id").eq("code", code).maybeSingle();
     if (gameError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
     if (!game?.id || !game.pool_wallet_id) return response({ error: "GAME_POOL_WALLET_MISSING" }, 503, origin);
+    const { data: gamePool, error: gamePoolError } = await db.schema("platform").from("game_pools")
+      .select("wallet_id").eq("game_code", code).maybeSingle();
+    if (gamePoolError || !gamePool || gamePool.wallet_id !== game.pool_wallet_id) {
+      return response({ error: "GAME_POOL_MAPPING_MISMATCH" }, 409, origin);
+    }
     const { data: pool, error: poolError } = await db.schema("wallet").from("wallets")
-      .select("id,balance,reserved_balance").eq("id", game.pool_wallet_id).maybeSingle();
+      .select("id,balance,reserved_balance,wallet_type,game_code").eq("id", game.pool_wallet_id).maybeSingle();
     if (poolError) return response({ error: "GAME_ACTIVATION_UNAVAILABLE" }, 503, origin);
-    const poolBalance = String(pool?.balance ?? "0");
-    const reservedBalance = String(pool?.reserved_balance ?? "0");
-    if (!pool || !/^[0-9]+$/.test(poolBalance) || !/^[0-9]+$/.test(reservedBalance)) {
+    if (!pool || pool.wallet_type !== "GAME_POOL" || pool.game_code !== code) {
+      return response({ error: "GAME_POOL_IDENTITY_MISMATCH" }, 409, origin);
+    }
+    const poolBalance = String(pool.balance ?? "0");
+    const reservedBalance = String(pool.reserved_balance ?? "0");
+    if (!/^[0-9]+$/.test(poolBalance) || !/^[0-9]+$/.test(reservedBalance)) {
       return response({ error: "GAME_POOL_BALANCE_INVALID" }, 503, origin);
     }
     const totalPoolBalance = BigInt(poolBalance);
