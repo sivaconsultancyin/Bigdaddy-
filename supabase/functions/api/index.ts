@@ -183,22 +183,23 @@ async function handle(req: Request) {
     try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
     const serverSeed = typeof body.serverSeed === "string" ? body.serverSeed : "";
-    const clientSeed = typeof body.clientSeed === "string" && body.clientSeed.length > 0 ? body.clientSeed : "client-seed-live";
-    const nonceRaw = body.nonce;
-    const nonce = typeof nonceRaw === "number" ? nonceRaw : Number.parseInt(String(nonceRaw ?? ""), 10);
-    if (!serverSeed || serverSeed.length > 1024 || nonceRaw === undefined || !Number.isSafeInteger(nonce) || nonce < 0 || clientSeed.length > 256) {
+    if (!serverSeed || serverSeed.length > 1024) {
       return response({ error: "INVALID_VERIFICATION_PARAMETERS" }, 400, origin);
     }
+    // Must exactly match backend/src/routes/authoritative-games.routes.ts:
+    // stableInt(serverSeed, "dice", 10) + 1. The old verifier used
+    // clientSeed:nonce and the first 8 hex digits, which could never
+    // reproduce the authoritative Dice result.
     const encoder = new TextEncoder();
     const hmacKey = await crypto.subtle.importKey(
       "raw", encoder.encode(serverSeed), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
     );
-    const hmacBytes = new Uint8Array(await crypto.subtle.sign("HMAC", hmacKey, encoder.encode(`${clientSeed}:${nonce}`)));
+    const hmacBytes = new Uint8Array(await crypto.subtle.sign("HMAC", hmacKey, encoder.encode("dice")));
     const hmacHex = Array.from(hmacBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
     const seedHashBytes = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(serverSeed)));
     const serverSeedHash = Array.from(seedHashBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-    const calculatedRoll = (Number.parseInt(hmacHex.slice(0, 8), 16) % 10) + 1;
-    return response({ serverSeed, serverSeedHash, clientSeed, nonce, calculatedRoll }, 200, origin);
+    const calculatedRoll = Number(BigInt(`0x${hmacHex.slice(0, 13)}`) % 10n) + 1;
+    return response({ serverSeed, serverSeedHash, calculatedRoll }, 200, origin);
   }
 
   let db: SupabaseClient;
