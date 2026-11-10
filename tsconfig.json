@@ -27,6 +27,7 @@
     "noEmit": true
   },
   "exclude": [
-    "supabase/functions/**"
+    "supabase/functions/**",
+    "supabase/archive/**"
   ]
 }
