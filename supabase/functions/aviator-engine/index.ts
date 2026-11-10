@@ -167,15 +167,22 @@ Deno.serve(async (req: Request) => {
         : "unknown";
     actionCounts[action] = (actionCounts[action] ?? 0) + 1;
 
-    // The existing leased worker also advances Dice. The Dice RPC is independently
-    // serialized in PostgreSQL and is a no-op while Dice remains COMING_SOON.
-    // Keep Dice failures isolated so they cannot stop the Aviator engine.
-    const diceTick = await db.schema("dice").rpc("advance_round");
-    if (diceTick.error) {
+    // The existing leased worker also advances Dice, but only after the catalog
+    // marks it ACTIVE. This avoids calling a not-yet-migrated RPC while Dice is
+    // COMING_SOON. Dice failures remain isolated from the Aviator engine.
+    const diceConfig = await db.schema("platform").from("games")
+      .select("status").eq("code", "dice").maybeSingle();
+    if (diceConfig.error) {
       diceTickFailures += 1;
-      console.error("Dice engine RPC failed:", diceTick.error.code ?? "unknown");
-    } else {
-      lastDiceAction = diceTick.data ?? null;
+      console.error("Dice game config read failed:", diceConfig.error.code ?? "unknown");
+    } else if (diceConfig.data?.status === "ACTIVE") {
+      const diceTick = await db.schema("dice").rpc("advance_round");
+      if (diceTick.error) {
+        diceTickFailures += 1;
+        console.error("Dice engine RPC failed:", diceTick.error.code ?? "unknown");
+      } else {
+        lastDiceAction = diceTick.data ?? null;
+      }
     }
 
     if (Date.now() >= nextHeartbeatAt) {
