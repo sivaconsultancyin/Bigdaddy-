@@ -1,9 +1,9 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
+import { SUPABASE_API_BASE } from './supabaseConfig';
 
-// Production API is served directly by the Supabase Edge Function.
+// Production API is served directly by the configured canonical Supabase Edge Function.
 // The function strips the /functions/v1/api prefix and routes /auth, /games, /wallet, etc.
 // Keep Render out of the runtime request path.
-const SUPABASE_API_BASE = 'https://nzvpuoeibqrpcltrszvr.supabase.co/functions/v1/api';
 const API_BASE = import.meta.env.PROD
   ? SUPABASE_API_BASE
   : (import.meta.env.VITE_API_BASE_URL || '/api');
@@ -91,6 +91,9 @@ export class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    if (!API_BASE) {
+      throw new Error('Production API is not configured. Set VITE_SUPABASE_URL in the frontend environment.');
+    }
     const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
