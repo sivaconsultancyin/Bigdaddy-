@@ -31,11 +31,11 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 ### P1 — High risk
 
 #### BD-AUD-003 — Multiple backend execution paths make route/data-source consistency difficult to guarantee
-- Files: `render-proxy.ts`, `server.ts`, `backend/src/db/storage.ts`, `backend/src/db/postgres.ts`, `supabase/functions/api/index.ts`, `supabase/functions/aviator-api/index.ts`.
-- Evidence: package start script runs `tsx render-proxy.ts`; Render proxy forwards application requests to Supabase Edge `/functions/v1/api`. A separate Express `server.ts` contains legacy routers and PostgreSQL startup/worker orchestration. The repository also has a separate `aviator-api` Edge Function with its own auth and state/bet implementation.
-- Impact: security fixes or API behavior may be applied to one path but not the deployed path; two Aviator APIs may drift in authorization, validation, response shape, and financial semantics.
-- Recommendation: publish a single canonical production route map; mark legacy server/routes as development-only or remove them after migration. Decide whether `aviator-api` is active; if not, decommission it, otherwise share common contract tests and versioned RPCs.
-- Validation needed: inspect Render service start command and Supabase function deployment/configuration; run route-level tests against the actual deployed entry point.
+- Files: `render-proxy.ts`, `server.ts`, `supabase/functions/api/index.ts`, `supabase/functions/api/aviator.routes.ts`, `supabase/functions/aviator-engine/index.ts`.
+- Evidence: package start script runs `tsx render-proxy.ts`; the active Render backend service is the Supabase Edge proxy, while the frontend now calls the canonical Supabase API directly. `server.ts` is not the Render start entrypoint and mounts only the production routers. The historical standalone `aviator-api` function was archived by PR #148 and had no requests in the last 24-hour Edge logs. The remaining live divergence is concrete: deployed Supabase `api` version 36 (last updated 2026-10-24) differs materially from current main and lacks the `aviator.routes.ts` bundle.
+- Impact: security, fairness-verification, authentication, idempotency, and response-contract changes merged into main may not yet be active in the deployed API.
+- Recommendation: maintain one canonical production API, reconcile/deploy the current main source only after a reviewed rollout/rollback plan, and add a release parity check that records deployed function version/source commit.
+- Status: the historical multiple-API concern was addressed by PR #148; current deployed-source drift is tracked in P1 issue #163. The old Render proxy deployment is not in the current frontend request path.
 
 #### BD-AUD-004 — Legacy direct wallet transfer does not use a stable caller idempotency key
 - File: `backend/src/routes/wallet.routes.ts`
@@ -121,8 +121,8 @@ The repository has a substantial production-oriented Supabase/Edge implementatio
 
 ## Recommended remediation order
 
-1. Complete single-project consolidation: route all Aviator HTTP calls through the canonical API and keep abandoned migration/function sources outside active Supabase CLI paths.
-2. Complete API auth, validation, idempotency, and response contract tests on the canonical Aviator routes (BD-AUD-003/007).
+1. Reconcile deployed Supabase `api` version 36 with reviewed main source under issue #163; add deployment-source parity evidence and a rollback plan before production rollout.
+2. Complete API auth, validation, idempotency, and response contract tests on the canonical Aviator routes (BD-AUD-006/008).
 3. Reconcile the single project's 65 applied migration effects against its 57 active source files and run clean-bootstrap/upgrade tests before any production migration push (BD-AUD-005).
 4. Add concurrent Aviator cashout/settlement/refund tests and rollback injection, then run staging end-to-end financial flows (BD-AUD-006).
 5. Complete Realtime sequence-gap/terminal-event coverage and mobile end-to-end validation (BD-AUD-008/009).
