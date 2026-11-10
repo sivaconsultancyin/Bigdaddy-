@@ -24,7 +24,6 @@ export class DiceEngine {
   private history: DiceHistoryItem[] = [];
   private listeners: Set<DiceEventListener> = new Set();
   private timer: NodeJS.Timeout | null = null;
-  private simBetTimeouts: NodeJS.Timeout[] = [];
   private roundCount = 601;
 
   private BETTING_DURATION_MS = 14000; // 14 seconds betting phase
@@ -33,7 +32,6 @@ export class DiceEngine {
 
   private serverSeed: string = '';
   private serverSeedHash: string = '';
-  private clientSeed: string = 'client-seed-live';
   private winningNumber: number | null = null;
 
   constructor() {
@@ -97,8 +95,6 @@ export class DiceEngine {
   // --- 1. BETTING PHASE ---
   private startBettingPhase() {
     if (this.timer) clearTimeout(this.timer);
-    this.simBetTimeouts.forEach((t) => clearTimeout(t));
-    this.simBetTimeouts = [];
 
     this.roundCount++;
     this.currentBets.clear();
@@ -126,9 +122,6 @@ export class DiceEngine {
       serverSeedHash: this.serverSeedHash,
     });
 
-    // Schedule active online simulated community bets
-    this.scheduleSimulatedCommunityBets();
-
     // Transition to ROLLING phase after timer expires
     this.timer = setTimeout(() => {
       this.startRollingPhase();
@@ -138,7 +131,6 @@ export class DiceEngine {
   // --- 2. ROLLING PHASE ---
   private startRollingPhase() {
     if (this.timer) clearTimeout(this.timer);
-    this.simBetTimeouts.forEach((t) => clearTimeout(t));
 
     this.currentRound.status = DiceRoundStatus.ROLLING;
     this.currentRound.rolledNumber = null;
@@ -159,12 +151,8 @@ export class DiceEngine {
     if (this.timer) clearTimeout(this.timer);
 
     // Calculate provably fair winning number (1 to 10) only after betting & rolling finish
-    const hmac = crypto.createHmac('sha256', this.serverSeed);
-    hmac.update(`${this.clientSeed}:${this.roundCount}`);
-    const hash = hmac.digest('hex');
-    const subHash = hash.substring(0, 8);
-    const intVal = parseInt(subHash, 16);
-    this.winningNumber = (intVal % 10) + 1; // 1 to 10
+    const hash = crypto.createHmac('sha256', this.serverSeed).update('dice').digest('hex');
+    this.winningNumber = Number(BigInt('0x' + hash.slice(0, 13)) % 10n) + 1; // 1 to 10
 
     this.currentRound.status = DiceRoundStatus.RESULT;
     this.currentRound.rolledNumber = this.winningNumber;
@@ -233,7 +221,7 @@ export class DiceEngine {
                 targetWalletId: userWallet.id,
                 amount: payoutNum.toString(),
                 type: TransactionType.BET_WIN_PAYOUT,
-                idempotencyKey: `dice-live-win-${bet.id}-${Date.now()}`,
+                idempotencyKey: `dice-live-win-${bet.id}`,
                 description: `Lucky 10 Dice Win - Rolled #${rolled} on ${bet.type.toUpperCase()}`,
                 metadata: { roundNumber: this.currentRound.roundNumber, rolledNumber: rolled, multiplier },
               });
@@ -262,7 +250,7 @@ export class DiceEngine {
       winners,
       history: this.getHistory(),
       serverSeed: this.serverSeed,
-      poolBalance: poolWallet ? poolWallet.balance : '2000000',
+      poolBalance: poolWallet ? poolWallet.balance : '0',
     });
 
     // Schedule transition to next round
@@ -302,14 +290,14 @@ export class DiceEngine {
       targetWalletId: SYSTEM_WALLETS.DICE_POOL,
       amount: totalRequested.toString(),
       type: TransactionType.BET_ESCROW_LOCK,
-      idempotencyKey: `dice-live-bet-${params.userId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      idempotencyKey: `dice-live-bet-${params.userId}-${crypto.randomUUID()}`,
       description: `Lucky 10 Dice Bet - Round #${this.currentRound.roundNumber}`,
       metadata: { roundNumber: this.currentRound.roundNumber, betsCount: params.bets.length },
     });
 
     const createdBets: DiceRoundBet[] = [];
     for (const b of params.bets) {
-      const betId = `dice-bet-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const betId = `dice-bet-${crypto.randomUUID()}`;
       const roundBet: DiceRoundBet = {
         id: betId,
         roundId: this.currentRound.id,
@@ -351,51 +339,6 @@ export class DiceEngine {
     };
   }
 
-  // Simulated active community bets
-  private scheduleSimulatedCommunityBets() {
-    const simUsers = ['crypto_king', 'lucky_sam', 'raj_roller', 'blaze_99', 'anil_v', 'kavya_77'];
-    const delays = [1500, 3500, 6000, 8500, 11000];
-
-    delays.forEach((delay, idx) => {
-      const t = setTimeout(() => {
-        if (this.currentRound.status !== DiceRoundStatus.BETTING) return;
-        const u = simUsers[idx % simUsers.length];
-        const types = ['7', '3', '10', '5', 'small', 'big', 'even', 'odd', '1', '9'];
-        const chosenType = types[Math.floor(Math.random() * types.length)];
-        const amount = [50, 100, 200, 500][Math.floor(Math.random() * 4)].toString();
-
-        const simBetId = `sim-dice-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        const roundBet: DiceRoundBet = {
-          id: simBetId,
-          roundId: this.currentRound.id,
-          userId: `sim-${u}`,
-          username: u,
-          type: chosenType,
-          amount,
-          createdAt: new Date().toISOString(),
-        };
-
-        this.currentBets.set(simBetId, roundBet);
-        this.currentRound.totalBetsCount++;
-        this.currentRound.totalBetAmount = (
-          BigInt(this.currentRound.totalBetAmount) + BigInt(amount)
-        ).toString();
-
-        const prevNumAmt = this.currentRound.numberBetsAmount[chosenType] || '0';
-        this.currentRound.numberBetsAmount[chosenType] = (
-          BigInt(prevNumAmt) + BigInt(amount)
-        ).toString();
-
-        this.emit('dice:bet_placed', {
-          roundId: this.currentRound.id,
-          bets: [roundBet],
-          round: this.getPublicRoundState(),
-        });
-      }, delay);
-
-      this.simBetTimeouts.push(t);
-    });
-  }
 }
 
 export const diceEngine = new DiceEngine();

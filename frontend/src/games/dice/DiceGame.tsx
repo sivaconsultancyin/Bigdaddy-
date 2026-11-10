@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
   ArrowLeft,
@@ -66,8 +66,6 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
 
   // Verify Modal State
   const [verifyServerSeed, setVerifyServerSeed] = useState<string>('');
-  const [verifyClientSeed, setVerifyClientSeed] = useState<string>('client-seed-live');
-  const [verifyNonce, setVerifyNonce] = useState<number>(1);
   const [verifyResult, setVerifyResult] = useState<number | null>(null);
 
   // Keep WebSocket sync in local state
@@ -83,29 +81,8 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     if (wsDiceLiveBets) setLiveBets(wsDiceLiveBets);
   }, [wsDiceLiveBets]);
 
-  // Robust HTTP polling fallback (every 1.5s) to guarantee single continuous multiplayer room
-  const pollServerState = useCallback(async () => {
-    try {
-      const res = await ApiClient.getDiceState();
-      if (res && res.round) {
-        setRoundState(res.round);
-      }
-      if (res && res.history) {
-        setHistory(res.history);
-      }
-      if (res && res.allBets) {
-        setLiveBets(res.allBets);
-      }
-    } catch {
-      // Ignore polling transient errors
-    }
-  }, []);
-
-  useEffect(() => {
-    pollServerState();
-    const pollInterval = setInterval(pollServerState, 1500);
-    return () => clearInterval(pollInterval);
-  }, [pollServerState]);
+  // Shared WebSocketContext owns the single active-game poller and its
+  // non-overlapping 1s fallback; do not start a second Dice state poller here.
 
   // Sound toggle sync
   useEffect(() => {
@@ -200,6 +177,21 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     }
   }, [roundState.id, roundState.status, roundState.rolledNumber]);
 
+  const pendingDiceBetKeysRef = useRef<Map<string, string>>(new Map());
+
+  const submitDiceBets = async (bets: Array<{ type: string; amount: string }>) => {
+    const fingerprint = JSON.stringify({ roundId: roundState.id, bets });
+    const pendingKeys = pendingDiceBetKeysRef.current;
+    let idempotencyKey = pendingKeys.get(fingerprint);
+    if (!idempotencyKey) {
+      idempotencyKey = `dice-bet-${crypto.randomUUID()}`;
+      pendingKeys.set(fingerprint, idempotencyKey);
+    }
+    const result = await ApiClient.placeDiceBet({ bets }, idempotencyKey);
+    pendingKeys.delete(fingerprint);
+    return result;
+  };
+
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
     setTimeout(() => setNoticeMessage(null), 3000);
@@ -225,9 +217,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     setErrorMessage(null);
 
     try {
-      await ApiClient.placeDiceBet({
-        bets: [{ type, amount: selectedChip.toString() }],
-      });
+      await submitDiceBets([{ type, amount: selectedChip.toString() }]);
 
       setMyBets((prev) => ({
         ...prev,
@@ -262,7 +252,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
     }));
 
     try {
-      await ApiClient.placeDiceBet({ bets: betsPayload });
+      await submitDiceBets(betsPayload);
       setMyBets((prev) => {
         const next = { ...prev };
         NUMBERS_1_TO_10.forEach((num) => {
@@ -294,7 +284,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
 
     setIsSubmittingBet(true);
     try {
-      await ApiClient.placeDiceBet({ bets: betsPayload });
+      await submitDiceBets(betsPayload);
       setMyBets((prev) => {
         const next = { ...prev };
         keys.forEach((k) => {
@@ -330,7 +320,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
 
     setIsSubmittingBet(true);
     try {
-      await ApiClient.placeDiceBet({ bets: betsPayload });
+      await submitDiceBets(betsPayload);
       setMyBets(lastRoundBets);
       diceAudio.playChipSound();
       showNotification('మునుపటి రౌండ్ బెట్స్ రిపీట్ చేయబడ్డాయి!');
@@ -348,11 +338,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
   // Handle Verify Roll
   const handleVerify = async () => {
     try {
-      const res = await ApiClient.verifyDiceRoll({
-        serverSeed: verifyServerSeed,
-        clientSeed: verifyClientSeed,
-        nonce: verifyNonce,
-      });
+      const res = await ApiClient.verifyDiceRoll({ serverSeed: verifyServerSeed });
       setVerifyResult(res.calculatedRoll);
     } catch (e: any) {
       setErrorMessage(e.message || 'Verification error');
@@ -1042,22 +1028,7 @@ export const DiceGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobb
                 onChange={(e) => setVerifyServerSeed(e.target.value)}
                 className="w-full p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 font-mono text-[10px] text-zinc-200"
               />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="Client Seed"
-                  value={verifyClientSeed}
-                  onChange={(e) => setVerifyClientSeed(e.target.value)}
-                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 font-mono text-[10px] text-zinc-200"
-                />
-                <input
-                  type="number"
-                  placeholder="Round / Nonce"
-                  value={verifyNonce}
-                  onChange={(e) => setVerifyNonce(parseInt(e.target.value) || 1)}
-                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 font-mono text-[10px] text-zinc-200"
-                />
-              </div>
+              <p className="text-[10px] text-zinc-500">The revealed server seed is checked using the same HMAC-SHA256 rule used by the production Dice engine.</p>
 
               <button
                 onClick={handleVerify}

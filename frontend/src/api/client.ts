@@ -416,15 +416,18 @@ export class ApiClient {
     });
   }
 
-  public static placeDiceBet(payload: { bets: Array<{ type: string; amount: string }> }) {
+  public static placeDiceBet(
+    payload: { bets: Array<{ type: string; amount: string }> },
+    idempotencyKey = 'dice-bet-' + crypto.randomUUID(),
+  ) {
     return this.request('/games/dice/bet', {
       method: 'POST',
-      headers: { 'Idempotency-Key': 'dice-bet-' + crypto.randomUUID() },
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
     });
   }
 
-  public static verifyDiceRoll(payload: { serverSeed: string; clientSeed: string; nonce: number }) {
+  public static verifyDiceRoll(payload: { serverSeed: string }) {
     return this.request('/games/dice/verify', {
       method: 'POST',
       body: JSON.stringify(payload),
