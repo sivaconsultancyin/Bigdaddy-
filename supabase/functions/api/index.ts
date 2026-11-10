@@ -269,7 +269,7 @@ async function handle(req: Request) {
     return response({ token, user:data.user, wallet:data.wallet }, 201, origin);
   }
 
-  const gameStateMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/state$/);
+  const gameStateMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/state$/);
   if (req.method === "GET" && gameStateMatch) {
     const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
     // Secondary-game state can include usernames and bet details. Authenticate
@@ -623,7 +623,7 @@ async function handle(req: Request) {
   }
 
   // Fail closed for every activation path not covered by the explicit production allowlist above.
-  const unsupportedActivation = path.match(/^\\/games\\/([^/]+)\\/activate$/);
+  const unsupportedActivation = path.match(/^\/games\/([^/]+)\/activate$/);
   if (req.method === "POST" && unsupportedActivation) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
     return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
