@@ -304,11 +304,25 @@ async function readGameState(code: GameCode) {
   };
 }
 
-authoritativeGamesRouter.get('/games/:gameCode/state', async (req, res) => {
+authoritativeGamesRouter.get('/games/:gameCode/state', auth, async (req: AuthRequest, res) => {
   const code = codeFromParam(req.params.gameCode);
   if (!code) return res.status(404).json({ error: 'UNKNOWN_GAME' });
   try {
     if (!(await hasRuntimeSchema())) return res.status(503).json({ error: 'GAME_RUNTIME_MIGRATION_REQUIRED' });
+    const sql = getDatabaseClient();
+    const gameRows = await sql.unsafe('SELECT status FROM platform.games WHERE code=$1 LIMIT 1', [code]);
+    if (!gameRows[0] || gameRows[0].status !== 'ACTIVE') {
+      return res.json({
+        gameCode: code, status: 'COMING_SOON', gameStateUnavailable: true,
+        round: null, history: [], bets: [], allBets: [],
+      });
+    }
+    if (code === 'dice') {
+      const runtimeRows = await sql.unsafe('SELECT dice.advance_round() AS state');
+      if (!runtimeRows[0]?.state || runtimeRows[0].state.gameStateUnavailable || !runtimeRows[0].state.round?.id) {
+        return res.status(503).json({ error: 'DICE_RUNTIME_UNAVAILABLE' });
+      }
+    }
     const data = await readGameState(code);
     if (!data.round) return res.status(503).json({ error: 'GAME_NOT_CONFIGURED', gameCode: code });
     return res.json(data);
