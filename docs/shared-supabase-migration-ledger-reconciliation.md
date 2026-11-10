@@ -5,13 +5,12 @@ Read-only snapshot rechecked on 2026-11-10. The only active production target is
 ## Exact comparison
 
 - Applied ledger entries: **65**
-- Active candidate SQL files in `supabase/migrations/`: **58**
-- Legacy isolated-Aviator migration files preserved outside the active directory: **11**
-- Additional legacy isolated security/index migration archived: **1**
+- Active SQL files physically in `supabase/migrations/`: **57**
+- Legacy isolated-Aviator migration files preserved outside the active directory: **12**
 - Total SQL files physically in the active `supabase/migrations/` directory: **57**
 - Exact version + name matches: **21**
 - Applied ledger entries with no exact file match: **44**
-- Active SQL files not represented by an exact applied version + name: **37**
+- Active SQL files not represented by an exact applied version + name: **36**
 - Duplicate filename version prefixes: **2**
 
 A name-only comparison is insufficient. A file with the same migration name but a different 14-digit version is still a pending file to the Supabase CLI and can be replayed. Do not run `supabase db push`, `migration repair`, or rename/replay files until each row has an approved source/effect mapping.
