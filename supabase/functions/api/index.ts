@@ -609,7 +609,7 @@ async function handle(req: Request) {
       if (runtimeError || !runtimeState || runtimeState.gameStateUnavailable || !runtimeState.round?.id ||
           !["BETTING", "RUNNING"].includes(String(runtimeState.round.status))) {
         await db.schema("platform").from("games").update({
-          status: game.status, updated_at: new Date().toISOString(),
+          status: "COMING_SOON", updated_at: new Date().toISOString(),
         }).eq("code", code);
         console.error("Andar Bahar activation runtime check failed:", runtimeError?.code ?? "unavailable");
         return response({ error: "ANDAR_BAHAR_RUNTIME_UNAVAILABLE" }, 503, origin);
