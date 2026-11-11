@@ -85,8 +85,7 @@ BEGIN
   SELECT g.status, g.pool_wallet_id
     INTO v_game_status, v_pool_wallet_id
   FROM platform.games AS g
-  WHERE g.code = 'andar_bahar'
-  FOR UPDATE;
+  WHERE g.code = 'andar_bahar';
 
   IF NOT FOUND OR v_game_status <> 'ACTIVE' OR v_pool_wallet_id IS NULL THEN
     RETURN jsonb_build_object('gameCode','andar_bahar','status','COMING_SOON',
@@ -95,6 +94,13 @@ BEGIN
 
   SELECT gp.wallet_id INTO v_mapped_pool_wallet_id
   FROM platform.game_pools AS gp WHERE gp.game_code = 'andar_bahar';
+
+  SELECT * INTO v_round
+  FROM andar_bahar.authoritative_game_rounds
+  WHERE game_code = 'andar_bahar'
+  ORDER BY round_number DESC LIMIT 1
+  FOR UPDATE;
+  v_has_round := FOUND;
 
   SELECT w.wallet_type::text, w.game_code, w.balance, w.reserved_balance
     INTO v_pool_type, v_pool_game_code, v_pool_balance, v_pool_reserved
@@ -116,12 +122,6 @@ BEGIN
   ORDER BY w.id LIMIT 1 FOR UPDATE;
   IF v_escrow_wallet_id IS NULL THEN RAISE EXCEPTION 'ANDAR_BAHAR_ESCROW_WALLET_MISSING'; END IF;
 
-  SELECT * INTO v_round
-  FROM andar_bahar.authoritative_game_rounds
-  WHERE game_code = 'andar_bahar'
-  ORDER BY round_number DESC LIMIT 1
-  FOR UPDATE;
-  v_has_round := FOUND;
 
   -- Close betting and create the committed, server-only shuffled deck.
   IF v_has_round AND v_round.status = 'BETTING'
