@@ -632,12 +632,14 @@ jobs:
           v_main_profit bigint;
         BEGIN
           v_state := andar_bahar.advance_round();
-          SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds
-            WHERE game_code='andar_bahar' ORDER BY round_number DESC LIMIT 1;
-          IF v_round.status <> 'BETTING' OR length(coalesce(v_round.server_seed_hash,'')) <> 64 THEN
+          IF v_state->'round'->>'status' <> 'BETTING'
+             OR length(coalesce(v_state->'round'->>'serverSeedHash','')) <> 64
+             OR coalesce(v_state->'round'->>'id','') = '' THEN
             RAISE EXCEPTION 'Andar Bahar did not create a committed betting round; state=%',v_state;
           END IF;
-          v_first_id := v_round.id;
+          v_first_id := (v_state->'round'->>'id')::uuid;
+          SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds WHERE id=v_first_id;
+          IF NOT FOUND THEN RAISE EXCEPTION 'Returned Andar Bahar round is not persisted'; END IF;
           PERFORM andar_bahar.advance_round();
           IF (SELECT count(*) FROM andar_bahar.authoritative_game_rounds WHERE status='BETTING') <> 1
              OR (SELECT id FROM andar_bahar.authoritative_game_rounds WHERE status='BETTING') <> v_first_id THEN
