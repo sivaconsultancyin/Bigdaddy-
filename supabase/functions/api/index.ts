@@ -297,6 +297,15 @@ async function handle(req: Request) {
         return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
       }
     }
+    // Andar Bahar rounds are advanced by a serialized database lifecycle RPC;
+    // the state endpoint is the recovery path if a client missed a tick.
+    if (code === "andar_bahar") {
+      const { error: lifecycleError } = await db.schema("andar_bahar").rpc("advance_round");
+      if (lifecycleError) {
+        console.error("Andar Bahar lifecycle advance failed:", lifecycleError.code ?? "unknown");
+        return response({ error: "ANDAR_BAHAR_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     // Roulette's durable lifecycle is advanced only by this server-side RPC.
     // It creates persisted rounds and settles expired rounds in one database transaction.
     if (code === "roulette") {
@@ -549,7 +558,7 @@ async function handle(req: Request) {
       : activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
     // Roulette now has a persisted PostgreSQL round lifecycle and atomic settlement.
     // Keep games without a verified production engine blocked.
-    if (code !== "aviator" && code !== "roulette" && code !== "dice") {
+    if (code !== "aviator" && code !== "roulette" && code !== "dice" && code !== "andar_bahar") {
       return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
     }
     const { data: game, error: gameError } = await db.schema("platform").from("games")
@@ -572,7 +581,7 @@ async function handle(req: Request) {
       mappedWalletId: String(gamePool?.wallet_id ?? ""), walletType: String(pool?.wallet_type ?? ""),
       walletGameCode: String(pool?.game_code ?? ""), balance: String(pool?.balance ?? ""),
       reservedBalance: String(pool?.reserved_balance ?? ""), runtimeRoundStatus,
-      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : undefined,
+      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : code === "andar_bahar" ? (BigInt(String(game.max_bet ?? "0")) * 2n).toString() : undefined,
     });
     if (!readiness.ok) return response({ error: readiness.error }, readiness.status, origin);
     const poolBalance = String(pool?.balance ?? "0");
@@ -591,6 +600,19 @@ async function handle(req: Request) {
         }).eq("code", code);
         console.error("Dice activation runtime check failed:", runtimeError?.code ?? "unavailable");
         return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
+    // Smoke-test Andar Bahar's durable lifecycle before confirming activation.
+    // Restore the previous status if the first persisted betting round cannot be created.
+    if (code === "andar_bahar") {
+      const { data: runtimeState, error: runtimeError } = await db.schema("andar_bahar").rpc("advance_round");
+      if (runtimeError || !runtimeState || runtimeState.gameStateUnavailable || !runtimeState.round?.id ||
+          !["BETTING", "RUNNING"].includes(String(runtimeState.round.status))) {
+        await db.schema("platform").from("games").update({
+          status: game.status, updated_at: new Date().toISOString(),
+        }).eq("code", code);
+        console.error("Andar Bahar activation runtime check failed:", runtimeError?.code ?? "unavailable");
+        return response({ error: "ANDAR_BAHAR_RUNTIME_UNAVAILABLE" }, 503, origin);
       }
     }
     // Smoke-test Roulette's durable lifecycle before confirming activation. If the
@@ -732,6 +754,14 @@ async function handle(req: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
     const bets = Array.isArray(body.bets) ? body.bets : [body];
     if (!bets.length || bets.length > 20 || bets.some((b:any) => !positiveAmount(b?.amount))) return response({ error: "INVALID_BET" }, 400, origin);
+    if (code === "andar_bahar") {
+      const invalidSelection = bets.some((b: any) => {
+        const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
+          ? b.selection : b;
+        return !["andar", "bahar"].includes(String(selection?.type ?? "").toLowerCase());
+      });
+      if (invalidSelection) return response({ error: "INVALID_ANDAR_BAHAR_SELECTION" }, 400, origin);
+    }
     if (code === "dice") {
       const allowedDiceTypes = /^(?:[1-9]|10|small|big|even|odd)$/;
       const invalidSelection = bets.some((b: any) => {
