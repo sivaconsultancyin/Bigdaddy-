@@ -15,7 +15,7 @@ BEGIN
     RAISE EXCEPTION 'INVALID_ANDAR_BAHAR_SELECTION' USING ERRCODE = '22023';
   END IF;
   v_type := lower(coalesce(NEW.selection->>'type', ''));
-  IF v_type NOT IN ('andar', 'bahar') THEN
+  IF v_type NOT IN ('andar', 'bahar', 'joker_red', 'joker_black') THEN
     RAISE EXCEPTION 'INVALID_ANDAR_BAHAR_SELECTION' USING ERRCODE = '22023';
   END IF;
   IF NEW.bet_amount <= 0 OR NEW.bet_amount > 1000000000000 THEN
@@ -209,9 +209,21 @@ BEGIN
       IF v_bet.reserved_liability IS DISTINCT FROM v_expected_liability THEN
         RAISE EXCEPTION 'ANDAR_BAHAR_RESERVED_LIABILITY_MISMATCH';
       END IF;
-      v_won := v_type = (v_round.result->>'winner');
-      v_gross := CASE WHEN v_won THEN v_bet.bet_amount * 2 ELSE 0 END;
-      v_profit := CASE WHEN v_won THEN v_bet.bet_amount ELSE 0 END;
+      v_won := CASE
+        WHEN v_type = 'andar' THEN v_round.result->>'winner' = 'andar'
+        WHEN v_type = 'bahar' THEN v_round.result->>'winner' = 'bahar'
+        WHEN v_type = 'joker_red' THEN v_round.result->'jokerCard'->>'suit' IN ('H','D')
+        WHEN v_type = 'joker_black' THEN v_round.result->'jokerCard'->>'suit' IN ('S','C')
+        ELSE false
+      END;
+      v_gross := CASE
+        WHEN NOT v_won THEN 0
+        WHEN v_type = 'andar' THEN v_bet.bet_amount * 2
+        WHEN v_type = 'bahar' THEN floor(v_bet.bet_amount::numeric * 190 / 100)::bigint
+        WHEN v_type IN ('joker_red','joker_black') THEN floor(v_bet.bet_amount::numeric * 195 / 100)::bigint
+        ELSE 0
+      END;
+      v_profit := CASE WHEN v_won THEN v_gross - v_bet.bet_amount ELSE 0 END;
       v_payout_tx := NULL;
       v_stake_tx := NULL;
 
