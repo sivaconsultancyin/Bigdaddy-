@@ -758,7 +758,7 @@ async function handle(req: Request) {
       const invalidSelection = bets.some((b: any) => {
         const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
           ? b.selection : b;
-        return !["andar", "bahar"].includes(String(selection?.type ?? "").toLowerCase());
+        return !["andar", "bahar", "joker_red", "joker_black"].includes(String(selection?.type ?? "").toLowerCase());
       });
       if (invalidSelection) return response({ error: "INVALID_ANDAR_BAHAR_SELECTION" }, 400, origin);
     }
