@@ -563,14 +563,17 @@ async function runTestSuite() {
     const winners = { andar: 0, bahar: 0 };
     for (let i = 0; i < 10000; i++) {
       const result = makeResult('andar_bahar', 'andar-bahar-simulation-' + i);
-      assert.ok(result.dealCards.length >= 1 && result.dealCards.length <= 51);
-      assert.strictEqual(result.dealCards[result.dealCards.length - 1].card.rank, result.jokerCard.rank);
-      assert.strictEqual(result.dealCards.filter(x => x.card.rank === result.jokerCard.rank).length, 1);
-      assert.ok(result.dealCards.every((x, index) => x.side === (index % 2 === 0 ? 'bahar' : 'andar')));
-      assert.ok(result.dealCards.every(x => typeof x.card.code === 'string' && x.card.code.length >= 2));
-      jokerRanks[result.jokerCard.rank - 2]++;
-      suits.set(result.jokerCard.suit, (suits.get(result.jokerCard.suit) ?? 0) + 1);
-      winners[result.winner]++;
+      const jokerCard = result.jokerCard as { rank: number; suit: string };
+      const dealCards = result.dealCards as Array<{ side: 'andar' | 'bahar'; card: { rank: number; suit: string; code: string } }>;
+      const winner = result.winner as 'andar' | 'bahar';
+      assert.ok(dealCards.length >= 1 && dealCards.length <= 51);
+      assert.strictEqual(dealCards[dealCards.length - 1].card.rank, jokerCard.rank);
+      assert.strictEqual(dealCards.filter((x) => x.card.rank === jokerCard.rank).length, 1);
+      assert.ok(dealCards.every((x, index) => x.side === (index % 2 === 0 ? 'bahar' : 'andar')));
+      assert.ok(dealCards.every((x) => typeof x.card.code === 'string' && x.card.code.length >= 2));
+      jokerRanks[jokerCard.rank - 2]++;
+      suits.set(jokerCard.suit, (suits.get(jokerCard.suit) ?? 0) + 1);
+      winners[winner]++;
     }
     assert.ok(jokerRanks.every(count => count > 650 && count < 900));
     assert.ok([...suits.values()].every(count => count > 2300 && count < 2700));
