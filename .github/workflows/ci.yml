@@ -663,11 +663,13 @@ jobs:
           FOR v_card,v_side IN
             SELECT value->'card',value->>'side' FROM jsonb_array_elements(v_result->'dealCards')
           LOOP
-            v_expected_side := CASE WHEN v_count % 2 = 0 THEN 'bahar' ELSE 'andar' END;
+            v_expected_side := CASE WHEN v_count % 2 = 0 THEN v_first_side ELSE CASE WHEN v_first_side='andar' THEN 'bahar' ELSE 'andar' END END;
             IF v_side <> v_expected_side THEN RAISE EXCEPTION 'Andar/Bahar dealing order is not alternating'; END IF;
             v_count := v_count + 1;
           END LOOP;
           v_winner := v_result->>'winner';
+          v_first_side := v_result->>'firstSide';
+          IF v_first_side <> CASE WHEN v_result->'jokerCard'->>'suit' IN ('S','C') THEN 'andar' ELSE 'bahar' END THEN RAISE EXCEPTION 'Joker color did not determine the first dealt side'; END IF;
           v_loser := CASE WHEN v_winner='andar' THEN 'bahar' ELSE 'andar' END;
           SELECT id INTO v_player_wallet_id FROM wallet.wallets
             WHERE user_id='20000000-0000-0000-0000-000000000001' AND wallet_type='PLAYER';
@@ -695,14 +697,14 @@ jobs:
           END IF;
           IF (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='WON') <> 2
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='LOST') <> 2
-             OR (v_winner='andar' AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 20)
-             OR (v_winner='bahar' AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 19)
+             OR ((v_winner=v_first_side) AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 19)
+             OR ((v_winner<>v_first_side) AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 20)
              OR (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_loser) <> 0
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type' IN ('joker_red','joker_black') AND status='WON' AND payout_amount=19) <> 1
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type' IN ('joker_red','joker_black') AND status='LOST' AND payout_amount=0) <> 1 THEN
             RAISE EXCEPTION 'Winning/losing settlement amounts are incorrect';
           END IF;
-          v_main_gross := CASE WHEN v_winner='andar' THEN 20 ELSE 19 END;
+          v_main_gross := CASE WHEN v_winner=v_first_side THEN 19 ELSE 20 END;
           v_main_profit := v_main_gross - 10;
           IF (SELECT balance FROM wallet.wallets WHERE id=v_player_wallet_id) <> 960 + v_main_gross + 19
              OR (SELECT balance FROM wallet.wallets WHERE id=v_escrow_wallet_id) <> 0
@@ -1094,6 +1096,8 @@ jobs:
             v_count := v_count + 1;
           END LOOP;
           v_winner := v_result->>'winner';
+          v_first_side := v_result->>'firstSide';
+          IF v_first_side <> CASE WHEN v_result->'jokerCard'->>'suit' IN ('S','C') THEN 'andar' ELSE 'bahar' END THEN RAISE EXCEPTION 'Joker color did not determine the first dealt side'; END IF;
           v_loser := CASE WHEN v_winner='andar' THEN 'bahar' ELSE 'andar' END;
           INSERT INTO andar_bahar.authoritative_game_bets(round_id,user_id,bet_amount,selection,status,reserved_liability,idempotency_key)
           VALUES
