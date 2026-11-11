@@ -544,6 +544,151 @@ jobs:
         $verify$;
         SQL
 
+    - name: Apply Andar Bahar lifecycle migration and provision isolated fixtures
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        CREATE SCHEMA IF NOT EXISTS extensions;
+        CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+        ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_ESCROW_REFUND';
+        ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_WIN_PAYOUT';
+        ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_LOSS_GAME_POOL';
+        UPDATE platform.games
+          SET pool_wallet_id=(SELECT id FROM wallet.wallets WHERE game_code='andar_bahar')
+          WHERE code='andar_bahar';
+        UPDATE platform.game_pools
+          SET wallet_id=(SELECT id FROM wallet.wallets WHERE game_code='andar_bahar')
+          WHERE game_code='andar_bahar';
+        UPDATE wallet.wallets SET balance=1000000,reserved_balance=0
+          WHERE game_code='andar_bahar' AND wallet_type='GAME_POOL';
+        UPDATE andar_bahar.authoritative_game_rounds
+          SET settled_at=now()-interval '10 seconds'
+          WHERE round_number=1 AND status='SETTLED';
+        CREATE OR REPLACE FUNCTION public.wallet_transfer_atomic(
+          p_idempotency_key text,p_type public.transaction_type_enum,p_amount bigint,
+          p_source_wallet_id uuid,p_target_wallet_id uuid,p_metadata jsonb DEFAULT '{}'::jsonb
+        ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path=pg_catalog,pg_temp AS $function$
+        DECLARE v_id uuid;
+        BEGIN
+          INSERT INTO wallet.wallet_transactions(idempotency_key,type,amount,source_wallet_id,target_wallet_id,metadata)
+          VALUES(p_idempotency_key,p_type,p_amount,p_source_wallet_id,p_target_wallet_id,coalesce(p_metadata,'{}'::jsonb))
+          RETURNING id INTO v_id;
+          RETURN v_id;
+        END;
+        $function$;
+        INSERT INTO wallet.wallets(user_id,wallet_type,balance,reserved_balance)
+        VALUES('20000000-0000-0000-0000-000000000001','PLAYER',1000,0);
+        INSERT INTO wallet.wallets(wallet_type,balance,reserved_balance)
+        VALUES('ESCROW',1000000,0);
+        UPDATE platform.games SET status='ACTIVE' WHERE code='andar_bahar';
+        SQL
+        psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261111120000_andar_bahar_authoritative_round_lifecycle.sql
+
+    - name: Verify Andar Bahar lifecycle, card sequence, settlement and idempotency
+      run: |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        SET ROLE service_role;
+        DO $verify$
+        DECLARE
+          v_round andar_bahar.authoritative_game_rounds%ROWTYPE;
+          v_first_id uuid;
+          v_winner text;
+          v_loser text;
+          v_result jsonb;
+          v_dealt integer;
+          v_joker_rank integer;
+          v_last_rank integer;
+          v_matching_cards integer;
+          v_card jsonb;
+          v_side text;
+          v_expected_side text;
+          v_count integer := 0;
+          v_failed boolean := false;
+        BEGIN
+          PERFORM andar_bahar.advance_round();
+          SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds
+            WHERE game_code='andar_bahar' ORDER BY round_number DESC LIMIT 1;
+          IF v_round.status <> 'BETTING' OR v_round.server_seed IS NULL
+             OR encode(extensions.digest(v_round.server_seed,'sha256'),'hex') <> v_round.server_seed_hash THEN
+            RAISE EXCEPTION 'Andar Bahar did not create a committed betting round';
+          END IF;
+          v_first_id := v_round.id;
+          PERFORM andar_bahar.advance_round();
+          IF (SELECT count(*) FROM andar_bahar.authoritative_game_rounds WHERE status='BETTING') <> 1
+             OR (SELECT id FROM andar_bahar.authoritative_game_rounds WHERE status='BETTING') <> v_first_id THEN
+            RAISE EXCEPTION 'Repeated lifecycle call created a duplicate betting round';
+          END IF;
+
+          UPDATE andar_bahar.authoritative_game_rounds
+            SET betting_closes_at=clock_timestamp()-interval '1 second' WHERE id=v_first_id;
+          PERFORM andar_bahar.advance_round();
+          SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds WHERE id=v_first_id;
+          IF v_round.status <> 'RUNNING' OR v_round.result IS NULL THEN
+            RAISE EXCEPTION 'Expired betting round did not enter RUNNING with a server result';
+          END IF;
+          v_result := v_round.result;
+          v_joker_rank := (v_result->'jokerCard'->>'rank')::integer;
+          v_dealt := jsonb_array_length(v_result->'dealCards');
+          IF v_dealt < 1 OR v_dealt > 51 THEN RAISE EXCEPTION 'Invalid deal length'; END IF;
+          IF (v_result->'dealCards'->(v_dealt-1)->'card'->>'rank')::integer <> v_joker_rank THEN
+            RAISE EXCEPTION 'Final dealt card does not match Joker rank';
+          END IF;
+          SELECT count(*) INTO v_matching_cards
+            FROM jsonb_array_elements(v_result->'dealCards') d
+            WHERE (d->'card'->>'rank')::integer=v_joker_rank;
+          IF v_matching_cards <> 1 THEN RAISE EXCEPTION 'Deal did not stop at the first Joker-rank match'; END IF;
+          FOR v_card,v_side IN
+            SELECT value->'card',value->>'side' FROM jsonb_array_elements(v_result->'dealCards')
+          LOOP
+            v_expected_side := CASE WHEN v_count % 2 = 0 THEN 'bahar' ELSE 'andar' END;
+            IF v_side <> v_expected_side THEN RAISE EXCEPTION 'Andar/Bahar dealing order is not alternating'; END IF;
+            v_count := v_count + 1;
+          END LOOP;
+          v_winner := v_result->>'winner';
+          v_loser := CASE WHEN v_winner='andar' THEN 'bahar' ELSE 'andar' END;
+          INSERT INTO andar_bahar.authoritative_game_bets(round_id,user_id,bet_amount,selection,status,reserved_liability,idempotency_key)
+          VALUES
+            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',v_winner),'PENDING',20,'ci-andar-winner-0001'),
+            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',v_loser),'PENDING',20,'ci-andar-loser-0001');
+          UPDATE wallet.wallets SET reserved_balance=reserved_balance+40
+            WHERE game_code='andar_bahar' AND wallet_type='GAME_POOL';
+          UPDATE andar_bahar.authoritative_game_rounds
+            SET state=state||jsonb_build_object('dealStartedAt',clock_timestamp()-interval '5 seconds')
+            WHERE id=v_first_id;
+          PERFORM andar_bahar.advance_round();
+          SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds WHERE id=v_first_id;
+          IF v_round.status <> 'SETTLED' OR v_round.server_seed IS NULL THEN
+            RAISE EXCEPTION 'Andar Bahar round did not settle/reveal its seed';
+          END IF;
+          IF (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='WON') <> 1
+             OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='LOST') <> 1
+             OR (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 20
+             OR (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_loser) <> 0 THEN
+            RAISE EXCEPTION 'Winning/losing settlement amounts are incorrect';
+          END IF;
+          IF (SELECT count(*) FROM wallet.wallet_transactions WHERE metadata->>'gameCode'='andar_bahar' AND metadata->>'roundId'=v_first_id::text) <> 3 THEN
+            RAISE EXCEPTION 'Expected stake return, winning profit and losing stake transfers';
+          END IF;
+          IF (SELECT reserved_balance FROM wallet.wallets WHERE game_code='andar_bahar' AND wallet_type='GAME_POOL') <> 0 THEN
+            RAISE EXCEPTION 'Pool reserved liability was not fully released';
+          END IF;
+          UPDATE andar_bahar.authoritative_game_rounds
+            SET settled_at=clock_timestamp()-interval '6 seconds' WHERE id=v_first_id;
+          PERFORM andar_bahar.advance_round();
+          IF (SELECT count(*) FROM andar_bahar.authoritative_game_rounds WHERE status='BETTING') <> 1 THEN
+            RAISE EXCEPTION 'Next round was not created after settlement window';
+          END IF;
+          BEGIN
+            INSERT INTO andar_bahar.authoritative_game_bets(round_id,user_id,bet_amount,selection,idempotency_key)
+            VALUES(v_first_id,'20000000-0000-0000-0000-000000000001',10,'{"type":"not-a-side"}','ci-andar-invalid-0001');
+          EXCEPTION WHEN SQLSTATE '22023' THEN v_failed := true;
+          END;
+          IF NOT v_failed THEN RAISE EXCEPTION 'Invalid Andar/Bahar selection was accepted'; END IF;
+        END;
+        $verify$;
+        RESET ROLE;
+        SQL
+
   validate-edge-functions:
     runs-on: ubuntu-latest
     steps:
