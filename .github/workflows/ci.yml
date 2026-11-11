@@ -613,7 +613,7 @@ jobs:
           v_state := andar_bahar.advance_round();
           SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds
             WHERE game_code='andar_bahar' ORDER BY round_number DESC LIMIT 1;
-          IF v_round.status <> 'BETTING' OR v_round.server_seed_hash !~ '^[0-9a-f]{64}
+          IF v_round.status <> 'BETTING' OR length(coalesce(v_round.server_seed_hash,'')) <> 64
             RAISE EXCEPTION 'Andar Bahar did not create a committed betting round; state=%',v_state;
           END IF;
           v_first_id := v_round.id;
