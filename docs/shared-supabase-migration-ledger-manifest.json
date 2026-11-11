@@ -625,7 +625,7 @@
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
     "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111120000_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -665,7 +665,7 @@
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
     "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111120000_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
   ],
   "duplicateVersionPrefixes": [
     "20261021120000",
@@ -731,7 +731,7 @@
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
     "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111120000_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -1057,7 +1057,7 @@
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
     "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111120000_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
   ],
   "legacyIsolatedSnapshot": {
     "appliedLedger": [
