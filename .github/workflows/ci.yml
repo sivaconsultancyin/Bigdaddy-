@@ -621,7 +621,7 @@ jobs:
           END IF;
 
           UPDATE andar_bahar.authoritative_game_rounds
-            SET betting_closes_at=clock_timestamp()-interval '1 second' WHERE id=v_first_id;
+            SET opened_at=clock_timestamp()-interval '20 seconds', betting_closes_at=clock_timestamp()-interval '1 second' WHERE id=v_first_id;
           PERFORM andar_bahar.advance_round();
           SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds WHERE id=v_first_id;
           IF v_round.status <> 'RUNNING' OR v_round.result IS NULL THEN
