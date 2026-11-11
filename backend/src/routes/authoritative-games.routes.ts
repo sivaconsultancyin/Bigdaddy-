@@ -137,14 +137,15 @@ export function makeResult(code: GameCode, seed: string): Record<string, any> {
   const deck = shuffledDeck(seed);
   const jokerCard = deck[0];
   const cards = deck.slice(1);
+  const firstSide: 'andar' | 'bahar' = ['S', 'C'].includes(String(jokerCard.suit).toUpperCase()) ? 'andar' : 'bahar';
   const dealCards: Array<{ side: 'andar' | 'bahar'; card: { rank: number; suit: string; code: string } }> = [];
-  let winner: 'andar' | 'bahar' = 'bahar';
+  let winner: 'andar' | 'bahar' = firstSide;
   for (let i = 0; i < cards.length; i++) {
-    const side: 'andar' | 'bahar' = i % 2 === 0 ? 'bahar' : 'andar';
+    const side: 'andar' | 'bahar' = i % 2 === 0 ? firstSide : firstSide === 'andar' ? 'bahar' : 'andar';
     dealCards.push({ side, card: cards[i] });
     if (cards[i].rank === jokerCard.rank) { winner = side; break; }
   }
-  return { jokerCard, dealCards, winner, totalCardsDealt: dealCards.length };
+  return { jokerCard, dealCards, winner, firstSide, totalCardsDealt: dealCards.length };
 }
 export function payoutMultiplier(code: GameCode, selection: any, result: any): number {
   const type = String(selection?.type || '').toLowerCase();
@@ -189,7 +190,15 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
     if (type === 'tiger_small') return result.tigerCard.rank <= 6 ? 2 : 0;
     return 0;
   }
-  return type === result.winner ? 2 : 0;
+  if (type === 'andar' || type === 'bahar') {
+    if (result.winner !== type) return 0;
+    const firstSide = result.firstSide ?? (['S', 'C'].includes(String(result?.jokerCard?.suit ?? '').toUpperCase()) ? 'andar' : 'bahar');
+    return firstSide === type ? 1.9 : 2;
+  }
+  const jokerSuit = String(result?.jokerCard?.suit ?? '').toUpperCase();
+  if (type === 'joker_red') return ['H','D'].includes(jokerSuit) ? 1.95 : 0;
+  if (type === 'joker_black') return ['S','C'].includes(jokerSuit) ? 1.95 : 0;
+  return 0;
 }
 
 export function maxLiabilityMultiplier(code: GameCode, selection: any): number {
@@ -229,7 +238,7 @@ export function validateSelection(code: GameCode, selection: any): boolean {
     return false;
   }
   if (code === 'dragon_tiger') return ['dragon','tiger','tie','suited_tie','dragon_big','dragon_small','tiger_big','tiger_small'].includes(type);
-  return ['andar','bahar'].includes(type);
+  return ['andar','bahar','joker_red','joker_black'].includes(type);
 }
 
 function publicRound(row: any, code: GameCode) {

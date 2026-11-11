@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
-import { evaluateGameActivationReadiness } from "./activation.ts";
+import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from "./activation.ts";
 import bcrypt from "npm:bcryptjs@2.4.3";
 import { corsHeaders, jsonResponse, signBigDaddyToken, verifyBigDaddyToken, type BigDaddyClaims } from "./bigdaddy-jwt.ts";
 import { handleAviatorApi } from "./aviator.routes.ts";
@@ -297,6 +297,15 @@ async function handle(req: Request) {
         return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
       }
     }
+    // Andar Bahar rounds are advanced by a serialized database lifecycle RPC;
+    // the state endpoint is the recovery path if a client missed a tick.
+    if (code === "andar_bahar") {
+      const { error: lifecycleError } = await db.schema("andar_bahar").rpc("advance_round");
+      if (lifecycleError) {
+        console.error("Andar Bahar lifecycle advance failed:", lifecycleError.code ?? "unknown");
+        return response({ error: "ANDAR_BAHAR_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     // Roulette's durable lifecycle is advanced only by this server-side RPC.
     // It creates persisted rounds and settles expired rounds in one database transaction.
     if (code === "roulette") {
@@ -323,7 +332,19 @@ async function handle(req: Request) {
     if (code === "roulette") { current.spinEndsAt = row.status === "RUNNING" && row.state?.spinStartedAt ? new Date(row.state.spinStartedAt).getTime() + 1500 : current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
     if (code === "dice") { current.rolledNumber = row.status === "SETTLED" ? result?.number ?? null : null; current.numberBetsAmount = {}; }
     if (code === "dragon_tiger") { current.dragonCard = result?.dragonCard ?? null; current.tigerCard = result?.tigerCard ?? null; current.winner = result?.winner ?? null; current.dragonBetAmount = "0"; current.tigerBetAmount = "0"; current.tieBetAmount = "0"; }
-    if (code === "andar_bahar") { current.jokerCard = result?.jokerCard ?? null; current.dealCards = result?.dealCards ?? []; current.winningSide = result?.winner ?? null; current.winningCard = result?.dealCards?.[Math.max(0,(result?.dealCards?.length ?? 1)-1)]?.card ?? null; current.totalCardsDealt = result?.totalCardsDealt ?? 0; current.firstSide = "bahar"; current.andarBetAmount = "0"; current.baharBetAmount = "0"; }
+    if (code === "andar_bahar") {
+      // Reveal only the cards that should have appeared by this point in the
+      // 4.5-second deal. The winning side/card stay private until settlement.
+      const publicDeal = getAndarBaharPublicDeal(row.result, row.status, row.state?.dealStartedAt);
+      current.jokerCard = publicDeal.jokerCard;
+      current.dealCards = publicDeal.dealCards;
+      current.winningSide = publicDeal.winningSide;
+      current.winningCard = publicDeal.winningCard;
+      current.totalCardsDealt = publicDeal.totalCardsDealt;
+      current.firstSide = row.result?.firstSide ?? (row.result?.jokerCard?.suit ? (["S", "C"].includes(String(row.result.jokerCard.suit).toUpperCase()) ? "andar" : "bahar") : null);
+      current.andarBetAmount = "0";
+      current.baharBetAmount = "0";
+    }
     const { data: bets, error: betsError } = await db.schema(code).from("authoritative_game_bets").select("id,user_id,bet_amount,selection,status,payout_amount").eq("round_id", row.id).order("created_at", { ascending: false }).limit(100);
     if (betsError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     const userIds = [...new Set((bets ?? []).map(b => b.user_id))];
@@ -549,7 +570,7 @@ async function handle(req: Request) {
       : activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
     // Roulette now has a persisted PostgreSQL round lifecycle and atomic settlement.
     // Keep games without a verified production engine blocked.
-    if (code !== "aviator" && code !== "roulette" && code !== "dice") {
+    if (code !== "aviator" && code !== "roulette" && code !== "dice" && code !== "andar_bahar") {
       return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
     }
     const { data: game, error: gameError } = await db.schema("platform").from("games")
@@ -572,7 +593,7 @@ async function handle(req: Request) {
       mappedWalletId: String(gamePool?.wallet_id ?? ""), walletType: String(pool?.wallet_type ?? ""),
       walletGameCode: String(pool?.game_code ?? ""), balance: String(pool?.balance ?? ""),
       reservedBalance: String(pool?.reserved_balance ?? ""), runtimeRoundStatus,
-      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : undefined,
+      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : code === "andar_bahar" ? (BigInt(String(game.max_bet ?? "0")) * 2n).toString() : undefined,
     });
     if (!readiness.ok) return response({ error: readiness.error }, readiness.status, origin);
     const poolBalance = String(pool?.balance ?? "0");
@@ -591,6 +612,19 @@ async function handle(req: Request) {
         }).eq("code", code);
         console.error("Dice activation runtime check failed:", runtimeError?.code ?? "unavailable");
         return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
+    // Smoke-test Andar Bahar's durable lifecycle before confirming activation.
+    // Restore the previous status if the first persisted betting round cannot be created.
+    if (code === "andar_bahar") {
+      const { data: runtimeState, error: runtimeError } = await db.schema("andar_bahar").rpc("advance_round");
+      if (runtimeError || !runtimeState || runtimeState.gameStateUnavailable || !runtimeState.round?.id ||
+          !["BETTING", "RUNNING"].includes(String(runtimeState.round.status))) {
+        await db.schema("platform").from("games").update({
+          status: "COMING_SOON", updated_at: new Date().toISOString(),
+        }).eq("code", code);
+        console.error("Andar Bahar activation runtime check failed:", runtimeError?.code ?? "unavailable");
+        return response({ error: "ANDAR_BAHAR_RUNTIME_UNAVAILABLE" }, 503, origin);
       }
     }
     // Smoke-test Roulette's durable lifecycle before confirming activation. If the
@@ -732,6 +766,14 @@ async function handle(req: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
     const bets = Array.isArray(body.bets) ? body.bets : [body];
     if (!bets.length || bets.length > 20 || bets.some((b:any) => !positiveAmount(b?.amount))) return response({ error: "INVALID_BET" }, 400, origin);
+    if (code === "andar_bahar") {
+      const invalidSelection = bets.some((b: any) => {
+        const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
+          ? b.selection : b;
+        return !["andar", "bahar", "joker_red", "joker_black"].includes(String(selection?.type ?? "").toLowerCase());
+      });
+      if (invalidSelection) return response({ error: "INVALID_ANDAR_BAHAR_SELECTION" }, 400, origin);
+    }
     if (code === "dice") {
       const allowedDiceTypes = /^(?:[1-9]|10|small|big|even|odd)$/;
       const invalidSelection = bets.some((b: any) => {

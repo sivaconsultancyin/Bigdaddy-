@@ -9,7 +9,7 @@ import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
-import { evaluateGameActivationReadiness } from '../supabase/functions/api/activation';
+import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from '../supabase/functions/api/activation';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
 import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
@@ -95,15 +95,15 @@ async function runTestSuite() {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 58);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 59);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
     assert.strictEqual(manifest.counts.sharedAppliedLedger, 65);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 58);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 59);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
-    // The Dice lifecycle migration remains source-only until isolated DB validation completes.
-    assert.strictEqual(manifest.counts.sharedFileOnly, 37);
+    // Dice and Andar Bahar lifecycle migrations remain source-only until production application is verified.
+    assert.strictEqual(manifest.counts.sharedFileOnly, 38);
     const exactAppliedFiles = new Set(
       (manifest.appliedLedger as Array<{ version: string; name: string }>).map(
         (entry) => `${entry.version}_${entry.name}.sql`,
@@ -117,7 +117,7 @@ async function runTestSuite() {
       appliedNames.has(name.replace(/^\d{14}_/, '').replace(/\.sql$/, '')),
     );
     assert.strictEqual(sameNameDifferentVersion.length, 27);
-    assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 10);
+    assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 11);
     assert.ok(!sourceOnlyFiles.includes('20261025110000_shared_aviator_wallet_operations.sql'));
     assert.strictEqual(manifest.counts.legacyIsolatedAppliedLedgerSnapshot, 7);
     assert.strictEqual(manifest.counts.legacyArchivedMigrationFiles, 13);
@@ -540,6 +540,94 @@ async function runTestSuite() {
     if (!wrongPool.ok) assert.strictEqual(wrongPool.error, 'GAME_POOL_IDENTITY_MISMATCH');
   });
 
+  test('Andar Bahar lifecycle and bet placement acquire round locks before wallet locks', () => {
+    const migration = readFileSync('supabase/migrations/20261111120000_andar_bahar_authoritative_round_lifecycle.sql', 'utf8');
+    const roundLock = migration.indexOf('SELECT * INTO v_round');
+    const poolLock = migration.indexOf('FROM wallet.wallets AS w WHERE w.id = v_pool_wallet_id FOR UPDATE');
+    assert.ok(roundLock >= 0 && poolLock > roundLock, 'Lifecycle must lock the round before the shared pool wallet');
+    assert.ok(!migration.includes("WHERE g.code = 'andar_bahar'\n  FOR UPDATE"), 'Lifecycle must not hold the game row while waiting for a round lock');
+  });
+
+  test('Andar Bahar realtime uses a safe broadcast topic and polls the authoritative API', () => {
+    const migration = readFileSync('supabase/migrations/20261111120000_andar_bahar_authoritative_round_lifecycle.sql', 'utf8');
+    const realtime = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(migration.includes("'andar_bahar:rounds'"));
+    assert.ok(migration.includes("'andar_bahar_round_changed'"));
+    assert.ok(migration.includes("'bettingEndsAt', NEW.betting_closes_at"));
+    assert.ok(!migration.includes("'serverSeed', NEW.server_seed"));
+    assert.ok(realtime.includes(".channel('andar_bahar:rounds'"));
+    assert.ok(realtime.includes("event: 'andar_bahar_round_changed'"));
+    assert.ok(realtime.includes("else void poll()"));
+  });
+
+  test('Andar Bahar public deal reveals cards progressively but hides winner until settlement', () => {
+    const cards = Array.from({ length: 30 }, (_, index) => ({ side: index % 2 ? 'andar' : 'bahar', card: { rank: index + 2 } }));
+    const result = { jokerCard: { rank: 7, suit: 'H' }, dealCards: cards, winner: 'andar' };
+    assert.strictEqual(getAndarBaharPublicDeal(result, 'BETTING', null, 10000).dealCards.length, 0);
+    const atStart = getAndarBaharPublicDeal(result, 'RUNNING', '1970-01-01T00:00:10.000Z', 10000);
+    assert.strictEqual(atStart.dealCards.length, 0);
+    assert.strictEqual(atStart.jokerCard?.rank, 7);
+    assert.strictEqual(atStart.winningSide, null);
+    const mid = getAndarBaharPublicDeal(result, 'RUNNING', '1970-01-01T00:00:10.000Z', 12250);
+    assert.strictEqual(mid.dealCards.length, 15);
+    assert.strictEqual(mid.winningSide, null);
+    const settled = getAndarBaharPublicDeal(result, 'SETTLED', '1970-01-01T00:00:10.000Z', 14500);
+    assert.strictEqual(settled.dealCards.length, 30);
+    assert.strictEqual(settled.winningSide, 'andar');
+    assert.deepStrictEqual(settled.winningCard, cards[29].card);
+  });
+
+  test('Andar Bahar betting UI does not publish a first side or fixed side odds before the Joker is drawn', () => {
+    const api = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const ui = readFileSync('frontend/src/games/andar-bahar/AndarBaharGame.tsx', 'utf8');
+    assert.ok(api.includes('row.result?.jokerCard?.suit ?'));
+    assert.ok(ui.includes("'1.90x / 2.00x'"));
+    assert.ok(ui.includes("'WAITING FOR JOKER'"));
+  });
+
+  test('Andar Bahar activation requires a correctly mapped pool with 2x max-bet liability', () => {
+    const base = {
+      gameCode: 'andar_bahar', catalogWalletId: 'andar-pool', mappedWalletId: 'andar-pool',
+      walletType: 'GAME_POOL', walletGameCode: 'andar_bahar', balance: '1000000',
+      reservedBalance: '0', minimumPoolBalance: '200000',
+    };
+    assert.deepStrictEqual(evaluateGameActivationReadiness(base), {
+      ok: true, availablePoolBalance: '1000000',
+    });
+    const insufficient = evaluateGameActivationReadiness({ ...base, balance: '199999' });
+    assert.strictEqual(insufficient.ok, false);
+    if (!insufficient.ok) assert.strictEqual(insufficient.error, 'ANDAR_BAHAR_POOL_LIQUIDITY_INSUFFICIENT');
+    const wrongPool = evaluateGameActivationReadiness({ ...base, walletGameCode: 'roulette' });
+    assert.strictEqual(wrongPool.ok, false);
+    if (!wrongPool.ok) assert.strictEqual(wrongPool.error, 'GAME_POOL_IDENTITY_MISMATCH');
+  });
+
+  test('Andar Bahar 10,000-round simulation preserves card match and alternating deal rules', () => {
+    const jokerRanks = new Array(13).fill(0);
+    const suits = new Map<string, number>([['S',0],['H',0],['D',0],['C',0]]);
+    const winners = { andar: 0, bahar: 0 };
+    for (let i = 0; i < 10000; i++) {
+      const result = makeResult('andar_bahar', 'andar-bahar-simulation-' + i);
+      const jokerCard = result.jokerCard as { rank: number; suit: string };
+      const dealCards = result.dealCards as Array<{ side: 'andar' | 'bahar'; card: { rank: number; suit: string; code: string } }>;
+      const winner = result.winner as 'andar' | 'bahar';
+      assert.ok(dealCards.length >= 1 && dealCards.length <= 51);
+      assert.strictEqual(dealCards[dealCards.length - 1].card.rank, jokerCard.rank);
+      assert.strictEqual(dealCards.filter((x) => x.card.rank === jokerCard.rank).length, 1);
+      const expectedFirstSide = ['S', 'C'].includes(jokerCard.suit) ? 'andar' : 'bahar';
+      assert.strictEqual(result.firstSide, expectedFirstSide);
+      assert.ok(dealCards.every((x, index) => x.side === (index % 2 === 0 ? expectedFirstSide : expectedFirstSide === 'andar' ? 'bahar' : 'andar')));
+      assert.ok(dealCards.every((x) => typeof x.card.code === 'string' && x.card.code.length >= 2));
+      jokerRanks[jokerCard.rank - 2]++;
+      suits.set(jokerCard.suit, (suits.get(jokerCard.suit) ?? 0) + 1);
+      winners[winner]++;
+    }
+    assert.ok(jokerRanks.every(count => count > 650 && count < 900));
+    assert.ok([...suits.values()].every(count => count > 2300 && count < 2700));
+    assert.ok(winners.andar > 4500 && winners.andar < 5500);
+    assert.ok(winners.bahar > 4500 && winners.bahar < 5500);
+  });
+
   test('Production Dice verifier uses the exact authoritative engine HMAC contract', () => {
     const seed = 'dice-test-seed';
     const expectedHex = createHmac('sha256', seed).update('dice').digest('hex').slice(0, 13);
@@ -574,7 +662,18 @@ async function runTestSuite() {
     assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon' }), true);
     assert.strictEqual(validateSelection('roulette', { type: 'red' }), true);
     assert.strictEqual(validateSelection('dice', { type: '11' }), false);
+    assert.strictEqual(validateSelection('andar_bahar', { type: 'andar' }), true);
+    assert.strictEqual(validateSelection('andar_bahar', { type: 'bahar' }), true);
+    assert.strictEqual(validateSelection('andar_bahar', { type: 'joker_red' }), true);
+    assert.strictEqual(validateSelection('andar_bahar', { type: 'joker_black' }), true);
+    assert.strictEqual(validateSelection('andar_bahar', { type: 'cards_25_plus' }), false);
     assert.strictEqual(validateSelection('andar_bahar', { type: 'untrusted-side' }), false);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'andar' }, { winner: 'andar', firstSide: 'andar' }), 1.9);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'bahar' }, { winner: 'bahar', firstSide: 'andar' }), 2);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'andar' }, { winner: 'andar', firstSide: 'bahar' }), 2);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'bahar' }, { winner: 'bahar', firstSide: 'bahar' }), 1.9);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_red' }, { jokerCard: { suit: 'H' } }), 1.95);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_black' }, { jokerCard: { suit: 'C' } }), 1.95);
     assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'tie' }), 9);
     assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 51);
   });
