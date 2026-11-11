@@ -720,6 +720,10 @@ jobs:
           IF (SELECT reserved_balance FROM wallet.wallets WHERE game_code='andar_bahar' AND wallet_type='GAME_POOL') <> 0 THEN
             RAISE EXCEPTION 'Pool reserved liability was not fully released';
           END IF;
+          PERFORM andar_bahar.advance_round();
+          IF (SELECT count(*) FROM wallet.wallet_transactions WHERE metadata->>'gameCode'='andar_bahar' AND metadata->>'roundId'=v_first_id::text) <> 10 THEN
+            RAISE EXCEPTION 'Repeated settlement created duplicate wallet transfers';
+          END IF;
           UPDATE andar_bahar.authoritative_game_rounds
             SET settled_at=clock_timestamp()-interval '6 seconds' WHERE id=v_first_id;
           PERFORM andar_bahar.advance_round();
