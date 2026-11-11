@@ -549,6 +549,11 @@ jobs:
         psql -v ON_ERROR_STOP=1 <<'SQL'
         CREATE SCHEMA IF NOT EXISTS extensions;
         CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+        CREATE SCHEMA IF NOT EXISTS realtime;
+        CREATE TABLE public.ci_realtime_events(payload jsonb,event text,topic text,is_private boolean);
+        CREATE OR REPLACE FUNCTION realtime.send(p_payload jsonb,p_event text,p_topic text,p_private boolean)
+        RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp
+        AS $function$ INSERT INTO public.ci_realtime_events VALUES(p_payload,p_event,p_topic,p_private) $function$;
         GRANT USAGE ON SCHEMA extensions TO service_role;
         ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_ESCROW_REFUND';
         ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_WIN_PAYOUT';
@@ -677,6 +682,11 @@ jobs:
           END IF;
           IF (SELECT count(*) FROM wallet.wallet_transactions WHERE metadata->>'gameCode'='andar_bahar' AND metadata->>'roundId'=v_first_id::text) <> 6 THEN
             RAISE EXCEPTION 'Expected stake-return, profit and losing-stake transfers for main and Joker-color bets';
+          END IF;
+          IF (SELECT count(*) FROM public.ci_realtime_events WHERE topic='andar_bahar:rounds' AND event='andar_bahar_round_changed') < 4
+             OR EXISTS (SELECT 1 FROM public.ci_realtime_events WHERE topic='andar_bahar:rounds' AND
+               (payload ? 'result' OR payload ? 'serverSeed' OR payload ? 'walletBalance' OR payload ? 'bets')) THEN
+            RAISE EXCEPTION 'Andar Bahar Realtime did not broadcast safe round metadata';
           END IF;
           IF (SELECT reserved_balance FROM wallet.wallets WHERE game_code='andar_bahar' AND wallet_type='GAME_POOL') <> 0 THEN
             RAISE EXCEPTION 'Pool reserved liability was not fully released';
