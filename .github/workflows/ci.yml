@@ -653,7 +653,7 @@ jobs:
           END IF;
           v_result := v_round.result;
           v_first_side := v_result->>'firstSide';
-          IF v_first_side <> CASE WHEN v_result->'jokerCard'->>'suit' IN ('S','C') THEN 'andar' ELSE 'bahar' END THEN
+          IF v_first_side <> (CASE WHEN v_result->'jokerCard'->>'suit' IN ('S','C') THEN 'andar' ELSE 'bahar' END) THEN
             RAISE EXCEPTION 'Joker color did not determine the first dealt side';
           END IF;
           v_joker_rank := (v_result->'jokerCard'->>'rank')::integer;
