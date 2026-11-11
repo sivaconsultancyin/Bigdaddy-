@@ -589,6 +589,9 @@ jobs:
       run: |
         psql -v ON_ERROR_STOP=1 <<'SQL'
         SET ROLE service_role;
+        SELECT g.code,g.status,g.pool_wallet_id,gp.wallet_id,w.wallet_type::text,w.game_code,w.balance,w.reserved_balance
+          FROM platform.games g LEFT JOIN platform.game_pools gp ON gp.game_code=g.code
+          LEFT JOIN wallet.wallets w ON w.id=g.pool_wallet_id WHERE g.code='andar_bahar';
         DO $verify$
         DECLARE
           v_round andar_bahar.authoritative_game_rounds%ROWTYPE;
@@ -604,14 +607,14 @@ jobs:
           v_side text;
           v_expected_side text;
           v_count integer := 0;
-          v_failed boolean := false;
+          v_failed boolean := false;\n          v_state jsonb;
         BEGIN
           PERFORM andar_bahar.advance_round();
           SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds
             WHERE game_code='andar_bahar' ORDER BY round_number DESC LIMIT 1;
           IF v_round.status <> 'BETTING' OR v_round.server_seed IS NULL
              OR encode(extensions.digest(v_round.server_seed,'sha256'),'hex') <> v_round.server_seed_hash THEN
-            RAISE EXCEPTION 'Andar Bahar did not create a committed betting round';
+            RAISE EXCEPTION 'Andar Bahar did not create a committed betting round; state=%',v_state;
           END IF;
           v_first_id := v_round.id;
           PERFORM andar_bahar.advance_round();
