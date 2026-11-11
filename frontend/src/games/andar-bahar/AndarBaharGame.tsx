@@ -344,7 +344,7 @@ export const AndarBaharGame: React.FC<{ onBackToLobby: () => void }> = ({ onBack
           <div className="mt-2.5 text-[9px] text-zinc-400 font-medium">
             First Card Deals to:{' '}
             <strong className={isJokerBlack ? 'text-blue-400' : 'text-amber-400'}>
-              {isJokerBlack ? 'ANDAR (Black Joker)' : 'BAHAR (Red Joker)'}
+              {joker ? (isJokerBlack ? 'ANDAR (Black Joker)' : 'BAHAR (Red Joker)') : 'WAITING FOR JOKER'}
             </strong>
           </div>
         </div>
@@ -474,7 +474,7 @@ export const AndarBaharGame: React.FC<{ onBackToLobby: () => void }> = ({ onBack
               ANDAR (అందర్)
             </span>
             <span className="text-[10px] font-mono text-blue-300 mt-0.5">
-              Odds: {andarBaharRound.firstSide === 'andar' ? '1.9x' : '2.0x'}
+              Odds: {andarBaharRound.firstSide ? (andarBaharRound.firstSide === 'andar' ? '1.9x' : '2.0x') : '1.90x / 2.00x'}
             </span>
             {myBets['andar'] && (
               <span className="mt-1 px-2 py-0.5 rounded-full bg-yellow-400 text-zinc-950 text-[10px] font-black font-mono shadow">
@@ -500,7 +500,7 @@ export const AndarBaharGame: React.FC<{ onBackToLobby: () => void }> = ({ onBack
               BAHAR (బహార్)
             </span>
             <span className="text-[10px] font-mono text-amber-300 mt-0.5">
-              Odds: {andarBaharRound.firstSide === 'bahar' ? '1.9x' : '2.0x'}
+              Odds: {andarBaharRound.firstSide ? (andarBaharRound.firstSide === 'bahar' ? '1.9x' : '2.0x') : '1.90x / 2.00x'}
             </span>
             {myBets['bahar'] && (
               <span className="mt-1 px-2 py-0.5 rounded-full bg-yellow-400 text-zinc-950 text-[10px] font-black font-mono shadow">
