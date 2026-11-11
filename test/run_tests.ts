@@ -577,6 +577,14 @@ async function runTestSuite() {
     assert.deepStrictEqual(settled.winningCard, cards[29].card);
   });
 
+  test('Andar Bahar betting UI does not publish a first side or fixed side odds before the Joker is drawn', () => {
+    const api = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const ui = readFileSync('frontend/src/games/andar-bahar/AndarBaharGame.tsx', 'utf8');
+    assert.ok(api.includes('row.result?.jokerCard?.suit ?'));
+    assert.ok(ui.includes("'1.90x / 2.00x'"));
+    assert.ok(ui.includes("'WAITING FOR JOKER'"));
+  });
+
   test('Andar Bahar activation requires a correctly mapped pool with 2x max-bet liability', () => {
     const base = {
       gameCode: 'andar_bahar', catalogWalletId: 'andar-pool', mappedWalletId: 'andar-pool',
