@@ -255,7 +255,7 @@ export interface AndarBaharRound {
   winningSide: 'andar' | 'bahar' | null;
   winningCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number } | null;
   totalCardsDealt: number;
-  firstSide: 'andar' | 'bahar';
+  firstSide: 'andar' | 'bahar' | null;
   totalBetsCount: number;
   totalBetAmount: string;
   andarBetAmount: string;
