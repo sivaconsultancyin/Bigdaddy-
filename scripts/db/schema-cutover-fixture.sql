@@ -3,7 +3,7 @@
 -- shape and function boundaries against this catalogue fixture.
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
-CREATE ROLE service_role NOLOGIN;
+CREATE ROLE service_role NOLOGIN BYPASSRLS;
 
 CREATE TYPE public.transaction_type_enum AS ENUM ('SYSTEM_INITIALIZATION','BET_ESCROW_LOCK');
 CREATE TYPE public.wallet_type_enum AS ENUM ('TREASURY','PLAYER','GAME_POOL','ESCROW');
