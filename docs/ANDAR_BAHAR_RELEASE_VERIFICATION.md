@@ -7,8 +7,10 @@ Do not change `platform.games.status` from `COMING_SOON` until all required CI j
 
 ## Required automated coverage
 - Lint, TypeScript checks and frontend production build
-- 10,000 deterministic Andar Bahar rounds with card-match and alternating-deal invariants
-- Andar (2.00x), Bahar (1.90x), Joker Red (1.95x) and Joker Black (1.95x) payout rules
+- 10,000 deterministic Andar Bahar rounds with card-match, Joker-color first-side and alternating-deal invariants
+- Verify both Joker colors produce the matching first side and invert first/second-side gross payout correctly
+- Joker-color-driven first side: black Joker starts Andar; red Joker starts Bahar
+- First-dealt side 1.90x, second-dealt side 2.00x, Joker Red/Black 1.95x
 - Progressive card reveal while the winner remains hidden until settlement
 - Sanitized Realtime broadcast on `andar_bahar:rounds` plus authenticated state-poll fallback
 - Synthetic wallet debit, escrow, gross payout, pool balance and duplicate-settlement checks
