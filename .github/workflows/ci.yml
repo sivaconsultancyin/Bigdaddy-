@@ -549,6 +549,7 @@ jobs:
         psql -v ON_ERROR_STOP=1 <<'SQL'
         CREATE SCHEMA IF NOT EXISTS extensions;
         CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+        GRANT USAGE ON SCHEMA extensions TO service_role;
         ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_ESCROW_REFUND';
         ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_WIN_PAYOUT';
         ALTER TYPE public.transaction_type_enum ADD VALUE IF NOT EXISTS 'BET_LOSS_GAME_POOL';
