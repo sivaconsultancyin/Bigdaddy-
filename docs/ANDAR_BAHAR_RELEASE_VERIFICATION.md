@@ -12,6 +12,7 @@ Do not change `platform.games.status` from `COMING_SOON` until all required CI j
 - Joker-color-driven first side: black Joker starts Andar; red Joker starts Bahar
 - First-dealt side 1.90x, second-dealt side 2.00x, Joker Red/Black 1.95x
 - Progressive card reveal while the winner remains hidden until settlement
+- Do not publish a fixed Andar/Bahar first-side odds assignment before the Joker is drawn; show the 1.90x/2.00x position-based odds after the Joker determines the first side
 - Sanitized Realtime broadcast on `andar_bahar:rounds` plus authenticated state-poll fallback
 - Synthetic wallet debit, escrow, gross payout, pool balance and duplicate-settlement checks
 - Isolated PostgreSQL round creation, seed commitment, card dealing, bet settlement, pool reservation release, duplicate-call idempotency and invalid-selection rejection
