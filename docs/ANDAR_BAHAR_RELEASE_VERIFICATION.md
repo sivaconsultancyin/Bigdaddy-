@@ -20,7 +20,7 @@ Do not change `platform.games.status` from `COMING_SOON` until all required CI j
 - Edge API typecheck and existing platform financial/security suites
 
 ## Production verification
-1. Apply the migration from `supabase/migrations/20261111120000_andar_bahar_authoritative_round_lifecycle.sql`.
+1. Apply the migration from `supabase/migrations/20261111125900_andar_bahar_authoritative_round_lifecycle.sql`.
 2. Deploy the `api` Edge Function from the matching GitHub source.
 3. Verify pool mapping and available liability (at least 2x max bet).
 4. Activate only through the guarded activation API; it must create the first persisted BETTING round.
