@@ -551,6 +551,7 @@ jobs:
         CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
         CREATE SCHEMA IF NOT EXISTS realtime;
         CREATE TABLE public.ci_realtime_events(payload jsonb,event text,topic text,is_private boolean);
+        GRANT SELECT ON public.ci_realtime_events TO service_role;
         CREATE OR REPLACE FUNCTION realtime.send(p_payload jsonb,p_event text,p_topic text,p_private boolean)
         RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp
         AS $function$ INSERT INTO public.ci_realtime_events VALUES(p_payload,p_event,p_topic,p_private) $function$;
