@@ -1,6 +1,8 @@
 # Andar Bahar release verification
 
 ## Activation gate
+
+This checklist is versioned with the release PR; rerun the complete CI suite on every update to the lifecycle, wallet or API implementation.
 Do not change `platform.games.status` from `COMING_SOON` until all required CI jobs pass, the migration is applied, the Edge API is deployed, and the production smoke tests below pass.
 
 ## Required automated coverage
