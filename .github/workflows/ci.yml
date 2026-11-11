@@ -616,7 +616,7 @@ jobs:
         VALUES('ESCROW',0,0);
         UPDATE platform.games SET status='ACTIVE' WHERE code='andar_bahar';
         SQL
-        psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261111120000_andar_bahar_authoritative_round_lifecycle.sql
+        psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261111125900_andar_bahar_authoritative_round_lifecycle.sql
 
     - name: Verify Andar Bahar lifecycle, card sequence, settlement and idempotency
       run: |
