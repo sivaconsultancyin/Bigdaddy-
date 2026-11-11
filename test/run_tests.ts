@@ -9,7 +9,7 @@ import { db } from '../backend/src/db/storage';
 import { AuthService } from '../backend/src/services/auth.service';
 import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
-import { evaluateGameActivationReadiness } from '../supabase/functions/api/activation';
+import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from '../supabase/functions/api/activation';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
 import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
@@ -538,6 +538,23 @@ async function runTestSuite() {
     const wrongPool = evaluateGameActivationReadiness({ ...base, walletGameCode: 'roulette' });
     assert.strictEqual(wrongPool.ok, false);
     if (!wrongPool.ok) assert.strictEqual(wrongPool.error, 'GAME_POOL_IDENTITY_MISMATCH');
+  });
+
+  test('Andar Bahar public deal reveals cards progressively but hides winner until settlement', () => {
+    const cards = Array.from({ length: 30 }, (_, index) => ({ side: index % 2 ? 'andar' : 'bahar', card: { rank: index + 2 } }));
+    const result = { jokerCard: { rank: 7, suit: 'H' }, dealCards: cards, winner: 'andar' };
+    assert.strictEqual(getAndarBaharPublicDeal(result, 'BETTING', null, 10000).dealCards.length, 0);
+    const atStart = getAndarBaharPublicDeal(result, 'RUNNING', '1970-01-01T00:00:10.000Z', 10000);
+    assert.strictEqual(atStart.dealCards.length, 0);
+    assert.strictEqual(atStart.jokerCard?.rank, 7);
+    assert.strictEqual(atStart.winningSide, null);
+    const mid = getAndarBaharPublicDeal(result, 'RUNNING', '1970-01-01T00:00:10.000Z', 12250);
+    assert.strictEqual(mid.dealCards.length, 15);
+    assert.strictEqual(mid.winningSide, null);
+    const settled = getAndarBaharPublicDeal(result, 'SETTLED', '1970-01-01T00:00:10.000Z', 14500);
+    assert.strictEqual(settled.dealCards.length, 30);
+    assert.strictEqual(settled.winningSide, 'andar');
+    assert.deepStrictEqual(settled.winningCard, cards[29].card);
   });
 
   test('Andar Bahar activation requires a correctly mapped pool with 2x max-bet liability', () => {
