@@ -102,7 +102,7 @@ async function runTestSuite() {
     assert.strictEqual(manifest.counts.sharedRepositoryFiles, 58);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 21);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 44);
-    // The Dice lifecycle migration remains source-only until isolated DB validation completes.
+    // Dice and Andar Bahar lifecycle migrations remain source-only until production application is verified.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
     const exactAppliedFiles = new Set(
       (manifest.appliedLedger as Array<{ version: string; name: string }>).map(
@@ -117,7 +117,7 @@ async function runTestSuite() {
       appliedNames.has(name.replace(/^\d{14}_/, '').replace(/\.sql$/, '')),
     );
     assert.strictEqual(sameNameDifferentVersion.length, 27);
-    assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 10);
+    assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 11);
     assert.ok(!sourceOnlyFiles.includes('20261025110000_shared_aviator_wallet_operations.sql'));
     assert.strictEqual(manifest.counts.legacyIsolatedAppliedLedgerSnapshot, 7);
     assert.strictEqual(manifest.counts.legacyArchivedMigrationFiles, 13);
