@@ -204,7 +204,7 @@ BEGIN
       ORDER BY id FOR UPDATE
     LOOP
       v_type := lower(coalesce(v_bet.selection->>'type',''));
-      IF v_type NOT IN ('andar','bahar') THEN RAISE EXCEPTION 'ANDAR_BAHAR_BET_SELECTION_INVALID'; END IF;
+      IF v_type NOT IN ('andar','bahar','joker_red','joker_black') THEN RAISE EXCEPTION 'ANDAR_BAHAR_BET_SELECTION_INVALID'; END IF;
       v_expected_liability := v_bet.bet_amount * 2;
       IF v_bet.reserved_liability IS DISTINCT FROM v_expected_liability THEN
         RAISE EXCEPTION 'ANDAR_BAHAR_RESERVED_LIABILITY_MISMATCH';
