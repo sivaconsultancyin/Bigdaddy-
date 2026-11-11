@@ -608,6 +608,7 @@ jobs:
           v_round andar_bahar.authoritative_game_rounds%ROWTYPE;
           v_first_id uuid;
           v_winner text;
+          v_first_side text;
           v_loser text;
           v_result jsonb;
           v_dealt integer;
@@ -1091,7 +1092,7 @@ jobs:
           FOR v_card,v_side IN
             SELECT value->'card',value->>'side' FROM jsonb_array_elements(v_result->'dealCards')
           LOOP
-            v_expected_side := CASE WHEN v_count % 2 = 0 THEN 'bahar' ELSE 'andar' END;
+            v_expected_side := CASE WHEN v_count % 2 = 0 THEN v_first_side ELSE CASE WHEN v_first_side='andar' THEN 'bahar' ELSE 'andar' END END;
             IF v_side <> v_expected_side THEN RAISE EXCEPTION 'Andar/Bahar dealing order is not alternating'; END IF;
             v_count := v_count + 1;
           END LOOP;
@@ -1117,8 +1118,8 @@ jobs:
           END IF;
           IF (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='WON') <> 2
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='LOST') <> 2
-             OR (v_winner='andar' AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 20)
-             OR (v_winner='bahar' AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 19)
+             OR ((v_winner=v_first_side) AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 19)
+             OR ((v_winner<>v_first_side) AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 20)
              OR (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_loser) <> 0
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type' IN ('joker_red','joker_black') AND status='WON' AND payout_amount=19) <> 1
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type' IN ('joker_red','joker_black') AND status='LOST' AND payout_amount=0) <> 1 THEN
