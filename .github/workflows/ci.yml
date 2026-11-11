@@ -607,9 +607,10 @@ jobs:
           v_side text;
           v_expected_side text;
           v_count integer := 0;
-          v_failed boolean := false;\n          v_state jsonb;
+          v_failed boolean := false;
+          v_state jsonb;
         BEGIN
-          PERFORM andar_bahar.advance_round();
+          v_state := andar_bahar.advance_round();
           SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds
             WHERE game_code='andar_bahar' ORDER BY round_number DESC LIMIT 1;
           IF v_round.status <> 'BETTING' OR v_round.server_seed IS NULL
