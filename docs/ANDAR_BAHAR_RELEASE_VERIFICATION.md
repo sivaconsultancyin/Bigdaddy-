@@ -8,6 +8,8 @@ Do not change `platform.games.status` from `COMING_SOON` until all required CI j
 - 10,000 deterministic Andar Bahar rounds with card-match and alternating-deal invariants
 - Andar (2.00x), Bahar (1.90x), Joker Red (1.95x) and Joker Black (1.95x) payout rules
 - Progressive card reveal while the winner remains hidden until settlement
+- Sanitized Realtime broadcast on `andar_bahar:rounds` plus authenticated state-poll fallback
+- Synthetic wallet debit, escrow, gross payout, pool balance and duplicate-settlement checks
 - Isolated PostgreSQL round creation, seed commitment, card dealing, bet settlement, pool reservation release, duplicate-call idempotency and invalid-selection rejection
 - Edge API typecheck and existing platform financial/security suites
 
