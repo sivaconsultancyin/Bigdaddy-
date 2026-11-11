@@ -228,6 +228,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const simIntervalRef = useRef<number | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const andarBaharRealtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
@@ -763,6 +764,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       });
       realtimeChannelRef.current = channel;
+
+      // Andar Bahar broadcasts only round IDs/status/timing. The authenticated
+      // state API fetches the actual cards and user-specific bet data.
+      const andarChannel = supabaseRealtime
+        .channel('andar_bahar:rounds', { config: { broadcast: { self: false } } })
+        .on('broadcast', { event: 'andar_bahar_round_changed' }, ({ payload }) => {
+          if (stopped || disposedRef.current || !activeGameKeysRef.current.has('andarBahar')) return;
+          if (!payload || typeof payload !== 'object') return;
+          if (simIntervalRef.current !== null) {
+            window.clearTimeout(simIntervalRef.current);
+            simIntervalRef.current = null;
+          }
+          if (inFlight) rerunRequested = true;
+          else void poll();
+        })
+        .subscribe();
+      andarBaharRealtimeChannelRef.current = andarChannel;
     }
     void poll();
   };
@@ -782,6 +800,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (realtimeChannelRef.current && supabaseRealtime) {
         void supabaseRealtime.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
+      }
+      if (andarBaharRealtimeChannelRef.current && supabaseRealtime) {
+        void supabaseRealtime.removeChannel(andarBaharRealtimeChannelRef.current);
+        andarBaharRealtimeChannelRef.current = null;
       }
     };
   }, []);
