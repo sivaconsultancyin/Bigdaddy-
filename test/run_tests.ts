@@ -540,6 +540,44 @@ async function runTestSuite() {
     if (!wrongPool.ok) assert.strictEqual(wrongPool.error, 'GAME_POOL_IDENTITY_MISMATCH');
   });
 
+  test('Andar Bahar activation requires a correctly mapped pool with 2x max-bet liability', () => {
+    const base = {
+      gameCode: 'andar_bahar', catalogWalletId: 'andar-pool', mappedWalletId: 'andar-pool',
+      walletType: 'GAME_POOL', walletGameCode: 'andar_bahar', balance: '1000000',
+      reservedBalance: '0', minimumPoolBalance: '200000',
+    };
+    assert.deepStrictEqual(evaluateGameActivationReadiness(base), {
+      ok: true, availablePoolBalance: '1000000',
+    });
+    const insufficient = evaluateGameActivationReadiness({ ...base, balance: '199999' });
+    assert.strictEqual(insufficient.ok, false);
+    if (!insufficient.ok) assert.strictEqual(insufficient.error, 'ANDAR_BAHAR_POOL_LIQUIDITY_INSUFFICIENT');
+    const wrongPool = evaluateGameActivationReadiness({ ...base, walletGameCode: 'roulette' });
+    assert.strictEqual(wrongPool.ok, false);
+    if (!wrongPool.ok) assert.strictEqual(wrongPool.error, 'GAME_POOL_IDENTITY_MISMATCH');
+  });
+
+  test('Andar Bahar 10,000-round simulation preserves card match and alternating deal rules', () => {
+    const jokerRanks = new Array(13).fill(0);
+    const suits = new Map<string, number>([['S',0],['H',0],['D',0],['C',0]]);
+    const winners = { andar: 0, bahar: 0 };
+    for (let i = 0; i < 10000; i++) {
+      const result = makeResult('andar_bahar', 'andar-bahar-simulation-' + i);
+      assert.ok(result.dealCards.length >= 1 && result.dealCards.length <= 51);
+      assert.strictEqual(result.dealCards[result.dealCards.length - 1].card.rank, result.jokerCard.rank);
+      assert.strictEqual(result.dealCards.filter(x => x.card.rank === result.jokerCard.rank).length, 1);
+      assert.ok(result.dealCards.every((x, index) => x.side === (index % 2 === 0 ? 'bahar' : 'andar')));
+      assert.ok(result.dealCards.every(x => typeof x.card.code === 'string' && x.card.code.length >= 2));
+      jokerRanks[result.jokerCard.rank - 2]++;
+      suits.set(result.jokerCard.suit, (suits.get(result.jokerCard.suit) ?? 0) + 1);
+      winners[result.winner]++;
+    }
+    assert.ok(jokerRanks.every(count => count > 650 && count < 900));
+    assert.ok([...suits.values()].every(count => count > 2300 && count < 2700));
+    assert.ok(winners.andar > 4500 && winners.andar < 5500);
+    assert.ok(winners.bahar > 4500 && winners.bahar < 5500);
+  });
+
   test('Production Dice verifier uses the exact authoritative engine HMAC contract', () => {
     const seed = 'dice-test-seed';
     const expectedHex = createHmac('sha256', seed).update('dice').digest('hex').slice(0, 13);
