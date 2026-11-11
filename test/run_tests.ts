@@ -598,7 +598,9 @@ async function runTestSuite() {
       assert.ok(dealCards.length >= 1 && dealCards.length <= 51);
       assert.strictEqual(dealCards[dealCards.length - 1].card.rank, jokerCard.rank);
       assert.strictEqual(dealCards.filter((x) => x.card.rank === jokerCard.rank).length, 1);
-      assert.ok(dealCards.every((x, index) => x.side === (index % 2 === 0 ? 'bahar' : 'andar')));
+      const expectedFirstSide = ['S', 'C'].includes(jokerCard.suit) ? 'andar' : 'bahar';
+      assert.strictEqual(result.firstSide, expectedFirstSide);
+      assert.ok(dealCards.every((x, index) => x.side === (index % 2 === 0 ? expectedFirstSide : expectedFirstSide === 'andar' ? 'bahar' : 'andar')));
       assert.ok(dealCards.every((x) => typeof x.card.code === 'string' && x.card.code.length >= 2));
       jokerRanks[jokerCard.rank - 2]++;
       suits.set(jokerCard.suit, (suits.get(jokerCard.suit) ?? 0) + 1);
@@ -650,8 +652,10 @@ async function runTestSuite() {
     assert.strictEqual(validateSelection('andar_bahar', { type: 'joker_black' }), true);
     assert.strictEqual(validateSelection('andar_bahar', { type: 'cards_25_plus' }), false);
     assert.strictEqual(validateSelection('andar_bahar', { type: 'untrusted-side' }), false);
-    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'andar' }, { winner: 'andar' }), 2);
-    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'bahar' }, { winner: 'bahar' }), 1.9);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'andar' }, { winner: 'andar', firstSide: 'andar' }), 1.9);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'bahar' }, { winner: 'bahar', firstSide: 'andar' }), 2);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'andar' }, { winner: 'andar', firstSide: 'bahar' }), 2);
+    assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'bahar' }, { winner: 'bahar', firstSide: 'bahar' }), 1.9);
     assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_red' }, { jokerCard: { suit: 'H' } }), 1.95);
     assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_black' }, { jokerCard: { suit: 'C' } }), 1.95);
     assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'tie' }), 9);
