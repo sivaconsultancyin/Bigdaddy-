@@ -134,7 +134,7 @@ BEGIN
       FOR v_rank IN 2..14 LOOP
         v_code := v_ranks[v_rank - 1] || v_suit;
         v_deck := v_deck || jsonb_build_array(jsonb_build_object(
-          'rank',v_rank,'suit',v_suit,'code',v_code
+          'rank',v_rank,'suit',v_suit,'code',v_code,'deckIndex',0
         ));
       END LOOP;
     END LOOP;
@@ -142,7 +142,7 @@ BEGIN
     -- Deterministic Fisher-Yates shuffle driven by HMAC-SHA256 and a 256-bit
     -- server seed generated with pgcrypto. The client never supplies the seed.
     FOR v_i IN REVERSE 52..2 LOOP
-      v_hmac_hex := encode(extensions.hmac('andar-bahar-deck:' || v_i::text,v_seed,'sha256'),'hex');
+      v_hmac_hex := encode(extensions.hmac('deck:' || (v_i - 1)::text,v_seed,'sha256'),'hex');
       v_j := (('x' || substr(v_hmac_hex,1,13))::bit(52)::bigint % v_i)::integer;
       v_card_i := v_deck -> (v_i - 1);
       v_card_j := v_deck -> v_j;
