@@ -321,4 +321,41 @@ REVOKE ALL ON FUNCTION andar_bahar.advance_round() FROM PUBLIC, anon, authentica
 GRANT EXECUTE ON FUNCTION andar_bahar.advance_round() TO service_role;
 REVOKE ALL ON FUNCTION andar_bahar.validate_bet_selection() FROM PUBLIC, anon, authenticated;
 
+
+-- Broadcast only safe round metadata. Never expose the result, server seed,
+-- bet payloads, wallet data or user identifiers on the public channel.
+DO $realtime$
+BEGIN
+  IF to_regprocedure('realtime.send(jsonb,text,text,boolean)') IS NOT NULL THEN
+    EXECUTE $fn$
+      CREATE OR REPLACE FUNCTION andar_bahar.broadcast_round_signal()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      SECURITY DEFINER
+      SET search_path = pg_catalog, pg_temp
+      AS $body$
+      BEGIN
+        PERFORM realtime.send(
+          jsonb_build_object(
+            'id', NEW.id,
+            'roundNumber', NEW.round_number,
+            'status', NEW.status,
+            'openedAt', NEW.opened_at,
+            'bettingEndsAt', NEW.betting_closes_at
+          ),
+          'andar_bahar_round_changed',
+          'andar_bahar:rounds',
+          false
+        );
+        RETURN NEW;
+      END;
+      $body$;
+    $fn$;
+    EXECUTE 'DROP TRIGGER IF EXISTS broadcast_andar_bahar_round_signal ON andar_bahar.authoritative_game_rounds';
+    EXECUTE 'CREATE TRIGGER broadcast_andar_bahar_round_signal AFTER INSERT OR UPDATE OF status, state, result, betting_closes_at ON andar_bahar.authoritative_game_rounds FOR EACH ROW EXECUTE FUNCTION andar_bahar.broadcast_round_signal()';
+    EXECUTE 'REVOKE ALL ON FUNCTION andar_bahar.broadcast_round_signal() FROM PUBLIC, anon, authenticated';
+  END IF;
+END;
+$realtime$;
+
 COMMIT;
