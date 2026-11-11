@@ -665,7 +665,8 @@ jobs:
           END IF;
           IF (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='WON') <> 2
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND status='LOST') <> 2
-             OR (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> CASE WHEN v_winner='andar' THEN 20 ELSE 19 END
+             OR (v_winner='andar' AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 20)
+             OR (v_winner='bahar' AND (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_winner) <> 19)
              OR (SELECT payout_amount FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type'=v_loser) <> 0
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type' IN ('joker_red','joker_black') AND status='WON' AND payout_amount=19) <> 1
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type' IN ('joker_red','joker_black') AND status='LOST' AND payout_amount=0) <> 1 THEN
