@@ -576,6 +576,12 @@ jobs:
         SET search_path=pg_catalog,pg_temp AS $function$
         DECLARE v_id uuid;
         BEGIN
+          UPDATE wallet.wallets SET balance=balance-p_amount,updated_at=clock_timestamp()
+            WHERE id=p_source_wallet_id AND balance-reserved_balance >= p_amount;
+          IF NOT FOUND THEN RAISE EXCEPTION 'CI_WALLET_INSUFFICIENT_FUNDS'; END IF;
+          UPDATE wallet.wallets SET balance=balance+p_amount,updated_at=clock_timestamp()
+            WHERE id=p_target_wallet_id;
+          IF NOT FOUND THEN RAISE EXCEPTION 'CI_WALLET_TARGET_MISSING'; END IF;
           INSERT INTO wallet.wallet_transactions(idempotency_key,type,amount,source_wallet_id,target_wallet_id,metadata)
           VALUES(p_idempotency_key,p_type,p_amount,p_source_wallet_id,p_target_wallet_id,coalesce(p_metadata,'{}'::jsonb))
           RETURNING id INTO v_id;
@@ -585,7 +591,7 @@ jobs:
         INSERT INTO wallet.wallets(user_id,wallet_type,balance,reserved_balance)
         VALUES('20000000-0000-0000-0000-000000000001','PLAYER',1000,0);
         INSERT INTO wallet.wallets(wallet_type,balance,reserved_balance)
-        VALUES('ESCROW',1000000,0);
+        VALUES('ESCROW',0,0);
         UPDATE platform.games SET status='ACTIVE' WHERE code='andar_bahar';
         SQL
         psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261111120000_andar_bahar_authoritative_round_lifecycle.sql
@@ -614,11 +620,19 @@ jobs:
           v_count integer := 0;
           v_failed boolean := false;
           v_state jsonb;
+          v_player_wallet_id uuid;
+          v_escrow_wallet_id uuid;
+          v_lock_tx_1 uuid;
+          v_lock_tx_2 uuid;
+          v_lock_tx_3 uuid;
+          v_lock_tx_4 uuid;
+          v_main_gross bigint;
+          v_main_profit bigint;
         BEGIN
           v_state := andar_bahar.advance_round();
           SELECT * INTO v_round FROM andar_bahar.authoritative_game_rounds
             WHERE game_code='andar_bahar' ORDER BY round_number DESC LIMIT 1;
-          IF v_round.status <> 'BETTING' OR length(coalesce(v_round.server_seed_hash,'')) <> 64
+          IF v_round.status <> 'BETTING' OR length(coalesce(v_round.server_seed_hash,'')) <> 64 THEN
             RAISE EXCEPTION 'Andar Bahar did not create a committed betting round; state=%',v_state;
           END IF;
           v_first_id := v_round.id;
@@ -655,12 +669,20 @@ jobs:
           END LOOP;
           v_winner := v_result->>'winner';
           v_loser := CASE WHEN v_winner='andar' THEN 'bahar' ELSE 'andar' END;
-          INSERT INTO andar_bahar.authoritative_game_bets(round_id,user_id,bet_amount,selection,status,reserved_liability,idempotency_key)
+          SELECT id INTO v_player_wallet_id FROM wallet.wallets
+            WHERE user_id='20000000-0000-0000-0000-000000000001' AND wallet_type='PLAYER';
+          SELECT id INTO v_escrow_wallet_id FROM wallet.wallets WHERE wallet_type='ESCROW' ORDER BY id LIMIT 1;
+          IF v_player_wallet_id IS NULL OR v_escrow_wallet_id IS NULL THEN RAISE EXCEPTION 'CI_TEST_WALLETS_MISSING'; END IF;
+          v_lock_tx_1 := wallet.wallet_transfer_atomic('ci-andar-escrow-1','BET_ESCROW_LOCK'::public.transaction_type_enum,10,v_player_wallet_id,v_escrow_wallet_id,jsonb_build_object('gameCode','andar_bahar','roundId',v_first_id::text));
+          v_lock_tx_2 := wallet.wallet_transfer_atomic('ci-andar-escrow-2','BET_ESCROW_LOCK'::public.transaction_type_enum,10,v_player_wallet_id,v_escrow_wallet_id,jsonb_build_object('gameCode','andar_bahar','roundId',v_first_id::text));
+          v_lock_tx_3 := wallet.wallet_transfer_atomic('ci-andar-escrow-3','BET_ESCROW_LOCK'::public.transaction_type_enum,10,v_player_wallet_id,v_escrow_wallet_id,jsonb_build_object('gameCode','andar_bahar','roundId',v_first_id::text));
+          v_lock_tx_4 := wallet.wallet_transfer_atomic('ci-andar-escrow-4','BET_ESCROW_LOCK'::public.transaction_type_enum,10,v_player_wallet_id,v_escrow_wallet_id,jsonb_build_object('gameCode','andar_bahar','roundId',v_first_id::text));
+          INSERT INTO andar_bahar.authoritative_game_bets(round_id,user_id,bet_amount,selection,status,reserved_liability,idempotency_key,escrow_transaction_id)
           VALUES
-            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',v_winner),'PENDING',20,'ci-andar-winner-0001'),
-            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',v_loser),'PENDING',20,'ci-andar-loser-0001'),
-            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',CASE WHEN v_result->'jokerCard'->>'suit' IN ('H','D') THEN 'joker_red' ELSE 'joker_black' END),'PENDING',20,'ci-joker-color-winner-0001'),
-            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',CASE WHEN v_result->'jokerCard'->>'suit' IN ('H','D') THEN 'joker_black' ELSE 'joker_red' END),'PENDING',20,'ci-joker-color-loser-0001');
+            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',v_winner),'PENDING',20,'ci-andar-winner-0001',v_lock_tx_1),
+            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',v_loser),'PENDING',20,'ci-andar-loser-0001',v_lock_tx_2),
+            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',CASE WHEN v_result->'jokerCard'->>'suit' IN ('H','D') THEN 'joker_red' ELSE 'joker_black' END),'PENDING',20,'ci-joker-color-winner-0001',v_lock_tx_3),
+            (v_first_id,'20000000-0000-0000-0000-000000000001',10,jsonb_build_object('type',CASE WHEN v_result->'jokerCard'->>'suit' IN ('H','D') THEN 'joker_black' ELSE 'joker_red' END),'PENDING',20,'ci-joker-color-loser-0001',v_lock_tx_4);
           UPDATE wallet.wallets SET reserved_balance=reserved_balance+80
             WHERE game_code='andar_bahar' AND wallet_type='GAME_POOL';
           UPDATE andar_bahar.authoritative_game_rounds
@@ -680,8 +702,15 @@ jobs:
              OR (SELECT count(*) FROM andar_bahar.authoritative_game_bets WHERE round_id=v_first_id AND selection->>'type' IN ('joker_red','joker_black') AND status='LOST' AND payout_amount=0) <> 1 THEN
             RAISE EXCEPTION 'Winning/losing settlement amounts are incorrect';
           END IF;
-          IF (SELECT count(*) FROM wallet.wallet_transactions WHERE metadata->>'gameCode'='andar_bahar' AND metadata->>'roundId'=v_first_id::text) <> 6 THEN
-            RAISE EXCEPTION 'Expected stake-return, profit and losing-stake transfers for main and Joker-color bets';
+          v_main_gross := CASE WHEN v_winner='andar' THEN 20 ELSE 19 END;
+          v_main_profit := v_main_gross - 10;
+          IF (SELECT balance FROM wallet.wallets WHERE id=v_player_wallet_id) <> 960 + v_main_gross + 19
+             OR (SELECT balance FROM wallet.wallets WHERE id=v_escrow_wallet_id) <> 0
+             OR (SELECT balance FROM wallet.wallets WHERE game_code='andar_bahar' AND wallet_type='GAME_POOL') <> 1000000 + 20 - v_main_profit - 9 THEN
+            RAISE EXCEPTION 'Synthetic wallet debit/payout balances are incorrect';
+          END IF;
+          IF (SELECT count(*) FROM wallet.wallet_transactions WHERE metadata->>'gameCode'='andar_bahar' AND metadata->>'roundId'=v_first_id::text) <> 10 THEN
+            RAISE EXCEPTION 'Expected four escrow locks plus stake-return, profit and losing-stake transfers';
           END IF;
           IF (SELECT count(*) FROM public.ci_realtime_events WHERE topic='andar_bahar:rounds' AND event='andar_bahar_round_changed') < 4
              OR EXISTS (SELECT 1 FROM public.ci_realtime_events WHERE topic='andar_bahar:rounds' AND
