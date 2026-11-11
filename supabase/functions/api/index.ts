@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
-import { evaluateGameActivationReadiness } from "./activation.ts";
+import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from "./activation.ts";
 import bcrypt from "npm:bcryptjs@2.4.3";
 import { corsHeaders, jsonResponse, signBigDaddyToken, verifyBigDaddyToken, type BigDaddyClaims } from "./bigdaddy-jwt.ts";
 import { handleAviatorApi } from "./aviator.routes.ts";
@@ -332,7 +332,19 @@ async function handle(req: Request) {
     if (code === "roulette") { current.spinEndsAt = row.status === "RUNNING" && row.state?.spinStartedAt ? new Date(row.state.spinStartedAt).getTime() + 1500 : current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
     if (code === "dice") { current.rolledNumber = row.status === "SETTLED" ? result?.number ?? null : null; current.numberBetsAmount = {}; }
     if (code === "dragon_tiger") { current.dragonCard = result?.dragonCard ?? null; current.tigerCard = result?.tigerCard ?? null; current.winner = result?.winner ?? null; current.dragonBetAmount = "0"; current.tigerBetAmount = "0"; current.tieBetAmount = "0"; }
-    if (code === "andar_bahar") { current.jokerCard = result?.jokerCard ?? null; current.dealCards = result?.dealCards ?? []; current.winningSide = result?.winner ?? null; current.winningCard = result?.dealCards?.[Math.max(0,(result?.dealCards?.length ?? 1)-1)]?.card ?? null; current.totalCardsDealt = result?.totalCardsDealt ?? 0; current.firstSide = "bahar"; current.andarBetAmount = "0"; current.baharBetAmount = "0"; }
+    if (code === "andar_bahar") {
+      // Reveal only the cards that should have appeared by this point in the
+      // 4.5-second deal. The winning side/card stay private until settlement.
+      const publicDeal = getAndarBaharPublicDeal(row.result, row.status, row.state?.dealStartedAt);
+      current.jokerCard = publicDeal.jokerCard;
+      current.dealCards = publicDeal.dealCards;
+      current.winningSide = publicDeal.winningSide;
+      current.winningCard = publicDeal.winningCard;
+      current.totalCardsDealt = publicDeal.totalCardsDealt;
+      current.firstSide = "bahar";
+      current.andarBetAmount = "0";
+      current.baharBetAmount = "0";
+    }
     const { data: bets, error: betsError } = await db.schema(code).from("authoritative_game_bets").select("id,user_id,bet_amount,selection,status,payout_amount").eq("round_id", row.id).order("created_at", { ascending: false }).limit(100);
     if (betsError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     const userIds = [...new Set((bets ?? []).map(b => b.user_id))];
