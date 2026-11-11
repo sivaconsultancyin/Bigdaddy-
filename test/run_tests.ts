@@ -545,7 +545,7 @@ async function runTestSuite() {
     const roundLock = migration.indexOf('SELECT * INTO v_round');
     const poolLock = migration.indexOf('FROM wallet.wallets AS w WHERE w.id = v_pool_wallet_id FOR UPDATE');
     assert.ok(roundLock >= 0 && poolLock > roundLock, 'Lifecycle must lock the round before the shared pool wallet');
-    assert.ok(!migration.includes("WHERE g.code = 'andar_bahar'\\n  FOR UPDATE"), 'Lifecycle must not hold the game row while waiting for a round lock');
+    assert.ok(!migration.includes("WHERE g.code = 'andar_bahar'\n  FOR UPDATE"), 'Lifecycle must not hold the game row while waiting for a round lock');
   });
 
   test('Andar Bahar realtime uses a safe broadcast topic and polls the authoritative API', () => {
