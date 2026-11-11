@@ -67,6 +67,7 @@ DECLARE
   v_joker jsonb;
   v_card jsonb;
   v_side text;
+  v_first_side text;
   v_winner text;
   v_dealt integer := 0;
   v_type text;
@@ -151,6 +152,7 @@ BEGIN
     END LOOP;
 
     v_joker := v_deck -> 0;
+    v_first_side := CASE WHEN v_joker->>'suit' IN ('S','C') THEN 'andar' ELSE 'bahar' END;
     v_winner := NULL;
     v_deal_cards := '[]'::jsonb;
     v_dealt := 0;
@@ -159,7 +161,8 @@ BEGIN
     -- then Andar, alternating until the first card matching the Joker rank.
     FOR v_i IN 1..51 LOOP
       v_card := v_deck -> v_i;
-      v_side := CASE WHEN v_i % 2 = 1 THEN 'bahar' ELSE 'andar' END;
+      v_side := CASE WHEN v_i % 2 = 1 THEN v_first_side
+                     WHEN v_first_side = 'andar' THEN 'bahar' ELSE 'andar' END;
       v_deal_cards := v_deal_cards || jsonb_build_array(jsonb_build_object('side',v_side,'card',v_card));
       v_dealt := v_dealt + 1;
       IF (v_card->>'rank')::integer = (v_joker->>'rank')::integer THEN
@@ -176,7 +179,7 @@ BEGIN
     SET status = 'RUNNING',
         result = jsonb_build_object(
           'jokerCard',v_joker,'dealCards',v_deal_cards,'winner',v_winner,
-          'totalCardsDealt',v_dealt,'firstSide','bahar'
+          'totalCardsDealt',v_dealt,'firstSide',v_first_side
         ),
         state = state || jsonb_build_object('dealStartedAt',clock_timestamp())
     WHERE id = v_round.id
@@ -218,8 +221,9 @@ BEGIN
       END;
       v_gross := CASE
         WHEN NOT v_won THEN 0
-        WHEN v_type = 'andar' THEN v_bet.bet_amount * 2
-        WHEN v_type = 'bahar' THEN floor(v_bet.bet_amount::numeric * 190 / 100)::bigint
+        WHEN v_type IN ('andar','bahar') AND v_type = v_round.result->>'firstSide'
+          THEN floor(v_bet.bet_amount::numeric * 190 / 100)::bigint
+        WHEN v_type IN ('andar','bahar') THEN v_bet.bet_amount * 2
         WHEN v_type IN ('joker_red','joker_black') THEN floor(v_bet.bet_amount::numeric * 195 / 100)::bigint
         ELSE 0
       END;
