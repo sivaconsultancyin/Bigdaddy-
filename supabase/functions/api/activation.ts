@@ -21,3 +21,37 @@ export function evaluateGameActivationReadiness(input: GameActivationReadinessIn
   if (input.gameCode === 'aviator' && !['WAITING', 'RUNNING'].includes(String(input.runtimeRoundStatus ?? ''))) return { ok: false, error: 'AVIATOR_RUNTIME_UNAVAILABLE', status: 503 };
   return { ok: true, availablePoolBalance: available.toString() };
 }
+
+export type AndarBaharPublicDeal = {
+  jokerCard: any | null;
+  dealCards: any[];
+  winningSide: 'andar' | 'bahar' | null;
+  winningCard: any | null;
+  totalCardsDealt: number;
+};
+export function getAndarBaharPublicDeal(
+  result: any,
+  status: string,
+  dealStartedAt: string | null | undefined,
+  nowMs = Date.now(),
+): AndarBaharPublicDeal {
+  const cards = Array.isArray(result?.dealCards) ? result.dealCards : [];
+  let visible = 0;
+  if (status === 'SETTLED') visible = cards.length;
+  else if (status === 'RUNNING' && dealStartedAt) {
+    const startedAt = new Date(dealStartedAt).getTime();
+    if (Number.isFinite(startedAt)) {
+      const elapsed = Math.max(0, nowMs - startedAt);
+      visible = Math.min(cards.length, Math.ceil((elapsed / 4500) * cards.length));
+    }
+  }
+  const dealCards = cards.slice(0, visible);
+  const settled = status === 'SETTLED';
+  return {
+    jokerCard: result?.jokerCard ?? null,
+    dealCards,
+    winningSide: settled && (result?.winner === 'andar' || result?.winner === 'bahar') ? result.winner : null,
+    winningCard: settled ? dealCards[dealCards.length - 1]?.card ?? null : null,
+    totalCardsDealt: dealCards.length,
+  };
+}
