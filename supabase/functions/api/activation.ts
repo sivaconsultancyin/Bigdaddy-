@@ -8,7 +8,7 @@ export type GameActivationReadiness =
   | { ok: true; availablePoolBalance: string }
   | { ok: false; error: string; status: number };
 export function evaluateGameActivationReadiness(input: GameActivationReadinessInput): GameActivationReadiness {
-  if (!['aviator', 'roulette', 'dice'].includes(input.gameCode)) return { ok: false, error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION', status: 503 };
+  if (!['aviator', 'roulette', 'dice', 'andar_bahar'].includes(input.gameCode)) return { ok: false, error: 'GAME_NOT_AVAILABLE_IN_PRODUCTION', status: 503 };
   if (!input.catalogWalletId || input.catalogWalletId !== input.mappedWalletId) return { ok: false, error: 'GAME_POOL_MAPPING_MISMATCH', status: 409 };
   if (input.walletType !== 'GAME_POOL' || input.walletGameCode !== input.gameCode) return { ok: false, error: 'GAME_POOL_IDENTITY_MISMATCH', status: 409 };
   if (!/^[0-9]+$/.test(input.balance) || !/^[0-9]+$/.test(input.reservedBalance)) return { ok: false, error: 'GAME_POOL_BALANCE_INVALID', status: 503 };
