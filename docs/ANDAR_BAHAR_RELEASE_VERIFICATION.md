@@ -15,6 +15,7 @@ Do not change `platform.games.status` from `COMING_SOON` until all required CI j
 - Sanitized Realtime broadcast on `andar_bahar:rounds` plus authenticated state-poll fallback
 - Synthetic wallet debit, escrow, gross payout, pool balance and duplicate-settlement checks
 - Isolated PostgreSQL round creation, seed commitment, card dealing, bet settlement, pool reservation release, duplicate-call idempotency and invalid-selection rejection
+- CI service_role fixture models Supabase's BYPASSRLS behavior; lifecycle acquires round lock before shared wallet locks to match bet placement order
 - Edge API typecheck and existing platform financial/security suites
 
 ## Production verification
