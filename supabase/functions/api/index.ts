@@ -341,7 +341,7 @@ async function handle(req: Request) {
       current.winningSide = publicDeal.winningSide;
       current.winningCard = publicDeal.winningCard;
       current.totalCardsDealt = publicDeal.totalCardsDealt;
-      current.firstSide = row.result?.firstSide ?? (["S", "C"].includes(String(row.result?.jokerCard?.suit ?? "").toUpperCase()) ? "andar" : "bahar");
+      current.firstSide = row.result?.firstSide ?? (row.result?.jokerCard?.suit ? (["S", "C"].includes(String(row.result.jokerCard.suit).toUpperCase()) ? "andar" : "bahar") : null);
       current.andarBetAmount = "0";
       current.baharBetAmount = "0";
     }
