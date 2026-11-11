@@ -189,7 +189,12 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
     if (type === 'tiger_small') return result.tigerCard.rank <= 6 ? 2 : 0;
     return 0;
   }
-  return type === result.winner ? 2 : 0;
+  if (type === 'andar') return result.winner === 'andar' ? 2 : 0;
+  if (type === 'bahar') return result.winner === 'bahar' ? 1.9 : 0;
+  const jokerSuit = String(result?.jokerCard?.suit ?? '').toUpperCase();
+  if (type === 'joker_red') return ['H','D'].includes(jokerSuit) ? 1.95 : 0;
+  if (type === 'joker_black') return ['S','C'].includes(jokerSuit) ? 1.95 : 0;
+  return 0;
 }
 
 export function maxLiabilityMultiplier(code: GameCode, selection: any): number {
@@ -229,7 +234,7 @@ export function validateSelection(code: GameCode, selection: any): boolean {
     return false;
   }
   if (code === 'dragon_tiger') return ['dragon','tiger','tie','suited_tie','dragon_big','dragon_small','tiger_big','tiger_small'].includes(type);
-  return ['andar','bahar'].includes(type);
+  return ['andar','bahar','joker_red','joker_black'].includes(type);
 }
 
 function publicRound(row: any, code: GameCode) {
