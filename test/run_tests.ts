@@ -540,6 +540,18 @@ async function runTestSuite() {
     if (!wrongPool.ok) assert.strictEqual(wrongPool.error, 'GAME_POOL_IDENTITY_MISMATCH');
   });
 
+  test('Andar Bahar realtime uses a safe broadcast topic and polls the authoritative API', () => {
+    const migration = readFileSync('supabase/migrations/20261111120000_andar_bahar_authoritative_round_lifecycle.sql', 'utf8');
+    const realtime = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    assert.ok(migration.includes("'andar_bahar:rounds'"));
+    assert.ok(migration.includes("'andar_bahar_round_changed'"));
+    assert.ok(migration.includes("'bettingEndsAt', NEW.betting_closes_at"));
+    assert.ok(!migration.includes("'serverSeed', NEW.server_seed"));
+    assert.ok(realtime.includes(".channel('andar_bahar:rounds'"));
+    assert.ok(realtime.includes("event: 'andar_bahar_round_changed'"));
+    assert.ok(realtime.includes("else void poll()"));
+  });
+
   test('Andar Bahar public deal reveals cards progressively but hides winner until settlement', () => {
     const cards = Array.from({ length: 30 }, (_, index) => ({ side: index % 2 ? 'andar' : 'bahar', card: { rank: index + 2 } }));
     const result = { jokerCard: { rank: 7, suit: 'H' }, dealCards: cards, winner: 'andar' };
