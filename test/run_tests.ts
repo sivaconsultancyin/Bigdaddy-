@@ -163,9 +163,9 @@ async function runTestSuite() {
 
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
-    const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
-    console.log('Dragon Tiger migration files seen by CI:', actualFiles.filter((name: string) => name.includes('dragon_tiger_')));
-    console.log('Dragon Tiger migration files expected by manifest:', manifest.repositoryFiles.filter((name: string) => name.includes('dragon_tiger_')));
+    const trackedMigrationPaths = spawnSync('git', ['ls-files', '--', 'supabase/migrations/*.sql'], { encoding: 'utf8' }).stdout
+      .split(/\r?\n/).filter(Boolean);
+    const actualFiles = trackedMigrationPaths.map((path: string) => path.slice('supabase/migrations/'.length)).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
     assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 67);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
