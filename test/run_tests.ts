@@ -98,7 +98,7 @@ async function runTestSuite() {
     assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 61);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 65);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 71);
     assert.strictEqual(manifest.counts.sharedRepositoryFiles, 61);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 24);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
