@@ -150,6 +150,24 @@ async function runTestSuite() {
     assert.ok(!ui.includes('8:1'));
   });
 
+  test('Dragon Tiger Edge API returns the original round and enforces only the three supported markets', () => {
+    const api = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    assert.ok(api.includes('new Set(["dragon", "tiger", "tie"])'));
+    assert.ok(api.includes('.eq("id", data.roundId).maybeSingle()'));
+    assert.ok(api.includes('data.replay ? 200 : 201'));
+    assert.ok(api.includes('current.winner = row.status === "SETTLED"'));
+    assert.ok(api.includes('row.status === "RUNNING" ? result?.dragonCard ?? null : result?.dragonCard ?? null') || api.includes('current.dragonCard = result?.dragonCard ?? null'));
+  });
+
+  test('Dragon Tiger lifecycle settlement preserves gross payout, stake return, and pool liability release', () => {
+    const lifecycle = readFileSync('supabase/migrations/20261112120632_dragon_tiger_authoritative_round_lifecycle.sql', 'utf8');
+    assert.ok(lifecycle.includes("v_multiplier := CASE WHEN v_type = 'tie' THEN 9 ELSE 2 END"));
+    assert.ok(lifecycle.includes("'BET_ESCROW_REFUND'::public.transaction_type_enum"));
+    assert.ok(lifecycle.includes("'BET_WIN_PAYOUT'::public.transaction_type_enum"));
+    assert.ok(lifecycle.includes("'BET_LOSS_GAME_POOL'::public.transaction_type_enum"));
+    assert.ok(lifecycle.includes('reserved_balance = reserved_balance - v_bet.reserved_liability'));
+  });
+
   test('Dragon Tiger atomic bet RPC enforces exactly three markets before liability reservation', () => {
     const migration = readFileSync('supabase/migrations/20261112123252_dragon_tiger_atomic_market_allowlist.sql', 'utf8');
     assert.strictEqual(migration.split("NOT IN ('dragon','tiger','tie')").length - 1, 2);
