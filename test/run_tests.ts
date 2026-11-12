@@ -159,9 +159,9 @@ async function runTestSuite() {
     assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 65);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 74);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 75);
     assert.strictEqual(manifest.counts.sharedRepositoryFiles, 65);
-    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 27);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 28);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     // Historical source-only migration candidates remain tracked; Dragon Tiger migrations are exact production ledger matches.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
