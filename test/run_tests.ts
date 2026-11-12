@@ -880,6 +880,7 @@ async function runTestSuite() {
     const source = readFileSync('supabase/functions/api/index.ts', 'utf8');
     const guarded = source.slice(source.indexOf('const activationMatch'), source.indexOf('if (req.method === "GET" && path === "/games/list")'));
     assert.ok(guarded.includes('(aviator|roulette|dice|dragon-tiger|andar-bahar)'));
+    assert.ok(source.includes('.replace(/^\\/games\\/dragon_tiger(?=\\/|$)/, "/games/dragon-tiger")'), 'underscore Dragon Tiger routes must normalize to the canonical hyphen route');
     assert.ok(guarded.includes('evaluateGameActivationReadiness'));
     const fallbackStart = source.indexOf('const unsupportedActivation');
     const fallbackEnd = source.indexOf('if (req.method === "GET" && path === "/requests/list")', fallbackStart);
