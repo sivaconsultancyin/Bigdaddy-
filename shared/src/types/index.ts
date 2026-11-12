@@ -267,7 +267,7 @@ export interface AndarBaharRoundBet {
   roundId: string;
   userId: string;
   username: string;
-  type: 'dragon' | 'tiger' | 'tie';
+  type: string;
   amount: string;
   won?: boolean;
   payout?: string;
@@ -310,7 +310,7 @@ export interface DragonTigerRoundBet {
   roundId: string;
   userId: string;
   username: string;
-  type: string;
+  type: 'dragon' | 'tiger' | 'tie';
   amount: string;
   won?: boolean;
   payout?: string;
