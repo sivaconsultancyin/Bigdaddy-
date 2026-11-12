@@ -67,6 +67,21 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const [timeLeftSec, setTimeLeftSec] = useState<number>(12);
   const lastRoundIdRef = useRef<string | null>(null);
   const lastResultFiredRef = useRef<string | null>(null);
+  const lastTickSecondRef = useRef<number | null>(null);
+  const pendingTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const scheduleTimeout = (callback: () => void, delayMs: number) => {
+    const timeout = scheduleTimeout(() => {
+      pendingTimeoutsRef.current.delete(timeout);
+      callback();
+    }, delayMs);
+    pendingTimeoutsRef.current.add(timeout);
+    return timeout;
+  };
+
+  useEffect(() => () => {
+    pendingTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+    pendingTimeoutsRef.current.clear();
+  }, []);
 
   // Sound sync
   useEffect(() => {
@@ -81,7 +96,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
         const diff = Math.max(0, Math.ceil((dragonTigerRound.bettingEndsAt - now) / 1000));
         setTimeLeftSec(diff);
         if (diff <= 3 && diff > 0) {
-          dragonTigerAudio.playTick();
+          if (lastTickSecondRef.current !== diff) {\n            lastTickSecondRef.current = diff;\n            dragonTigerAudio.playTick();\n          }
         }
       } else {
         setTimeLeftSec(0);
