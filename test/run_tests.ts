@@ -150,6 +150,17 @@ async function runTestSuite() {
     assert.ok(!ui.includes('8:1'));
   });
 
+  test('Dragon Tiger state API returns only the authenticated player own-bet statuses for UI reconciliation', () => {
+    const api = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const websocket = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
+    const ui = readFileSync('frontend/src/games/dragon-tiger/DragonTigerGame.tsx', 'utf8');
+    assert.ok(api.includes('const myBets = (bets ?? []).filter(b => b.user_id === actor.id)'));
+    assert.ok(api.includes('allBets: mappedBets, myBets'));
+    assert.ok(websocket.includes('setDragonTigerMyBets(data.myBets as any)'));
+    assert.ok(ui.includes('dragonTigerMyBets.filter((bet) => bet.roundId === dragonTigerRound.id)'));
+    assert.ok(ui.includes("String(bet.status).toUpperCase() === 'WON'"));
+  });
+
   test('Dragon Tiger Edge API returns the original round and enforces only the three supported markets', () => {
     const api = readFileSync('supabase/functions/api/index.ts', 'utf8');
     assert.ok(api.includes('new Set(["dragon", "tiger", "tie"])'));
