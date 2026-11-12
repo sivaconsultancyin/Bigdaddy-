@@ -70,7 +70,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const lastTickSecondRef = useRef<number | null>(null);
   const pendingTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const scheduleTimeout = (callback: () => void, delayMs: number) => {
-    const timeout = scheduleTimeout(() => {
+    const timeout = setTimeout(() => {
       pendingTimeoutsRef.current.delete(timeout);
       callback();
     }, delayMs);
@@ -96,7 +96,10 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
         const diff = Math.max(0, Math.ceil((dragonTigerRound.bettingEndsAt - now) / 1000));
         setTimeLeftSec(diff);
         if (diff <= 3 && diff > 0) {
-          if (lastTickSecondRef.current !== diff) {\n            lastTickSecondRef.current = diff;\n            dragonTigerAudio.playTick();\n          }
+          if (lastTickSecondRef.current !== diff) {
+            lastTickSecondRef.current = diff;
+            dragonTigerAudio.playTick();
+          }
         }
       } else {
         setTimeLeftSec(0);
