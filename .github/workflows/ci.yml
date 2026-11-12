@@ -12,6 +12,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        # Test the exact PR head; GitHub's synthetic merge checkout was omitting newly added migration files.
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
     - name: Set up Bun
       uses: oven-sh/setup-bun@v2
