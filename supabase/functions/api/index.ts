@@ -766,6 +766,15 @@ async function handle(req: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
     const bets = Array.isArray(body.bets) ? body.bets : [body];
     if (!bets.length || bets.length > 20 || bets.some((b:any) => !positiveAmount(b?.amount))) return response({ error: "INVALID_BET" }, 400, origin);
+    if (code === "dragon_tiger") {
+      const allowedDragonTigerMarkets = new Set(["dragon", "tiger", "tie"]);
+      const invalidSelection = bets.some((b: any) => {
+        const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
+          ? b.selection : b;
+        return !allowedDragonTigerMarkets.has(String(selection?.type ?? "").toLowerCase());
+      });
+      if (invalidSelection) return response({ error: "INVALID_DRAGON_TIGER_SELECTION" }, 400, origin);
+    }
     if (code === "andar_bahar") {
       const invalidSelection = bets.some((b: any) => {
         const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
