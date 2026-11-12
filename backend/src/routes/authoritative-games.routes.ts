@@ -136,8 +136,6 @@ export function makeResult(code: GameCode, seed: string): Record<string, any> {
     const deck = shuffledDeck(seed, 8);
     const dragonCard = deck[0];
     const tigerCard = deck[1];
-    const dragonValue = dragonCard.rank === 14 ? 1 : dragonCard.rank;
-    const tigerValue = tigerCard.rank === 14 ? 1 : tigerCard.rank;
     const winner = resolveDragonTigerWinner(dragonCard, tigerCard);
     return { dragonCard, tigerCard, winner };
   }
