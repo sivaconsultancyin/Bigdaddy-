@@ -109,7 +109,7 @@ async function runTestSuite() {
 
   test('Dragon Tiger atomic bet RPC enforces exactly three markets before liability reservation', () => {
     const migration = readFileSync('supabase/migrations/20261112123252_dragon_tiger_atomic_market_allowlist.sql', 'utf8');
-    assert.strictEqual((migration.match(/NOT IN \\('dragon','tiger','tie'\\)/g) || []).length, 2);
+    assert.strictEqual(migration.split("NOT IN ('dragon','tiger','tie')").length - 1, 2);
     assert.ok(migration.includes('INVALID_DRAGON_TIGER_SELECTION'));
     assert.ok(migration.includes("v_multiplier := 9"));
     assert.ok(migration.includes("v_multiplier := 2"));
