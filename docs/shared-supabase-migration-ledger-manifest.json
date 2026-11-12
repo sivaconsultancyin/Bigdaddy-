@@ -2,9 +2,9 @@
   "snapshotDate": "2026-11-12",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 73,
-    "sharedRepositoryFiles": 63,
-    "sharedExactVersionNameMatches": 26,
+    "sharedAppliedLedger": 77,
+    "sharedRepositoryFiles": 67,
+    "sharedExactVersionNameMatches": 30,
     "sharedAppliedOnly": 47,
     "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 63,
+    "totalSupabaseMigrationFiles": 67,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -311,6 +311,22 @@
     {
       "version": "20261112123252",
       "name": "dragon_tiger_atomic_market_allowlist"
+    },
+    {
+      "version": "20261112125941",
+      "name": "dragon_tiger_idempotent_replay_status"
+    },
+    {
+      "version": "20261112130413",
+      "name": "dragon_tiger_realtime_broadcast"
+    },
+    {
+      "version": "20261112130720",
+      "name": "dragon_tiger_replay_record_type_fix"
+    },
+    {
+      "version": "20261112130811",
+      "name": "dragon_tiger_replay_found_rowcount_fix"
     }
   ],
   "exactMatches": [
@@ -443,6 +459,26 @@
       "version": "20261112123252",
       "name": "dragon_tiger_atomic_market_allowlist",
       "file": "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
+    },
+    {
+      "version": "20261112125941",
+      "name": "dragon_tiger_idempotent_replay_status",
+      "file": "20261112125941_dragon_tiger_idempotent_replay_status.sql"
+    },
+    {
+      "version": "20261112130413",
+      "name": "dragon_tiger_realtime_broadcast",
+      "file": "20261112130413_dragon_tiger_realtime_broadcast.sql"
+    },
+    {
+      "version": "20261112130720",
+      "name": "dragon_tiger_replay_record_type_fix",
+      "file": "20261112130720_dragon_tiger_replay_record_type_fix.sql"
+    },
+    {
+      "version": "20261112130811",
+      "name": "dragon_tiger_replay_found_rowcount_fix",
+      "file": "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
     }
   ],
   "appliedOnly": [
@@ -698,7 +734,11 @@
     "20261112120512_dragon_tiger_three_market_selection_guard.sql",
     "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
     "20261112122447_dragon_tiger_authoritative_cron_worker.sql",
-    "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
+    "20261112123252_dragon_tiger_atomic_market_allowlist.sql",
+    "20261112125941_dragon_tiger_idempotent_replay_status.sql",
+    "20261112130413_dragon_tiger_realtime_broadcast.sql",
+    "20261112130720_dragon_tiger_replay_record_type_fix.sql",
+    "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -807,7 +847,11 @@
     "20261112120512_dragon_tiger_three_market_selection_guard.sql",
     "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
     "20261112122447_dragon_tiger_authoritative_cron_worker.sql",
-    "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
+    "20261112123252_dragon_tiger_atomic_market_allowlist.sql",
+    "20261112125941_dragon_tiger_idempotent_replay_status.sql",
+    "20261112130413_dragon_tiger_realtime_broadcast.sql",
+    "20261112130720_dragon_tiger_replay_record_type_fix.sql",
+    "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -940,6 +984,26 @@
       "version": "20261112123252",
       "name": "dragon_tiger_atomic_market_allowlist",
       "file": "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
+    },
+    {
+      "version": "20261112125941",
+      "name": "dragon_tiger_idempotent_replay_status",
+      "file": "20261112125941_dragon_tiger_idempotent_replay_status.sql"
+    },
+    {
+      "version": "20261112130413",
+      "name": "dragon_tiger_realtime_broadcast",
+      "file": "20261112130413_dragon_tiger_realtime_broadcast.sql"
+    },
+    {
+      "version": "20261112130720",
+      "name": "dragon_tiger_replay_record_type_fix",
+      "file": "20261112130720_dragon_tiger_replay_record_type_fix.sql"
+    },
+    {
+      "version": "20261112130811",
+      "name": "dragon_tiger_replay_found_rowcount_fix",
+      "file": "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
     }
   ],
   "sharedAppliedOnly": [
@@ -1303,7 +1367,10 @@
       "dragonTigerPoolBalance": 1000000,
       "dragonTigerPoolReservedBalance": 0,
       "dragonTigerMaxBet": 100000,
-      "dragonTigerAtomicBetRpcThreeMarketAllowlist": true
+      "dragonTigerAtomicBetRpcThreeMarketAllowlist": true,
+      "dragonTigerRealtimeBroadcastPresent": true,
+      "dragonTigerReplayStatusFixed": true,
+      "dragonTigerReplayRecordType": true
     },
     "pendingReview": [
       {

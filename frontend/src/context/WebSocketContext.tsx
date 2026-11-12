@@ -87,6 +87,7 @@ interface WebSocketContextType {
   dragonTigerRound: DragonTigerRound;
   dragonTigerHistory: DragonTigerHistoryItem[];
   dragonTigerLiveBets: DragonTigerRoundBet[];
+  dragonTigerMyBets: Array<{ id: string; roundId: string; amount: string; type: string; status: string; payoutAmount: string }>;
   // Lucky 10 Dice shared synchronized multiplayer state
   diceRound: DiceRound;
   diceHistory: DiceHistoryItem[];
@@ -198,6 +199,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [dragonTigerHistory, setDragonTigerHistory] = useState<DragonTigerHistoryItem[]>([]);
 
   const [dragonTigerLiveBets, setDragonTigerLiveBets] = useState<DragonTigerRoundBet[]>([]);
+  const [dragonTigerMyBets, setDragonTigerMyBets] = useState<Array<{ id: string; roundId: string; amount: string; type: string; status: string; payoutAmount: string }>>([]);
 
   // Lucky 10 Dice initial synchronized multiplayer state
   const [diceRound, setDiceRound] = useState<DiceRound>({
@@ -229,6 +231,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const simIntervalRef = useRef<number | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const andarBaharRealtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const dragonTigerRealtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
@@ -608,6 +611,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               winner: h.result?.winner,
             })) as any);
             if (Array.isArray(data.bets)) setDragonTigerLiveBets(data.bets as any);
+            if (Array.isArray(data.myBets)) setDragonTigerMyBets(data.myBets as any);
           } else if (key === 'andarBahar') {
             if (data.round) {
               setAndarBaharRound(data.round as any);
@@ -781,6 +785,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         })
         .subscribe();
       andarBaharRealtimeChannelRef.current = andarChannel;
+
+      // Dragon Tiger lifecycle broadcasts are wake-up signals only. The authenticated
+      // state API supplies authoritative cards, winner, and user-specific bet status.
+      const dragonTigerChannel = supabaseRealtime
+        .channel('dragon_tiger:rounds', { config: { broadcast: { self: false } } })
+        .on('broadcast', { event: 'dragon_tiger_round_changed' }, ({ payload }) => {
+          if (stopped || disposedRef.current || !activeGameKeysRef.current.has('dragonTiger')) return;
+          if (!payload || typeof payload !== 'object') return;
+          if (simIntervalRef.current !== null) {
+            window.clearTimeout(simIntervalRef.current);
+            simIntervalRef.current = null;
+          }
+          if (inFlight) rerunRequested = true;
+          else void poll();
+        })
+        .subscribe();
+      dragonTigerRealtimeChannelRef.current = dragonTigerChannel;
     }
     void poll();
   };
@@ -804,6 +825,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (andarBaharRealtimeChannelRef.current && supabaseRealtime) {
         void supabaseRealtime.removeChannel(andarBaharRealtimeChannelRef.current);
         andarBaharRealtimeChannelRef.current = null;
+      }
+      if (dragonTigerRealtimeChannelRef.current && supabaseRealtime) {
+        void supabaseRealtime.removeChannel(dragonTigerRealtimeChannelRef.current);
+        dragonTigerRealtimeChannelRef.current = null;
       }
     };
   }, []);
@@ -903,6 +928,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         dragonTigerRound,
         dragonTigerHistory,
         dragonTigerLiveBets,
+        dragonTigerMyBets,
         diceRound,
         diceHistory,
         diceLiveBets,
