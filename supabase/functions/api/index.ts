@@ -365,13 +365,19 @@ async function handle(req: Request) {
     const { data: users } = userIds.length ? await db.schema("platform").from("users").select("id,username").in("id", userIds) : { data: [] };
     const names = new Map((users ?? []).map(u => [u.id,u.username]));
     const mappedBets = (bets ?? []).map(b => ({ id:b.id, amount:String(b.bet_amount), type:b.selection?.type, selection:b.selection, status:b.status, payoutAmount:String(b.payout_amount ?? 0), username:names.get(b.user_id) ?? "Player" }));
+    // Only the authenticated player's own bet records are returned in this
+    // private list so the UI can reconcile pending/win/loss after settlement.
+    const myBets = (bets ?? []).filter(b => b.user_id === actor.id).map(b => ({
+      id:b.id, roundId:row.id, amount:String(b.bet_amount), type:String(b.selection?.type ?? ""),
+      status:b.status, payoutAmount:String(b.payout_amount ?? 0),
+    }));
     const totals = new Map<string,bigint>();
     for (const b of bets ?? []) { const type = String(b.selection?.type ?? ""); totals.set(type,(totals.get(type) ?? 0n)+BigInt(String(b.bet_amount))); }
     if (code === "dice") current.numberBetsAmount = Object.fromEntries([...totals].map(([k,v]) => [k,v.toString()]));
     if (code === "dragon_tiger") { current.dragonBetAmount=String(totals.get("dragon")??0n); current.tigerBetAmount=String(totals.get("tiger")??0n); current.tieBetAmount=String(totals.get("tie")??0n); }
     if (code === "andar_bahar") { current.andarBetAmount=String(totals.get("andar")??0n); current.baharBetAmount=String(totals.get("bahar")??0n); }
     const history = rounds.filter(r => r.status === "SETTLED").map(r => ({ roundNumber:Number(r.round_number), result:r.result, timestamp:r.settled_at }));
-    return response({ gameCode: code, status: gameConfig.status, round: current, history, bets: mappedBets, allBets: mappedBets }, 200, origin);
+    return response({ gameCode: code, status: gameConfig.status, round: current, history, bets: mappedBets, allBets: mappedBets, myBets }, 200, origin);
   }
 
 
