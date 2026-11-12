@@ -62,6 +62,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const [isSubmittingBet, setIsSubmittingBet] = useState<boolean>(false);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [serverBetStatus, setServerBetStatus] = useState<string | null>(null);
 
   // Live Timer Countdown Seconds
   const [timeLeftSec, setTimeLeftSec] = useState<number>(12);
@@ -69,6 +70,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const lastResultFiredRef = useRef<string | null>(null);
   const lastTickSecondRef = useRef<number | null>(null);
   const pendingTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const submittingBetRef = useRef(false);
   const scheduleTimeout = useCallback((callback: () => void, delayMs: number) => {
     const timeout = setTimeout(() => {
       pendingTimeoutsRef.current.delete(timeout);
@@ -119,6 +121,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       pendingTimeoutsRef.current.clear();
       setNoticeMessage(null);
       setErrorMessage(null);
+      setServerBetStatus(null);
       lastRoundIdRef.current = dragonTigerRound.id;
       if (dragonTigerRound.status === 'BETTING') {
         // Save previous round bets for rebet
@@ -177,6 +180,13 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     scheduleTimeout(() => setNoticeMessage(null), 3000);
   };
 
+  const recordServerBetStatus = (result: any) => {
+    const statuses = Array.isArray(result?.placedBets)
+      ? [...new Set(result.placedBets.map((bet: any) => String(bet?.status ?? '').toUpperCase()).filter(Boolean))]
+      : [];
+    if (statuses.length > 0) setServerBetStatus(statuses.join(' / '));
+  };
+
   // Place a bet on one of the three supported markets
   const handlePlaceBet = async (side: string) => {
     if (dragonTigerRound.status !== 'BETTING') {
@@ -185,6 +195,8 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       return;
     }
 
+    if (submittingBetRef.current || !user?.id) return;
+    submittingBetRef.current = true;
     dragonTigerAudio.playChipSound();
     setIsSubmittingBet(true);
     setErrorMessage(null);
@@ -192,9 +204,10 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     const betAmountStr = selectedChip.toString();
 
     try {
-      await ApiClient.placeDragonTigerBet({
+      const result = await ApiClient.placeDragonTigerBet({
         bets: [{ type: side, amount: betAmountStr }],
-      });
+      }, user.id);
+      recordServerBetStatus(result);
 
       setMyBets((prev) => ({
         ...prev,
@@ -207,13 +220,14 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       setErrorMessage(err.message || 'Error placing bet');
       scheduleTimeout(() => setErrorMessage(null), 3500);
     } finally {
+      submittingBetRef.current = false;
       setIsSubmittingBet(false);
     }
   };
 
   // Double current bets
   const handleDoubleBets = async () => {
-    if (dragonTigerRound.status !== 'BETTING') return;
+    if (dragonTigerRound.status !== 'BETTING' || submittingBetRef.current || !user?.id) return;
     const currentKeys = Object.keys(myBets).filter((k) => myBets[k] > 0);
     if (currentKeys.length === 0) {
       setErrorMessage('No bets to double.');
@@ -226,9 +240,11 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       amount: myBets[k].toString(),
     }));
 
+    submittingBetRef.current = true;
     setIsSubmittingBet(true);
     try {
-      await ApiClient.placeDragonTigerBet({ bets: additionalBets });
+      const result = await ApiClient.placeDragonTigerBet({ bets: additionalBets }, user.id);
+      recordServerBetStatus(result);
       setMyBets((prev) => {
         const updated = { ...prev };
         currentKeys.forEach((k) => {
@@ -243,13 +259,14 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       setErrorMessage(err.message || 'Could not double bets');
       scheduleTimeout(() => setErrorMessage(null), 3000);
     } finally {
+      submittingBetRef.current = false;
       setIsSubmittingBet(false);
     }
   };
 
   // Rebet previous round bets
   const handleRebet = async () => {
-    if (dragonTigerRound.status !== 'BETTING') return;
+    if (dragonTigerRound.status !== 'BETTING' || submittingBetRef.current || !user?.id) return;
     const rebetKeys = Object.keys(lastRoundBets).filter((k) => lastRoundBets[k] > 0);
     if (rebetKeys.length === 0) {
       setErrorMessage('No previous round bets found.');
@@ -262,9 +279,11 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       amount: lastRoundBets[k].toString(),
     }));
 
+    submittingBetRef.current = true;
     setIsSubmittingBet(true);
     try {
-      await ApiClient.placeDragonTigerBet({ bets: betsToPlace });
+      const result = await ApiClient.placeDragonTigerBet({ bets: betsToPlace }, user.id);
+      recordServerBetStatus(result);
       setMyBets((prev) => {
         const next = { ...prev };
         rebetKeys.forEach((k) => {
@@ -279,6 +298,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       setErrorMessage(err.message || 'Could not repeat bets');
       scheduleTimeout(() => setErrorMessage(null), 3000);
     } finally {
+      submittingBetRef.current = false;
       setIsSubmittingBet(false);
     }
   };
@@ -385,7 +405,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
                   <Trophy className="w-3.5 h-3.5 text-amber-400" />
                   {dragonTigerRound.winner === 'dragon' && '🔥 DRAGON WINS!'}
                   {dragonTigerRound.winner === 'tiger' && '⚡ TIGER WINS!'}
-                  {dragonTigerRound.winner === 'tie' && '🤝 TIE (8:1)!'}
+                  {dragonTigerRound.winner === 'tie' && '🤝 TIE (9:1)!'}
                 </span>
               )}
             </span>
@@ -642,7 +662,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           {dragonTigerRound.status === 'RESULT' && (dragonTigerRound.winner === 'tie') && (
             <div className="mt-2 text-center py-1.5 px-3 rounded-xl bg-emerald-500/20 border border-emerald-500/60 shadow-lg animate-pulse">
               <span className="text-xs font-black text-emerald-300 tracking-wider font-serif">
-                {'🤝 TIE ROUND! 8:1 PAYOUT!'}
+                {'🤝 TIE ROUND! 9:1 GROSS PAYOUT!'}
               </span>
             </div>
           )}
@@ -729,7 +749,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
             } ${dragonTigerRound.status !== 'BETTING' ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             <span className="text-xs font-black text-emerald-400 font-serif">TIE</span>
-            <span className="text-[9px] text-emerald-300 font-mono font-bold">8 : 1</span>
+            <span className="text-[9px] text-emerald-300 font-mono font-bold">9 : 1</span>
 
             {/* My Placed Chips on Tie */}
             {(myBets['tie'] || 0) > 0 && (
@@ -832,6 +852,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
             <span className="text-sm font-mono font-extrabold text-amber-400">
               ₹{totalMyBetAmount.toLocaleString()}
             </span>
+            {serverBetStatus && <span className="block text-[9px] font-bold text-zinc-400">Server: {serverBetStatus}</span>}
           </div>
         </div>
       </div>
@@ -998,8 +1019,8 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
 
                   <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-900/40 text-[11px] items-center">
                     <span className="font-bold text-emerald-400">TIE</span>
-                    <span className="font-mono font-bold text-emerald-300">8 : 1</span>
-                    <span className="text-zinc-400">రెండు కార్డుల ర్యాంక్ సమానమైతే (8x లాభం)</span>
+                    <span className="font-mono font-bold text-emerald-300">9 : 1</span>
+                    <span className="text-zinc-400">రెండు కార్డుల ర్యాంక్ సమానమైతే (9x మొత్తం payout; 8x లాభం)</span>
                   </div>
 
 
@@ -1043,7 +1064,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
                   <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
                     <h5 className="font-bold text-amber-400 mb-0.5">Tie వస్తే Dragon/Tiger బెట్స్ ఏమవుతాయి?</h5>
                     <p className="text-zinc-300">
-                      Tie వచ్చినప్పుడు డ్రాగన్ లేదా టైగర్‌పై పెట్టిన బెట్‌లో 50% వాపస్ వస్తుంది లేదా హౌస్ రూల్ ప్రకారం టై బెట్ మాత్రమే 8:1 పేమెంట్ పొందుతుంది.
+                      Tie వచ్చినప్పుడు Dragon/Tiger బెట్స్ ఓడిపోతాయి. Tie బెట్ మాత్రమే 9x మొత్తం payout (అసలు stakeతో కలిపి; 8x లాభం) పొందుతుంది.
                     </p>
                   </div>
                   <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
