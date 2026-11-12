@@ -1,12 +1,12 @@
 {
-  "snapshotDate": "2026-11-10",
+  "snapshotDate": "2026-11-12",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 65,
-    "sharedRepositoryFiles": 59,
-    "sharedExactVersionNameMatches": 21,
-    "sharedAppliedOnly": 44,
-    "sharedFileOnly": 38,
+    "sharedAppliedLedger": 71,
+    "sharedRepositoryFiles": 61,
+    "sharedExactVersionNameMatches": 24,
+    "sharedAppliedOnly": 47,
+    "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
     "isolatedAppliedLedger": 0,
     "isolatedRepositoryFiles": 0,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 59,
+    "totalSupabaseMigrationFiles": 61,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -279,6 +279,30 @@
     {
       "version": "20261109163549",
       "name": "aviator_realtime_and_recovery_hardening"
+    },
+    {
+      "version": "20261110145248",
+      "name": "aviator_realtime_event_sequence"
+    },
+    {
+      "version": "20261110145250",
+      "name": "harden_rls_auto_enable_grants"
+    },
+    {
+      "version": "20261110145329",
+      "name": "dice_authoritative_round_lifecycle"
+    },
+    {
+      "version": "20261111125900",
+      "name": "andar_bahar_authoritative_round_lifecycle"
+    },
+    {
+      "version": "20261112120512",
+      "name": "dragon_tiger_three_market_selection_guard"
+    },
+    {
+      "version": "20261112120632",
+      "name": "dragon_tiger_authoritative_round_lifecycle"
     }
   ],
   "exactMatches": [
@@ -386,6 +410,21 @@
       "version": "20261108063705",
       "name": "aviator_multiplier_realtime_broadcast",
       "file": "20261108063705_aviator_multiplier_realtime_broadcast.sql"
+    },
+    {
+      "version": "20261111125900",
+      "name": "andar_bahar_authoritative_round_lifecycle",
+      "file": "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
+    },
+    {
+      "version": "20261112120512",
+      "name": "dragon_tiger_three_market_selection_guard",
+      "file": "20261112120512_dragon_tiger_three_market_selection_guard.sql"
+    },
+    {
+      "version": "20261112120632",
+      "name": "dragon_tiger_authoritative_round_lifecycle",
+      "file": "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
     }
   ],
   "appliedOnly": [
@@ -564,6 +603,18 @@
     {
       "version": "20261109163549",
       "name": "aviator_realtime_and_recovery_hardening"
+    },
+    {
+      "version": "20261110145248",
+      "name": "aviator_realtime_event_sequence"
+    },
+    {
+      "version": "20261110145250",
+      "name": "harden_rls_auto_enable_grants"
+    },
+    {
+      "version": "20261110145329",
+      "name": "dice_authoritative_round_lifecycle"
     }
   ],
   "repositoryFiles": [
@@ -625,7 +676,9 @@
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
     "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql",
+    "20261112120512_dragon_tiger_three_market_selection_guard.sql",
+    "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -664,8 +717,7 @@
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
-    "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261110130100_dice_authoritative_round_lifecycle.sql"
   ],
   "duplicateVersionPrefixes": [
     "20261021120000",
@@ -731,7 +783,9 @@
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
     "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql",
+    "20261112120512_dragon_tiger_three_market_selection_guard.sql",
+    "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -839,6 +893,21 @@
       "version": "20261108063705",
       "name": "aviator_multiplier_realtime_broadcast",
       "file": "20261108063705_aviator_multiplier_realtime_broadcast.sql"
+    },
+    {
+      "version": "20261111125900",
+      "name": "andar_bahar_authoritative_round_lifecycle",
+      "file": "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
+    },
+    {
+      "version": "20261112120512",
+      "name": "dragon_tiger_three_market_selection_guard",
+      "file": "20261112120512_dragon_tiger_three_market_selection_guard.sql"
+    },
+    {
+      "version": "20261112120632",
+      "name": "dragon_tiger_authoritative_round_lifecycle",
+      "file": "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
     }
   ],
   "sharedAppliedOnly": [
@@ -1017,6 +1086,18 @@
     {
       "version": "20261109163549",
       "name": "aviator_realtime_and_recovery_hardening"
+    },
+    {
+      "version": "20261110145248",
+      "name": "aviator_realtime_event_sequence"
+    },
+    {
+      "version": "20261110145250",
+      "name": "harden_rls_auto_enable_grants"
+    },
+    {
+      "version": "20261110145329",
+      "name": "dice_authoritative_round_lifecycle"
     }
   ],
   "sharedFileOnly": [
@@ -1056,8 +1137,7 @@
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
-    "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261111125900_andar_bahar_authoritative_round_lifecycle.sql"
+    "20261110130100_dice_authoritative_round_lifecycle.sql"
   ],
   "legacyIsolatedSnapshot": {
     "appliedLedger": [
@@ -1160,9 +1240,9 @@
     "aviator-wallet-worker"
   ],
   "reconciliationFindings": {
-    "snapshotDate": "2026-11-10",
-    "sourceOnlySameNameCandidates": 27,
-    "sourceOnlyWithoutSameNameAppliedRow": 10,
+    "snapshotDate": "2026-11-12",
+    "sourceOnlySameNameCandidates": 30,
+    "sourceOnlyWithoutSameNameAppliedRow": 7,
     "duplicateActiveVersionPrefixes": [
       "20261021120000",
       "20261023160000"
@@ -1178,7 +1258,11 @@
       "multiplierTickSequenceColumnPresent": false,
       "tickCrashEngineWithBroadcastPresent": true,
       "baseTickFunctionPresent": true,
-      "rlsAutoEnableBrowserExecuteRevoked": true
+      "rlsAutoEnableBrowserExecuteRevoked": true,
+      "dragonTigerAdvanceRoundPresent": true,
+      "dragonTigerSelectionGuardPresent": true,
+      "dragonTigerRoundCount": 0,
+      "dragonTigerBetCount": 0
     },
     "pendingReview": [
       {
@@ -1192,7 +1276,7 @@
         "reason": "Read-only grant inspection showed browser-role EXECUTE already revoked; source is useful for reproducibility but does not require production DDL."
       }
     ],
-    "safety": "No production migration history, DDL, wallet, bet, round, settlement, or scheduler data was changed.",
+    "safety": "Two Dragon Tiger migrations are applied in the shared production project and recorded here. They add a three-market selection guard and authoritative round settlement; no production Dragon Tiger rounds or bets were created, and no wallet balances or transaction history were changed.",
     "poolArchitecture": {
       "observedPlatformGames": 5,
       "distinctPlatformGamePoolWallets": 5,
