@@ -229,6 +229,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const simIntervalRef = useRef<number | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const andarBaharRealtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const dragonTigerRealtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
@@ -781,6 +782,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         })
         .subscribe();
       andarBaharRealtimeChannelRef.current = andarChannel;
+
+      // Dragon Tiger lifecycle broadcasts are wake-up signals only. The authenticated
+      // state API supplies authoritative cards, winner, and user-specific bet status.
+      const dragonTigerChannel = supabaseRealtime
+        .channel('dragon_tiger:rounds', { config: { broadcast: { self: false } } })
+        .on('broadcast', { event: 'dragon_tiger_round_changed' }, ({ payload }) => {
+          if (stopped || disposedRef.current || !activeGameKeysRef.current.has('dragonTiger')) return;
+          if (!payload || typeof payload !== 'object') return;
+          if (simIntervalRef.current !== null) {
+            window.clearTimeout(simIntervalRef.current);
+            simIntervalRef.current = null;
+          }
+          if (inFlight) rerunRequested = true;
+          else void poll();
+        })
+        .subscribe();
+      dragonTigerRealtimeChannelRef.current = dragonTigerChannel;
     }
     void poll();
   };
@@ -804,6 +822,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (andarBaharRealtimeChannelRef.current && supabaseRealtime) {
         void supabaseRealtime.removeChannel(andarBaharRealtimeChannelRef.current);
         andarBaharRealtimeChannelRef.current = null;
+      }
+      if (dragonTigerRealtimeChannelRef.current && supabaseRealtime) {
+        void supabaseRealtime.removeChannel(dragonTigerRealtimeChannelRef.current);
+        dragonTigerRealtimeChannelRef.current = null;
       }
     };
   }, []);
