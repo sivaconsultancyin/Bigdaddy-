@@ -275,7 +275,7 @@ export class DragonTigerEngine {
     if (!Array.isArray(params.bets) || params.bets.length < 1 || params.bets.length > 20) throw new Error('INVALID_BET_COUNT');
     for (const b of params.bets) {
       if (!['dragon', 'tiger', 'tie'].includes(String(b.type).toLowerCase())) throw new Error('UNSUPPORTED_DRAGON_TIGER_MARKET');
-      if (!/^\\d+$/.test(b.amount)) throw new Error('INVALID_BET_AMOUNT');
+      if (!/^\d+$/.test(b.amount)) throw new Error('INVALID_BET_AMOUNT');
       const amt = BigInt(b.amount);
       if (amt < 10n || amt > 100000n) throw new Error('BET_OUT_OF_RANGE');
       totalRequested += amt;
