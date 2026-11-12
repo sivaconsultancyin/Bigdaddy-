@@ -738,7 +738,8 @@ async function runTestSuite() {
     assert.strictEqual(maxLiabilityMultiplier('roulette', { type: 'green' }), 36);
     assert.strictEqual(maxLiabilityMultiplier('dice', { type: 'number', value: 10 }), 10);
     assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'tie' }), 9);
-    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'suited_tie' }), 51);
+    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'suited_tie' }), 0);
+    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'dragon' }), 2);
     assert.strictEqual(maxLiabilityMultiplier('andar_bahar', { type: 'andar' }), 2);
   });
 
