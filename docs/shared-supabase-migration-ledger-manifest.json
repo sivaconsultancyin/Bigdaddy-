@@ -2,9 +2,9 @@
   "snapshotDate": "2026-11-12",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 72,
-    "sharedRepositoryFiles": 62,
-    "sharedExactVersionNameMatches": 25,
+    "sharedAppliedLedger": 73,
+    "sharedRepositoryFiles": 63,
+    "sharedExactVersionNameMatches": 26,
     "sharedAppliedOnly": 47,
     "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 62,
+    "totalSupabaseMigrationFiles": 63,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -307,6 +307,10 @@
     {
       "version": "20261112122447",
       "name": "dragon_tiger_authoritative_cron_worker"
+    },
+    {
+      "version": "20261112123252",
+      "name": "dragon_tiger_atomic_market_allowlist"
     }
   ],
   "exactMatches": [
@@ -434,6 +438,11 @@
       "version": "20261112122447",
       "name": "dragon_tiger_authoritative_cron_worker",
       "file": "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
+    },
+    {
+      "version": "20261112123252",
+      "name": "dragon_tiger_atomic_market_allowlist",
+      "file": "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
     }
   ],
   "appliedOnly": [
@@ -688,7 +697,8 @@
     "20261111125900_andar_bahar_authoritative_round_lifecycle.sql",
     "20261112120512_dragon_tiger_three_market_selection_guard.sql",
     "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
-    "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
+    "20261112122447_dragon_tiger_authoritative_cron_worker.sql",
+    "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -796,7 +806,8 @@
     "20261111125900_andar_bahar_authoritative_round_lifecycle.sql",
     "20261112120512_dragon_tiger_three_market_selection_guard.sql",
     "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
-    "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
+    "20261112122447_dragon_tiger_authoritative_cron_worker.sql",
+    "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -924,6 +935,11 @@
       "version": "20261112122447",
       "name": "dragon_tiger_authoritative_cron_worker",
       "file": "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
+    },
+    {
+      "version": "20261112123252",
+      "name": "dragon_tiger_atomic_market_allowlist",
+      "file": "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
     }
   ],
   "sharedAppliedOnly": [
@@ -1286,7 +1302,8 @@
       "dragonTigerGameStatus": "COMING_SOON",
       "dragonTigerPoolBalance": 1000000,
       "dragonTigerPoolReservedBalance": 0,
-      "dragonTigerMaxBet": 100000
+      "dragonTigerMaxBet": 100000,
+      "dragonTigerAtomicBetRpcThreeMarketAllowlist": true
     },
     "pendingReview": [
       {
@@ -1300,7 +1317,7 @@
         "reason": "Read-only grant inspection showed browser-role EXECUTE already revoked; source is useful for reproducibility but does not require production DDL."
       }
     ],
-    "safety": "Dragon Tiger has a production three-market guard, authoritative round lifecycle, and an active one-second server-side cron worker. The worker intentionally does not advance rounds while platform.games.status is COMING_SOON. No production Dragon Tiger rounds or bets were created, and no wallet balances or transaction history were changed.",
+    "safety": "Dragon Tiger has a production three-market database guard, an atomic bet RPC allow-list, an authoritative round lifecycle, and an active one-second server-side cron worker. The worker intentionally does not advance rounds while platform.games.status is COMING_SOON. No production Dragon Tiger rounds or bets were created, and no wallet balances or transaction history were changed.",
     "poolArchitecture": {
       "observedPlatformGames": 5,
       "distinctPlatformGamePoolWallets": 5,

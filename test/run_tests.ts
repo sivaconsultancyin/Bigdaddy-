@@ -107,16 +107,27 @@ async function runTestSuite() {
     assert.ok(!source.includes('scheduleSimulatedCommunityBets'));
   });
 
+  test('Dragon Tiger atomic bet RPC enforces exactly three markets before liability reservation', () => {
+    const migration = readFileSync('supabase/migrations/20261112123252_dragon_tiger_atomic_market_allowlist.sql', 'utf8');
+    assert.strictEqual(migration.split("NOT IN ('dragon','tiger','tie')").length - 1, 2);
+    assert.ok(migration.includes('INVALID_DRAGON_TIGER_SELECTION'));
+    assert.ok(migration.includes("v_multiplier := 9"));
+    assert.ok(migration.includes("v_multiplier := 2"));
+    assert.ok(!migration.includes('suited_tie'));
+    assert.ok(!migration.includes('dragon_big'));
+    assert.ok(!migration.includes('tiger_big'));
+  });
+
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 62);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 63);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 72);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 62);
-    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 25);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 73);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 63);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 26);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     // Historical source-only migration candidates remain tracked; Dragon Tiger migrations are exact production ledger matches.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
