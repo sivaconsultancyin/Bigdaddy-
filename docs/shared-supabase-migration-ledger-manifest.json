@@ -847,7 +847,11 @@
     "20261112120512_dragon_tiger_three_market_selection_guard.sql",
     "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
     "20261112122447_dragon_tiger_authoritative_cron_worker.sql",
-    "20261112123252_dragon_tiger_atomic_market_allowlist.sql"
+    "20261112123252_dragon_tiger_atomic_market_allowlist.sql",
+    "20261112125941_dragon_tiger_idempotent_replay_status.sql",
+    "20261112130413_dragon_tiger_realtime_broadcast.sql",
+    "20261112130720_dragon_tiger_replay_record_type_fix.sql",
+    "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
