@@ -116,6 +116,15 @@ async function runTestSuite() {
     assert.notStrictEqual(first, buildDragonTigerBetOperation('user-1', { bets: [{ type: 'tiger', amount: '50' }] }));
   });
 
+  test('Dragon Tiger idempotent replay uses a typed record and reliable dynamic SQL row count', () => {
+    const migration = readFileSync('supabase/migrations/20261112130811_dragon_tiger_replay_found_rowcount_fix.sql', 'utf8');
+    assert.ok(migration.includes('v_existing record;'));
+    assert.ok(migration.includes('v_existing_rows integer := 0;'));
+    assert.ok(migration.includes('GET DIAGNOSTICS v_existing_rows = ROW_COUNT;'));
+    assert.ok(migration.includes('IF v_existing_rows > 0 THEN'));
+    assert.ok(!migration.includes('IF FOUND THEN'));
+  });
+
   test('Dragon Tiger idempotent replay returns persisted settlement state and transaction references', () => {
     const migration = readFileSync('supabase/migrations/20261112125941_dragon_tiger_idempotent_replay_status.sql', 'utf8');
     assert.ok(migration.includes("'status',v_existing.status"));
@@ -156,12 +165,12 @@ async function runTestSuite() {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 65);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 67);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 75);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 65);
-    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 28);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 77);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 67);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 30);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     // Historical source-only migration candidates remain tracked; Dragon Tiger migrations are exact production ledger matches.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
