@@ -2,9 +2,9 @@
   "snapshotDate": "2026-11-12",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 71,
-    "sharedRepositoryFiles": 61,
-    "sharedExactVersionNameMatches": 24,
+    "sharedAppliedLedger": 72,
+    "sharedRepositoryFiles": 62,
+    "sharedExactVersionNameMatches": 25,
     "sharedAppliedOnly": 47,
     "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 61,
+    "totalSupabaseMigrationFiles": 62,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -303,6 +303,10 @@
     {
       "version": "20261112120632",
       "name": "dragon_tiger_authoritative_round_lifecycle"
+    },
+    {
+      "version": "20261112122447",
+      "name": "dragon_tiger_authoritative_cron_worker"
     }
   ],
   "exactMatches": [
@@ -425,6 +429,11 @@
       "version": "20261112120632",
       "name": "dragon_tiger_authoritative_round_lifecycle",
       "file": "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
+    },
+    {
+      "version": "20261112122447",
+      "name": "dragon_tiger_authoritative_cron_worker",
+      "file": "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
     }
   ],
   "appliedOnly": [
@@ -678,7 +687,8 @@
     "20261110130100_dice_authoritative_round_lifecycle.sql",
     "20261111125900_andar_bahar_authoritative_round_lifecycle.sql",
     "20261112120512_dragon_tiger_three_market_selection_guard.sql",
-    "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
+    "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
+    "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -785,7 +795,8 @@
     "20261110130100_dice_authoritative_round_lifecycle.sql",
     "20261111125900_andar_bahar_authoritative_round_lifecycle.sql",
     "20261112120512_dragon_tiger_three_market_selection_guard.sql",
-    "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
+    "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
+    "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -908,6 +919,11 @@
       "version": "20261112120632",
       "name": "dragon_tiger_authoritative_round_lifecycle",
       "file": "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql"
+    },
+    {
+      "version": "20261112122447",
+      "name": "dragon_tiger_authoritative_cron_worker",
+      "file": "20261112122447_dragon_tiger_authoritative_cron_worker.sql"
     }
   ],
   "sharedAppliedOnly": [
