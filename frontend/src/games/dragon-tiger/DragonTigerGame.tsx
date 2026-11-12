@@ -40,10 +40,6 @@ function getDragonTigerRankName(rank: number): string {
   return rank.toString();
 }
 
-function getCardValueForComparison(rank: number): number {
-  return rank === 14 ? 1 : rank;
-}
-
 export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBackToLobby }) => {
   const { user, wallet, refreshWallet } = useAuth();
   const {
@@ -134,19 +130,8 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
 
       if ((w === 'dragon' && (myBets['dragon'] || 0) > 0) ||
           (w === 'tiger' && (myBets['tiger'] || 0) > 0) ||
-          ((w === 'tie' || w === 'suited_tie') && (myBets['tie'] || 0) > 0) ||
-          (w === 'suited_tie' && (myBets['suited_tie'] || 0) > 0)) {
+          (w === 'tie' && (myBets['tie'] || 0) > 0)) {
         userWon = true;
-      }
-
-      // Check side bets
-      if (dragonTigerRound.dragonCard && dragonTigerRound.tigerCard) {
-        const dVal = getCardValueForComparison(dragonTigerRound.dragonCard.rank);
-        const tVal = getCardValueForComparison(dragonTigerRound.tigerCard.rank);
-        if (dVal >= 8 && dVal !== 7 && (myBets['dragon_big'] || 0) > 0) userWon = true;
-        if (dVal <= 6 && (myBets['dragon_small'] || 0) > 0) userWon = true;
-        if (tVal >= 8 && tVal !== 7 && (myBets['tiger_big'] || 0) > 0) userWon = true;
-        if (tVal <= 6 && (myBets['tiger_small'] || 0) > 0) userWon = true;
       }
 
       if (userWon) {
@@ -167,7 +152,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     setTimeout(() => setNoticeMessage(null), 3000);
   };
 
-  // Place bet on Dragon, Tiger, Tie, Suited Tie, or Side Bet
+  // Place a bet on one of the three supported markets
   const handlePlaceBet = async (side: string) => {
     if (dragonTigerRound.status !== 'BETTING') {
       setErrorMessage('Betting is closed for this round. Please wait for next round.');
@@ -279,7 +264,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const totalRounds = dragonTigerHistory.length || 1;
   const dragonWins = dragonTigerHistory.filter((h) => h.winner === 'dragon').length;
   const tigerWins = dragonTigerHistory.filter((h) => h.winner === 'tiger').length;
-  const tieWins = dragonTigerHistory.filter((h) => h.winner === 'tie' || h.winner === 'suited_tie').length;
+  const tieWins = dragonTigerHistory.filter((h) => h.winner === 'tie').length;
   const dragonPct = Math.round((dragonWins / totalRounds) * 100);
   const tigerPct = Math.round((tigerWins / totalRounds) * 100);
   const tiePct = Math.round((tieWins / totalRounds) * 100);
@@ -378,7 +363,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
                   {dragonTigerRound.winner === 'dragon' && '🔥 DRAGON WINS!'}
                   {dragonTigerRound.winner === 'tiger' && '⚡ TIGER WINS!'}
                   {dragonTigerRound.winner === 'tie' && '🤝 TIE (8:1)!'}
-                  {dragonTigerRound.winner === 'suited_tie' && '👑 SUITED TIE (50:1)!'}
                 </span>
               )}
             </span>
@@ -632,10 +616,10 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           </div>
 
           {/* Tie Clash Result Announcement Bar */}
-          {dragonTigerRound.status === 'RESULT' && (dragonTigerRound.winner === 'tie' || dragonTigerRound.winner === 'suited_tie') && (
+          {dragonTigerRound.status === 'RESULT' && (dragonTigerRound.winner === 'tie') && (
             <div className="mt-2 text-center py-1.5 px-3 rounded-xl bg-emerald-500/20 border border-emerald-500/60 shadow-lg animate-pulse">
               <span className="text-xs font-black text-emerald-300 tracking-wider font-serif">
-                {dragonTigerRound.winner === 'suited_tie' ? '👑 SUITED TIE HIT! 50:1 PAYOUT!' : '🤝 TIE ROUND! 8:1 PAYOUT!'}
+                {'🤝 TIE ROUND! 8:1 PAYOUT!'}
               </span>
             </div>
           )}
@@ -662,7 +646,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
             {dragonTigerHistory.map((item, idx) => {
               const isDragon = item.winner === 'dragon';
               const isTiger = item.winner === 'tiger';
-              const isTie = item.winner === 'tie' || item.winner === 'suited_tie';
+              const isTie = item.winner === 'tie';
               return (
                 <div
                   key={idx}
@@ -685,8 +669,8 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
 
       {/* 5. INTERACTIVE BETTING BOARD (MAIN & SIDE BETS) */}
       <div className="relative z-10 px-3 py-1 space-y-2">
-        {/* Main 4 Betting Spots: DRAGON, TIE, SUITED TIE, TIGER */}
-        <div className="grid grid-cols-4 gap-1.5">
+        {/* Main 3 Betting Spots: DRAGON, TIE, TIGER */}
+        <div className="grid grid-cols-3 gap-1.5">
           {/* DRAGON SPOT */}
           <button
             onClick={() => handlePlaceBet('dragon')}
@@ -732,29 +716,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
             )}
           </button>
 
-          {/* SUITED TIE SPOT */}
-          <button
-            onClick={() => handlePlaceBet('suited_tie')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
-            className={`col-span-1 rounded-xl p-2 border flex flex-col items-center justify-between transition-all duration-200 active:scale-95 relative overflow-hidden ${
-              (myBets['suited_tie'] || 0) > 0
-                ? 'bg-purple-950/80 border-purple-500 ring-2 ring-purple-500/50 shadow-lg'
-                : 'bg-zinc-900/90 hover:bg-zinc-800/90 border-purple-900/40 hover:border-purple-500/60'
-            } ${dragonTigerRound.status !== 'BETTING' ? 'opacity-70 cursor-not-allowed' : ''}`}
-          >
-            <span className="text-[11px] font-black text-purple-300 font-serif text-center leading-tight">
-              SUITED TIE
-            </span>
-            <span className="text-[9px] text-amber-300 font-mono font-bold">50 : 1</span>
-
-            {/* My Placed Chips on Suited Tie */}
-            {(myBets['suited_tie'] || 0) > 0 && (
-              <div className="mt-1 px-1.5 py-0.5 rounded-full bg-purple-600 text-white font-mono font-extrabold text-[10px] shadow animate-bounce">
-                ₹{myBets['suited_tie']}
-              </div>
-            )}
-          </button>
-
           {/* TIGER SPOT */}
           <button
             onClick={() => handlePlaceBet('tiger')}
@@ -780,57 +741,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           </button>
         </div>
 
-        {/* Secondary Side Bets: Big/Small (1:1) */}
-        <div className="grid grid-cols-4 gap-1 text-[10px]">
-          <button
-            onClick={() => handlePlaceBet('dragon_big')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
-            className={`p-1.5 rounded-lg border flex items-center justify-between transition ${
-              (myBets['dragon_big'] || 0) > 0
-                ? 'bg-red-950 border-red-500 text-red-300 font-bold'
-                : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400'
-            }`}
-          >
-            <span>D Big (8-K)</span>
-            <span className="font-mono text-zinc-500">1:1</span>
-          </button>
-          <button
-            onClick={() => handlePlaceBet('dragon_small')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
-            className={`p-1.5 rounded-lg border flex items-center justify-between transition ${
-              (myBets['dragon_small'] || 0) > 0
-                ? 'bg-red-950 border-red-500 text-red-300 font-bold'
-                : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400'
-            }`}
-          >
-            <span>D Small (A-6)</span>
-            <span className="font-mono text-zinc-500">1:1</span>
-          </button>
-          <button
-            onClick={() => handlePlaceBet('tiger_big')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
-            className={`p-1.5 rounded-lg border flex items-center justify-between transition ${
-              (myBets['tiger_big'] || 0) > 0
-                ? 'bg-amber-950 border-amber-500 text-amber-300 font-bold'
-                : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400'
-            }`}
-          >
-            <span>T Big (8-K)</span>
-            <span className="font-mono text-zinc-500">1:1</span>
-          </button>
-          <button
-            onClick={() => handlePlaceBet('tiger_small')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
-            className={`p-1.5 rounded-lg border flex items-center justify-between transition ${
-              (myBets['tiger_small'] || 0) > 0
-                ? 'bg-amber-950 border-amber-500 text-amber-300 font-bold'
-                : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400'
-            }`}
-          >
-            <span>T Small (A-6)</span>
-            <span className="font-mono text-zinc-500">1:1</span>
-          </button>
-        </div>
+
       </div>
 
       {/* 6. CHIP SELECTOR & ACTIONS TRAY */}
@@ -1068,23 +979,8 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
                     <span className="text-zinc-400">రెండు కార్డుల ర్యాంక్ సమానమైతే (8x లాభం)</span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-purple-950/40 border border-purple-900/40 text-[11px] items-center">
-                    <span className="font-bold text-purple-300">SUITED TIE</span>
-                    <span className="font-mono font-bold text-amber-300">50 : 1</span>
-                    <span className="text-zinc-400">ఒకే ర్యాంక్ మరియు ఒకే సూట్ (జాక్‌పాట్!)</span>
-                  </div>
 
-                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] items-center">
-                    <span className="font-bold text-zinc-300">Big (8 to K)</span>
-                    <span className="font-mono font-bold text-white">1 : 1</span>
-                    <span className="text-zinc-400">కార్డు 8 నుండి K మధ్య ఉంటే గెలుపు</span>
-                  </div>
 
-                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] items-center">
-                    <span className="font-bold text-zinc-300">Small (A to 6)</span>
-                    <span className="font-mono font-bold text-white">1 : 1</span>
-                    <span className="text-zinc-400">కార్డు A నుండి 6 మధ్య ఉంటే గెలుపు</span>
-                  </div>
                 </div>
               )}
 
@@ -1127,11 +1023,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
                       Tie వచ్చినప్పుడు డ్రాగన్ లేదా టైగర్‌పై పెట్టిన బెట్‌లో 50% వాపస్ వస్తుంది లేదా హౌస్ రూల్ ప్రకారం టై బెట్ మాత్రమే 8:1 పేమెంట్ పొందుతుంది.
                     </p>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
-                    <h5 className="font-bold text-amber-400 mb-0.5">7 నంబర్ కార్డ్ వస్తే Big/Small ఏమవుతుంది?</h5>
-                    <p className="text-zinc-300">
-                      సాంప్రదాయ క్యాసినో నిబంధనల ప్రకారం కార్డ్ 7 వచ్చినప్పుడు Big మరియు Small రెండూ లాస్ అవుతాయి (హౌస్ ఎడ్జ్).
-                    </p>
+
                   </div>
                   <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
                     <h5 className="font-bold text-amber-400 mb-0.5">విన్నింగ్ అమౌంట్ ఎప్పుడు జమ అవుతుంది?</h5>
