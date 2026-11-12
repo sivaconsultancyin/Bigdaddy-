@@ -700,7 +700,12 @@ async function runTestSuite() {
     assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_red' }, { jokerCard: { suit: 'H' } }), 1.95);
     assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_black' }, { jokerCard: { suit: 'C' } }), 1.95);
     assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'tie' }), 9);
-    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 51);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 0);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'suited_tie' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_small' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_small' }), false);
   });
 
   console.log('\n======================================================');
