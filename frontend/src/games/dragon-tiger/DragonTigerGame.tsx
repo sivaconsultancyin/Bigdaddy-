@@ -47,6 +47,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     dragonTigerRound,
     dragonTigerHistory,
     dragonTigerLiveBets,
+    dragonTigerMyBets,
   } = useWebSocket();
 
   // Audio & Modals
@@ -71,6 +72,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const lastTickSecondRef = useRef<number | null>(null);
   const pendingTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const submittingBetRef = useRef(false);
+  const myBetIdsRef = useRef<Set<string>>(new Set());
   const scheduleTimeout = useCallback((callback: () => void, delayMs: number) => {
     const timeout = setTimeout(() => {
       pendingTimeoutsRef.current.delete(timeout);
@@ -122,6 +124,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       setNoticeMessage(null);
       setErrorMessage(null);
       setServerBetStatus(null);
+      myBetIdsRef.current.clear();
       lastRoundIdRef.current = dragonTigerRound.id;
       if (dragonTigerRound.status === 'BETTING') {
         // Save previous round bets for rebet
@@ -153,14 +156,9 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       }
 
       // Check if user won
-      let userWon = false;
       const w = dragonTigerRound.winner;
-
-      if ((w === 'dragon' && (myBets['dragon'] || 0) > 0) ||
-          (w === 'tiger' && (myBets['tiger'] || 0) > 0) ||
-          (w === 'tie' && (myBets['tie'] || 0) > 0)) {
-        userWon = true;
-      }
+      const roundMyBets = dragonTigerMyBets.filter((bet) => bet.roundId === dragonTigerRound.id);
+      const userWon = roundMyBets.some((bet) => String(bet.type).toLowerCase() === w && String(bet.status).toUpperCase() === 'WON');
 
       if (userWon) {
         dragonTigerAudio.playWinFanfare();
@@ -173,7 +171,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
         refreshWallet();
       }
     }
-  }, [dragonTigerRound.id, dragonTigerRound.status, dragonTigerRound.winner, scheduleTimeout]);
+  }, [dragonTigerRound.id, dragonTigerRound.status, dragonTigerRound.winner, dragonTigerMyBets, scheduleTimeout]);
 
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
@@ -181,11 +179,51 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   };
 
   const recordServerBetStatus = (result: any) => {
-    const statuses = Array.isArray(result?.placedBets)
-      ? [...new Set(result.placedBets.map((bet: any) => String(bet?.status ?? '').toUpperCase()).filter(Boolean))]
-      : [];
+    const placedBets = Array.isArray(result?.placedBets) ? result.placedBets : [];
+    const statuses = [...new Set(placedBets.map((bet: any) => String(bet?.status ?? '').toUpperCase()).filter(Boolean))];
+    const responseRoundId = String(result?.roundId ?? dragonTigerRound.id);
+    if (responseRoundId !== dragonTigerRound.id) {
+      if (statuses.length > 0) setServerBetStatus(`Previous round: ${statuses.join(' / ')}`);
+      return;
+    }
+
+    const unseenBets = placedBets.filter((bet: any) => bet?.id && !myBetIdsRef.current.has(String(bet.id)));
+    unseenBets.forEach((bet: any) => myBetIdsRef.current.add(String(bet.id)));
+    if (unseenBets.length > 0) {
+      setMyBets((prev) => {
+        const next = { ...prev };
+        for (const bet of unseenBets) {
+          const type = String(bet?.selection?.type ?? bet?.type ?? '').toLowerCase();
+          const amount = Number(bet?.amount ?? 0);
+          if (['dragon', 'tiger', 'tie'].includes(type) && Number.isFinite(amount)) {
+            next[type] = (next[type] || 0) + amount;
+          }
+        }
+        return next;
+      });
+    }
     if (statuses.length > 0) setServerBetStatus(statuses.join(' / '));
   };
+
+  // Reconcile personal bet totals and settlement statuses from the authenticated
+  // state response; never infer WON/LOST from a local prediction.
+  useEffect(() => {
+    const currentRoundBets = dragonTigerMyBets.filter((bet) => bet.roundId === dragonTigerRound.id);
+    const ids = new Set<string>();
+    const totals: Record<string, number> = {};
+    for (const bet of currentRoundBets) {
+      ids.add(bet.id);
+      const type = String(bet.type ?? '').toLowerCase();
+      const amount = Number(bet.amount);
+      if (['dragon', 'tiger', 'tie'].includes(type) && Number.isFinite(amount)) {
+        totals[type] = (totals[type] || 0) + amount;
+      }
+    }
+    myBetIdsRef.current = ids;
+    setMyBets(totals);
+    const statuses = [...new Set(currentRoundBets.map((bet) => String(bet.status ?? '').toUpperCase()).filter(Boolean))];
+    setServerBetStatus(statuses.length > 0 ? statuses.join(' / ') : null);
+  }, [dragonTigerMyBets, dragonTigerRound.id]);
 
   // Place a bet on one of the three supported markets
   const handlePlaceBet = async (side: string) => {
@@ -208,11 +246,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
         bets: [{ type: side, amount: betAmountStr }],
       }, user.id);
       recordServerBetStatus(result);
-
-      setMyBets((prev) => ({
-        ...prev,
-        [side]: (prev[side] || 0) + selectedChip,
-      }));
 
       showNotification(`₹${selectedChip} placed on ${side.replace('_', ' ').toUpperCase()}!`);
       refreshWallet();
@@ -245,13 +278,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     try {
       const result = await ApiClient.placeDragonTigerBet({ bets: additionalBets }, user.id);
       recordServerBetStatus(result);
-      setMyBets((prev) => {
-        const updated = { ...prev };
-        currentKeys.forEach((k) => {
-          updated[k] = updated[k] * 2;
-        });
-        return updated;
-      });
       dragonTigerAudio.playChipSound();
       showNotification('Bets doubled!');
       refreshWallet();
@@ -284,13 +310,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     try {
       const result = await ApiClient.placeDragonTigerBet({ bets: betsToPlace }, user.id);
       recordServerBetStatus(result);
-      setMyBets((prev) => {
-        const next = { ...prev };
-        rebetKeys.forEach((k) => {
-          next[k] = (next[k] || 0) + lastRoundBets[k];
-        });
-        return next;
-      });
       dragonTigerAudio.playChipSound();
       showNotification('Previous bets repeated!');
       refreshWallet();
