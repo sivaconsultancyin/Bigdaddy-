@@ -17,7 +17,8 @@ export function evaluateGameActivationReadiness(input: GameActivationReadinessIn
   const available = total - reserved;
   if (available <= 0n) return { ok: false, error: 'ALLOCATE_GAME_POOL_TOKENS_FIRST', status: 400 };
   if (input.gameCode === 'dice' && input.minimumPoolBalance && available < BigInt(input.minimumPoolBalance)) return { ok: false, error: 'DICE_POOL_LIQUIDITY_INSUFFICIENT', status: 400 };
-  if (input.gameCode === 'andar_bahar' && input.minimumPoolBalance && available < BigInt(input.minimumPoolBalance)) return { ok: false, error: 'ANDAR_BAHAR_POOL_LIQUIDITY_INSUFFICIENT', status: 400 };\n  if (input.gameCode === 'dragon_tiger' && input.minimumPoolBalance && available < BigInt(input.minimumPoolBalance)) return { ok: false, error: 'DRAGON_TIGER_POOL_LIQUIDITY_INSUFFICIENT', status: 400 };
+  if (input.gameCode === 'andar_bahar' && input.minimumPoolBalance && available < BigInt(input.minimumPoolBalance)) return { ok: false, error: 'ANDAR_BAHAR_POOL_LIQUIDITY_INSUFFICIENT', status: 400 };
+  if (input.gameCode === 'dragon_tiger' && input.minimumPoolBalance && available < BigInt(input.minimumPoolBalance)) return { ok: false, error: 'DRAGON_TIGER_POOL_LIQUIDITY_INSUFFICIENT', status: 400 };
   if (input.gameCode === 'aviator' && !['WAITING', 'RUNNING'].includes(String(input.runtimeRoundStatus ?? ''))) return { ok: false, error: 'AVIATOR_RUNTIME_UNAVAILABLE', status: 503 };
   return { ok: true, availablePoolBalance: available.toString() };
 }
