@@ -1,6 +1,6 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 import { SUPABASE_API_BASE } from './supabaseConfig';
-import { buildRouletteBetOperation } from './idempotency';
+import { buildDragonTigerBetOperation, buildRouletteBetOperation } from './idempotency';
 
 // Production API is served directly by the configured canonical Supabase Edge Function.
 // The function strips the /functions/v1/api prefix and routes /auth, /games, /wallet, etc.
@@ -387,12 +387,21 @@ export class ApiClient {
     return this.request('/games/dragon-tiger/state');
   }
 
-  public static placeDragonTigerBet(payload: { bets: Array<{ type: string; amount: string }> }) {
-    return this.request('/games/dragon-tiger/bet', {
+  public static async placeDragonTigerBet(
+    payload: { bets: Array<{ type: string; amount: string }> },
+    userId: string,
+  ) {
+    // A timeout does not prove that the database rolled back. Reuse the same
+    // key until a confirmed response arrives, even if the round changes meanwhile.
+    const operation = buildDragonTigerBetOperation(userId, payload);
+    const idempotencyKey = await this.pendingKey(operation, 'DRAGON_TIGER_BET');
+    const result = await this.request('/games/dragon-tiger/bet', {
       method: 'POST',
-      headers: { 'Idempotency-Key': 'dragon-tiger-' + crypto.randomUUID() },
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
     });
+    this.clearPendingKey(operation);
+    return result;
   }
 
   // Provably Fair Dice
