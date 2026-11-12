@@ -11,7 +11,7 @@ import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/s
 import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
 import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from '../supabase/functions/api/activation';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
-import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
+import { makeResult, resolveDragonTigerWinner, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
 import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
 import { resolveSupabasePublicConfig } from '../frontend/src/api/supabaseConfigValidation';
 
@@ -91,16 +91,32 @@ async function runTestSuite() {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'CRASHED', crashMultiplier: 1.27 }), null);
   });
 
+  test('Dragon Tiger authoritative cron worker advances rounds only after activation', () => {
+    const migration = readFileSync('supabase/migrations/20261112122447_dragon_tiger_authoritative_cron_worker.sql', 'utf8');
+    assert.ok(migration.includes("cron.schedule("));
+    assert.ok(migration.includes("'1 second'"));
+    assert.ok(migration.includes("status = 'ACTIVE'"));
+    assert.ok(migration.includes('dragon_tiger.advance_round()'));
+  });
+
+  test('Legacy Dragon Tiger engine exposes no simulated community bets or side markets', () => {
+    const source = readFileSync('backend/src/games/dragon-tiger/dragon-tiger.engine.ts', 'utf8');
+    assert.ok(!source.includes('suited_tie'));
+    assert.ok(!source.includes('dragon_big'));
+    assert.ok(!source.includes('tiger_big'));
+    assert.ok(!source.includes('scheduleSimulatedCommunityBets'));
+  });
+
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 61);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 62);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 71);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 61);
-    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 24);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 72);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 62);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 25);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     // Historical source-only migration candidates remain tracked; Dragon Tiger migrations are exact production ledger matches.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
@@ -641,13 +657,22 @@ async function runTestSuite() {
     assert.ok(edgeSource.includes('encoder.encode("dice")'));
   });
 
-  test('Authoritative Dragon Tiger reveals two server-dealt cards and winner', () => {
+  test('Dragon Tiger supports only Dragon, Tiger and Tie; equal ranks tie regardless of suit', () => {
     const result = makeResult('dragon_tiger', 'dragon-tiger-test-seed');
     assert.ok(result.dragonCard && result.tigerCard);
-    assert.ok(['dragon','tiger','tie','suited_tie'].includes(result.winner));
-    if (result.dragonCard.rank === result.tigerCard.rank) {
-      assert.ok(result.winner === 'tie' || result.winner === 'suited_tie');
-    }
+    assert.ok(['dragon','tiger','tie'].includes(result.winner));
+    if (result.dragonCard.rank === result.tigerCard.rank) assert.strictEqual(result.winner, 'tie');
+    assert.strictEqual(resolveDragonTigerWinner({ rank: 8 } as any, { rank: 8 } as any), 'tie');
+    assert.strictEqual(resolveDragonTigerWinner({ rank: 8 } as any, { rank: 7 } as any), 'dragon');
+    assert.strictEqual(resolveDragonTigerWinner({ rank: 7 } as any, { rank: 8 } as any), 'tiger');
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'suited_tie' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_small' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_small' }), false);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'tie' }), 9);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'suited_tie' }), 0);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 0);
   });
 
   test('Authoritative Andar Bahar deals until the joker rank is matched', () => {
@@ -675,7 +700,12 @@ async function runTestSuite() {
     assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_red' }, { jokerCard: { suit: 'H' } }), 1.95);
     assert.strictEqual(payoutMultiplier('andar_bahar', { type: 'joker_black' }, { jokerCard: { suit: 'C' } }), 1.95);
     assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'tie' }), 9);
-    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 51);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 0);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'suited_tie' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_small' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_small' }), false);
   });
 
   console.log('\n======================================================');
@@ -713,7 +743,8 @@ async function runTestSuite() {
     assert.strictEqual(maxLiabilityMultiplier('roulette', { type: 'green' }), 36);
     assert.strictEqual(maxLiabilityMultiplier('dice', { type: 'number', value: 10 }), 10);
     assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'tie' }), 9);
-    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'suited_tie' }), 51);
+    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'suited_tie' }), 0);
+    assert.strictEqual(maxLiabilityMultiplier('dragon_tiger', { type: 'dragon' }), 2);
     assert.strictEqual(maxLiabilityMultiplier('andar_bahar', { type: 'andar' }), 2);
   });
 
