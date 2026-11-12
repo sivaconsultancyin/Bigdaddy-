@@ -163,7 +163,7 @@ async function runTestSuite() {
 
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
-    const trackedMigrationPaths = spawnSync('git', ['ls-files', '--', 'supabase/migrations/*.sql'], { encoding: 'utf8' }).stdout
+    const trackedMigrationPaths = spawnSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', 'supabase/migrations'], { encoding: 'utf8' }).stdout
       .split(/\r?\n/).filter(Boolean);
     const actualFiles = trackedMigrationPaths.map((path: string) => path.slice('supabase/migrations/'.length)).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
