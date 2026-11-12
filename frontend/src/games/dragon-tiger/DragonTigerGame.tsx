@@ -102,6 +102,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           }
         }
       } else {
+        lastTickSecondRef.current = null;
         setTimeLeftSec(0);
       }
     }, 250);
@@ -291,8 +292,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const tCard = dragonTigerRound.tigerCard;
   const isRevealingOrResult = dragonTigerRound.status === 'REVEALING' || dragonTigerRound.status === 'RESULT';
 
-  const dVal = dCard ? getCardValueForComparison(dCard.rank) : 0;
-  const tVal = tCard ? getCardValueForComparison(tCard.rank) : 0;
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-black text-zinc-100 flex flex-col justify-between pb-12 select-none relative overflow-x-hidden">
