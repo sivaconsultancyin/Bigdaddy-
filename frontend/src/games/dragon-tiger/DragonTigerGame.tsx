@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import {
   ArrowLeft,
@@ -69,14 +69,14 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   const lastResultFiredRef = useRef<string | null>(null);
   const lastTickSecondRef = useRef<number | null>(null);
   const pendingTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
-  const scheduleTimeout = (callback: () => void, delayMs: number) => {
+  const scheduleTimeout = useCallback((callback: () => void, delayMs: number) => {
     const timeout = setTimeout(() => {
       pendingTimeoutsRef.current.delete(timeout);
       callback();
     }, delayMs);
     pendingTimeoutsRef.current.add(timeout);
     return timeout;
-  };
+  }, []);
 
   useEffect(() => () => {
     pendingTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
@@ -113,6 +113,12 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
   // Round transition handling
   useEffect(() => {
     if (dragonTigerRound.id !== lastRoundIdRef.current) {
+      // Clear delayed sounds/notifications from the previous round so they can
+      // never fire over the next round or after the component is disposed.
+      pendingTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      pendingTimeoutsRef.current.clear();
+      setNoticeMessage(null);
+      setErrorMessage(null);
       lastRoundIdRef.current = dragonTigerRound.id;
       if (dragonTigerRound.status === 'BETTING') {
         // Save previous round bets for rebet
@@ -127,8 +133,8 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     // Play deal sound on transition to revealing
     if (dragonTigerRound.status === 'REVEALING') {
       dragonTigerAudio.playDealSound();
-      setTimeout(() => dragonTigerAudio.playFlipSound(), 600);
-      setTimeout(() => dragonTigerAudio.playFlipSound(), 1400);
+      scheduleTimeout(() => dragonTigerAudio.playFlipSound(), 600);
+      scheduleTimeout(() => dragonTigerAudio.playFlipSound(), 1400);
     }
 
     // Play victory sound & fanfare if result settled
@@ -164,18 +170,18 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
         refreshWallet();
       }
     }
-  }, [dragonTigerRound.id, dragonTigerRound.status, dragonTigerRound.winner]);
+  }, [dragonTigerRound.id, dragonTigerRound.status, dragonTigerRound.winner, scheduleTimeout]);
 
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
-    setTimeout(() => setNoticeMessage(null), 3000);
+    scheduleTimeout(() => setNoticeMessage(null), 3000);
   };
 
   // Place a bet on one of the three supported markets
   const handlePlaceBet = async (side: string) => {
     if (dragonTigerRound.status !== 'BETTING') {
       setErrorMessage('Betting is closed for this round. Please wait for next round.');
-      setTimeout(() => setErrorMessage(null), 2500);
+      scheduleTimeout(() => setErrorMessage(null), 2500);
       return;
     }
 
@@ -199,7 +205,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       refreshWallet();
     } catch (err: any) {
       setErrorMessage(err.message || 'Error placing bet');
-      setTimeout(() => setErrorMessage(null), 3500);
+      scheduleTimeout(() => setErrorMessage(null), 3500);
     } finally {
       setIsSubmittingBet(false);
     }
@@ -211,7 +217,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     const currentKeys = Object.keys(myBets).filter((k) => myBets[k] > 0);
     if (currentKeys.length === 0) {
       setErrorMessage('No bets to double.');
-      setTimeout(() => setErrorMessage(null), 2000);
+      scheduleTimeout(() => setErrorMessage(null), 2000);
       return;
     }
 
@@ -235,7 +241,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       refreshWallet();
     } catch (err: any) {
       setErrorMessage(err.message || 'Could not double bets');
-      setTimeout(() => setErrorMessage(null), 3000);
+      scheduleTimeout(() => setErrorMessage(null), 3000);
     } finally {
       setIsSubmittingBet(false);
     }
@@ -247,7 +253,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     const rebetKeys = Object.keys(lastRoundBets).filter((k) => lastRoundBets[k] > 0);
     if (rebetKeys.length === 0) {
       setErrorMessage('No previous round bets found.');
-      setTimeout(() => setErrorMessage(null), 2000);
+      scheduleTimeout(() => setErrorMessage(null), 2000);
       return;
     }
 
@@ -271,7 +277,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
       refreshWallet();
     } catch (err: any) {
       setErrorMessage(err.message || 'Could not repeat bets');
-      setTimeout(() => setErrorMessage(null), 3000);
+      scheduleTimeout(() => setErrorMessage(null), 3000);
     } finally {
       setIsSubmittingBet(false);
     }
