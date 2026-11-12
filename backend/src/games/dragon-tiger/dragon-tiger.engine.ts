@@ -15,7 +15,7 @@ import {
 } from '../../../../shared/src/utils/teenPatti';
 
 export interface DragonTigerBetInput {
-  type: string; // 'dragon' | 'tiger' | 'tie' | 'suited_tie' | 'dragon_big' | 'dragon_small' | 'tiger_big' | 'tiger_small'
+  type: 'dragon' | 'tiger' | 'tie';
   amount: string;
 }
 
@@ -28,8 +28,7 @@ export class DragonTigerEngine {
   private history: DragonTigerHistoryItem[] = [];
   private listeners: Set<DragonTigerEventListener> = new Set();
   private timer: NodeJS.Timeout | null = null;
-  private simBetTimeouts: NodeJS.Timeout[] = [];
-  private roundCount = 501;
+  private roundCount = 0;
 
   private BETTING_DURATION_MS = 12000;  // 12 seconds betting phase
   private REVEAL_DURATION_MS = 4500;   // 4.5 seconds card reveal & clash
@@ -37,26 +36,10 @@ export class DragonTigerEngine {
 
   private dragonCard: Card | null = null;
   private tigerCard: Card | null = null;
-  private roundWinner: 'dragon' | 'tiger' | 'tie' | 'suited_tie' | null = null;
+  private roundWinner: 'dragon' | 'tiger' | 'tie' | null = null;
 
   constructor() {
-    // Seed initial realistic roadmap history
-    const seed = [
-      { d: { rank: 13, suit: 'H' as const }, t: { rank: 9, suit: 'S' as const }, w: 'dragon' as const },
-      { d: { rank: 4, suit: 'D' as const }, t: { rank: 11, suit: 'C' as const }, w: 'tiger' as const },
-      { d: { rank: 8, suit: 'S' as const }, t: { rank: 8, suit: 'H' as const }, w: 'tie' as const },
-      { d: { rank: 14, suit: 'C' as const }, t: { rank: 12, suit: 'D' as const }, w: 'dragon' as const },
-      { d: { rank: 2, suit: 'H' as const }, t: { rank: 7, suit: 'S' as const }, w: 'tiger' as const },
-      { d: { rank: 10, suit: 'D' as const }, t: { rank: 5, suit: 'C' as const }, w: 'dragon' as const },
-    ];
-
-    this.history = seed.map((item, idx) => ({
-      roundNumber: this.roundCount - seed.length + idx,
-      dragonCard: item.d,
-      tigerCard: item.t,
-      winner: item.w,
-      timestamp: new Date(Date.now() - (seed.length - idx) * 30000).toISOString(),
-    }));
+    // History starts empty; never display fabricated rounds or community activity.
 
     this.currentRound = {
       id: `round-dt-${this.roundCount}`,
@@ -107,8 +90,6 @@ export class DragonTigerEngine {
   // --- 1. BETTING PHASE ---
   private startBettingPhase() {
     if (this.timer) clearTimeout(this.timer);
-    this.simBetTimeouts.forEach((t) => clearTimeout(t));
-    this.simBetTimeouts = [];
 
     this.roundCount++;
     this.currentBets.clear();
@@ -131,7 +112,7 @@ export class DragonTigerEngine {
     } else if (tVal > dVal) {
       this.roundWinner = 'tiger';
     } else {
-      this.roundWinner = this.dragonCard.suit === this.tigerCard.suit ? 'suited_tie' : 'tie';
+      this.roundWinner = 'tie';
     }
 
     this.currentRound = {
@@ -154,9 +135,6 @@ export class DragonTigerEngine {
       history: this.getHistory(),
     });
 
-    // Schedule active online simulated bets from community
-    this.scheduleSimulatedCommunityBets();
-
     // Schedule transition to REVEALING
     this.timer = setTimeout(() => {
       this.startRevealingPhase();
@@ -166,7 +144,6 @@ export class DragonTigerEngine {
   // --- 2. REVEALING PHASE ---
   private startRevealingPhase() {
     if (this.timer) clearTimeout(this.timer);
-    this.simBetTimeouts.forEach((t) => clearTimeout(t));
 
     this.currentRound.status = DragonTigerRoundStatus.REVEALING;
     this.currentRound.dragonCard = this.dragonCard;
@@ -191,9 +168,6 @@ export class DragonTigerEngine {
     this.currentRound.status = DragonTigerRoundStatus.RESULT;
     this.currentRound.winner = this.roundWinner;
 
-    const dVal = this.dragonCard!.rank === 14 ? 1 : this.dragonCard!.rank;
-    const tVal = this.tigerCard!.rank === 14 ? 1 : this.tigerCard!.rank;
-
     const winners: any[] = [];
     const poolWallet = db.getWallet(SYSTEM_WALLETS.DRAGON_TIGER_POOL);
 
@@ -211,29 +185,10 @@ export class DragonTigerEngine {
         won = true;
         multiplier = 2.0;
       }
-      // 3. Tie Bet (8:1 or 9x total return)
-      else if (bet.type === 'tie' && (this.roundWinner === 'tie' || this.roundWinner === 'suited_tie')) {
+      // Tie is determined only by equal card rank; suit never creates a separate market.
+      else if (bet.type === 'tie' && this.roundWinner === 'tie') {
         won = true;
         multiplier = 9.0;
-      }
-      // 4. Suited Tie Bet (50:1 or 51x total return)
-      else if (bet.type === 'suited_tie' && this.roundWinner === 'suited_tie') {
-        won = true;
-        multiplier = 51.0;
-      }
-      // 5. Side Bets: Big (8-13), Small (1-6)
-      else if (bet.type === 'dragon_big' && dVal >= 8 && dVal !== 7) {
-        won = true;
-        multiplier = 2.0;
-      } else if (bet.type === 'dragon_small' && dVal <= 6) {
-        won = true;
-        multiplier = 2.0;
-      } else if (bet.type === 'tiger_big' && tVal >= 8 && tVal !== 7) {
-        won = true;
-        multiplier = 2.0;
-      } else if (bet.type === 'tiger_small' && tVal <= 6) {
-        won = true;
-        multiplier = 2.0;
       }
 
       bet.won = won;
@@ -316,9 +271,13 @@ export class DragonTigerEngine {
     if (!userWallet) throw new Error('User wallet not found');
 
     let totalRequested = 0n;
+    if (params.userRole !== UserRole.PLAYER) throw new Error('PLAYER_ROLE_REQUIRED');
+    if (!Array.isArray(params.bets) || params.bets.length < 1 || params.bets.length > 20) throw new Error('INVALID_BET_COUNT');
     for (const b of params.bets) {
+      if (!['dragon', 'tiger', 'tie'].includes(String(b.type).toLowerCase())) throw new Error('UNSUPPORTED_DRAGON_TIGER_MARKET');
+      if (!/^\\d+$/.test(b.amount)) throw new Error('INVALID_BET_AMOUNT');
       const amt = BigInt(b.amount);
-      if (amt <= 0n) throw new Error('Bet amount must be greater than 0');
+      if (amt < 10n || amt > 100000n) throw new Error('BET_OUT_OF_RANGE');
       totalRequested += amt;
     }
 
@@ -366,7 +325,7 @@ export class DragonTigerEngine {
         this.currentRound.tigerBetAmount = (
           BigInt(this.currentRound.tigerBetAmount) + BigInt(b.amount)
         ).toString();
-      } else if (b.type === 'tie' || b.type === 'suited_tie') {
+      } else if (b.type === 'tie') {
         this.currentRound.tieBetAmount = (
           BigInt(this.currentRound.tieBetAmount) + BigInt(b.amount)
         ).toString();
@@ -390,60 +349,6 @@ export class DragonTigerEngine {
     };
   }
 
-  // Simulated community bets
-  private scheduleSimulatedCommunityBets() {
-    const simUsers = ['vegas_raj', 'anita_k', 'surya_strike', 'divya_77', 'rahul_ace'];
-    const delays = [1200, 3000, 5500, 8000, 10000];
-
-    delays.forEach((delay, idx) => {
-      const t = setTimeout(() => {
-        if (this.currentRound.status !== DragonTigerRoundStatus.BETTING) return;
-        const u = simUsers[idx % simUsers.length];
-        const sides = ['dragon', 'tiger', 'dragon', 'tiger', 'tie'];
-        const side = sides[Math.floor(Math.random() * sides.length)];
-        const amount = [50, 100, 200, 500][Math.floor(Math.random() * 4)].toString();
-
-        const simBetId = `sim-dt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        const roundBet: DragonTigerRoundBet = {
-          id: simBetId,
-          roundId: this.currentRound.id,
-          userId: `sim-${u}`,
-          username: u,
-          type: side,
-          amount,
-          createdAt: new Date().toISOString(),
-        };
-
-        this.currentBets.set(simBetId, roundBet);
-        this.currentRound.totalBetsCount++;
-        this.currentRound.totalBetAmount = (
-          BigInt(this.currentRound.totalBetAmount) + BigInt(amount)
-        ).toString();
-
-        if (side === 'dragon') {
-          this.currentRound.dragonBetAmount = (
-            BigInt(this.currentRound.dragonBetAmount) + BigInt(amount)
-          ).toString();
-        } else if (side === 'tiger') {
-          this.currentRound.tigerBetAmount = (
-            BigInt(this.currentRound.tigerBetAmount) + BigInt(amount)
-          ).toString();
-        } else {
-          this.currentRound.tieBetAmount = (
-            BigInt(this.currentRound.tieBetAmount) + BigInt(amount)
-          ).toString();
-        }
-
-        this.emit('dragon_tiger:bet_placed', {
-          roundId: this.currentRound.id,
-          bets: [roundBet],
-          round: this.getPublicRoundState(),
-        });
-      }, delay);
-
-      this.simBetTimeouts.push(t);
-    });
-  }
 }
 
 export const dragonTigerEngine = new DragonTigerEngine();
