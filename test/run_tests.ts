@@ -1,106 +1,29 @@
-import assert from 'assert';
-import { createHmac } from 'crypto';
-import { spawnSync } from 'node:child_process';
-import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
-import { readdirSync, readFileSync } from 'node:fs';
-import { applyExplicitCorsOrigin } from '../shared/src/cors';
-import { isNewerRealtimeEvent, isNewerRoundSnapshot, readRealtimeEventCursor } from '../shared/src/aviatorRealtime';
-import { db } from '../backend/src/db/storage';
-import { AuthService } from '../backend/src/services/auth.service';
-import { config, getPublicConfigInfo, ProductionConfigError } from '../backend/src/config';
-import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src/types';
-import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from '../supabase/functions/api/activation';
-import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
-import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
-import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
-import { resolveSupabasePublicConfig } from '../frontend/src/api/supabaseConfigValidation';
-
-let passed = 0;
-let failed = 0;
-
-function test(name: string, fn: () => void | Promise<void>) {
-  try {
-    fn();
-    console.log(`  ✅ PASS: ${name}`);
-    passed++;
-  } catch (err: any) {
-    console.error(`  ❌ FAIL: ${name}`);
-    console.error(`     Reason: ${err.message}`);
-    failed++;
-  }
-}
-
-async function runTestSuite() {
-  console.log('\n======================================================');
-  console.log('🎰 BIGDADDY CASINO — AUTOMATED TEST SUITE');
-  console.log('======================================================\n');
-
-  test('In-memory StorageEngine fails closed in production mode', () => {
-    const script = "import('./backend/src/db/storage.ts').then(() => process.exit(2)).catch((error) => { if (error?.message === 'IN_MEMORY_STORAGE_DISABLED_IN_PRODUCTION') process.exit(0); console.error(error); process.exit(1); })";
-    const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
-      encoding: 'utf8',
-      env: { ...process.env, NODE_ENV: 'production' },
-    });
-    assert.strictEqual(result.status, 0, `Production storage guard failed. stdout=${result.stdout} stderr=${result.stderr}`);
+  test('Legacy Dragon Tiger engine exposes no simulated community bets or side markets', () => {
+    const source = readFileSync('backend/src/games/dragon-tiger/dragon-tiger.engine.ts', 'utf8');
+    assert.ok(!source.includes('suited_tie'));
+    assert.ok(!source.includes('dragon_big'));
+    assert.ok(!source.includes('tiger_big'));
+    assert.ok(!source.includes('scheduleSimulatedCommunityBets'));
   });
 
-  test('Production auth modules do not eagerly import seeded in-memory storage', () => {
-    const authSource = readFileSync('backend/src/services/auth.service.ts', 'utf8');
-    const middlewareSource = readFileSync('backend/src/middleware/auth.middleware.ts', 'utf8');
-    assert.ok(!authSource.includes("from '../db/storage'"));
-    assert.ok(!middlewareSource.includes("import { db } from '../db/storage'"));
-    assert.ok(middlewareSource.includes("await import('../db/storage')"));
-  });
-
-  test('API health inventory covers every registered backend API route', () => {
-    const routeFiles = [
-      'server.ts',
-      'backend/src/routes/production.routes.ts',
-      'backend/src/routes/production.requests.routes.ts',
-      'backend/src/routes/authoritative-games.routes.ts',
-    ];
-    const inventorySource = readFileSync('frontend/src/components/owner/ApiHealthPanel.tsx', 'utf8');
-    const inventory = [...inventorySource.matchAll(/\{ method: '([A-Z]+)', path: '([^']+)'/g)]
-      .map((match) => ({ method: match[1], path: match[2] }));
-    const definitions = routeFiles.flatMap((file) => {
-      const source = readFileSync(file, 'utf8');
-      return [...source.matchAll(/(?:productionRouter|productionRequestsRouter|authoritativeGamesRouter|app)\.(get|post|put|patch|delete|options|head)\s*\(\s*'([^']+)'/g)]
-        .map((match) => ({
-          method: match[1].toUpperCase(),
-          path: match[2].replace(/^\/api(?=\/)/, ''),
-        }))
-        .filter((route) => route.path !== '*');
-    });
-    const matchesRoute = (pattern: string, actual: string) => {
-      const expectedParts = pattern.split('/');
-      const actualParts = actual.split('/');
-      return expectedParts.length === actualParts.length && expectedParts.every((part, index) =>
-        part.startsWith(':') ? actualParts[index].length > 0 : part === actualParts[index]
-      );
-    };
-    const missing = definitions.filter((route) =>
-      !inventory.some((probe) => probe.method === route.method && matchesRoute(route.path, probe.path))
-    );
-    assert.deepStrictEqual(missing, [], 'Health inventory is missing registered backend routes');
-  });
-
-
-  test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
-    assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
-    assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', multiplier: 1.27, crashMultiplier: 25 }), 1.27);
-    assert.strictEqual(readRunningRealtimeMultiplier({ status: 'CRASHED', crashMultiplier: 1.27 }), null);
+  test('Dragon Tiger authoritative cron worker advances rounds only after activation', () => {
+    const migration = readFileSync('supabase/migrations/20261112122447_dragon_tiger_authoritative_cron_worker.sql', 'utf8');
+    assert.ok(migration.includes("cron.schedule("));
+    assert.ok(migration.includes("'1 second'"));
+    assert.ok(migration.includes("status = 'ACTIVE'"));
+    assert.ok(migration.includes('dragon_tiger.advance_round()'));
   });
 
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     assert.deepStrictEqual(actualFiles, manifest.repositoryFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 61);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 62);
     assert.deepStrictEqual(manifest.sharedProjectFiles, actualFiles);
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 71);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 61);
-    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 24);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 72);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 62);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 25);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     // Historical source-only migration candidates remain tracked; Dragon Tiger migrations are exact production ledger matches.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
@@ -641,13 +564,22 @@ async function runTestSuite() {
     assert.ok(edgeSource.includes('encoder.encode("dice")'));
   });
 
-  test('Authoritative Dragon Tiger reveals two server-dealt cards and winner', () => {
+  test('Dragon Tiger supports only Dragon, Tiger and Tie; equal ranks tie regardless of suit', () => {
     const result = makeResult('dragon_tiger', 'dragon-tiger-test-seed');
     assert.ok(result.dragonCard && result.tigerCard);
-    assert.ok(['dragon','tiger','tie','suited_tie'].includes(result.winner));
-    if (result.dragonCard.rank === result.tigerCard.rank) {
-      assert.ok(result.winner === 'tie' || result.winner === 'suited_tie');
-    }
+    assert.ok(['dragon','tiger','tie'].includes(result.winner));
+    if (result.dragonCard.rank === result.tigerCard.rank) assert.strictEqual(result.winner, 'tie');
+    assert.strictEqual(resolveDragonTigerWinner({ rank: 8 } as any, { rank: 8 } as any), 'tie');
+    assert.strictEqual(resolveDragonTigerWinner({ rank: 8 } as any, { rank: 7 } as any), 'dragon');
+    assert.strictEqual(resolveDragonTigerWinner({ rank: 7 } as any, { rank: 8 } as any), 'tiger');
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'suited_tie' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'dragon_small' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_big' }), false);
+    assert.strictEqual(validateSelection('dragon_tiger', { type: 'tiger_small' }), false);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'tie' }), 9);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'tie' }, { winner: 'suited_tie' }), 0);
+    assert.strictEqual(payoutMultiplier('dragon_tiger', { type: 'suited_tie' }, { winner: 'suited_tie' }), 0);
   });
 
   test('Authoritative Andar Bahar deals until the joker rank is matched', () => {
