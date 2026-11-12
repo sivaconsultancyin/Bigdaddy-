@@ -193,6 +193,9 @@ async function runTestSuite() {
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const declaredFiles = [...(manifest.repositoryFiles as string[])].sort();
+    const actualFiles = spawnSync('git', ['ls-tree', '-r', '--name-only', 'HEAD'], { encoding: 'utf8' }).stdout
+      .split(/\r?\n/).filter((path: string) => path.startsWith('supabase/migrations/') && path.endsWith('.sql'))
+      .map((path: string) => path.slice('supabase/migrations/'.length)).sort();
     const missingFiles = declaredFiles.filter((name: string) => {
       try { readFileSync(`supabase/migrations/${name}`, 'utf8'); return false; }
       catch { return true; }
