@@ -267,7 +267,7 @@ export interface AndarBaharRoundBet {
   roundId: string;
   userId: string;
   username: string;
-  type: string;
+  type: 'dragon' | 'tiger' | 'tie';
   amount: string;
   won?: boolean;
   payout?: string;
@@ -297,7 +297,7 @@ export interface DragonTigerRound {
   bettingEndsAt: number;
   dragonCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number } | null;
   tigerCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number } | null;
-  winner: 'dragon' | 'tiger' | 'tie' | 'suited_tie' | null;
+  winner: 'dragon' | 'tiger' | 'tie' | null;
   totalBetsCount: number;
   totalBetAmount: string;
   dragonBetAmount: string;
@@ -322,7 +322,7 @@ export interface DragonTigerHistoryItem {
   roundNumber: number;
   dragonCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number };
   tigerCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number };
-  winner: 'dragon' | 'tiger' | 'tie' | 'suited_tie';
+  winner: 'dragon' | 'tiger' | 'tie';
   timestamp: string;
 }
 
