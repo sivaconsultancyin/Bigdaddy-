@@ -2,9 +2,9 @@
   "snapshotDate": "2026-11-12",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 74,
+    "sharedAppliedLedger": 75,
     "sharedRepositoryFiles": 65,
-    "sharedExactVersionNameMatches": 27,
+    "sharedExactVersionNameMatches": 28,
     "sharedAppliedOnly": 47,
     "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
@@ -315,6 +315,10 @@
     {
       "version": "20261112125941",
       "name": "dragon_tiger_idempotent_replay_status"
+    },
+    {
+      "version": "20261112130413",
+      "name": "dragon_tiger_realtime_broadcast"
     }
   ],
   "exactMatches": [
@@ -452,6 +456,11 @@
       "version": "20261112125941",
       "name": "dragon_tiger_idempotent_replay_status",
       "file": "20261112125941_dragon_tiger_idempotent_replay_status.sql"
+    },
+    {
+      "version": "20261112130413",
+      "name": "dragon_tiger_realtime_broadcast",
+      "file": "20261112130413_dragon_tiger_realtime_broadcast.sql"
     }
   ],
   "appliedOnly": [
@@ -708,7 +717,8 @@
     "20261112120632_dragon_tiger_authoritative_round_lifecycle.sql",
     "20261112122447_dragon_tiger_authoritative_cron_worker.sql",
     "20261112123252_dragon_tiger_atomic_market_allowlist.sql",
-    "20261112125941_dragon_tiger_idempotent_replay_status.sql"
+    "20261112125941_dragon_tiger_idempotent_replay_status.sql",
+    "20261112130413_dragon_tiger_realtime_broadcast.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -955,6 +965,11 @@
       "version": "20261112125941",
       "name": "dragon_tiger_idempotent_replay_status",
       "file": "20261112125941_dragon_tiger_idempotent_replay_status.sql"
+    },
+    {
+      "version": "20261112130413",
+      "name": "dragon_tiger_realtime_broadcast",
+      "file": "20261112130413_dragon_tiger_realtime_broadcast.sql"
     }
   ],
   "sharedAppliedOnly": [
@@ -1318,7 +1333,8 @@
       "dragonTigerPoolBalance": 1000000,
       "dragonTigerPoolReservedBalance": 0,
       "dragonTigerMaxBet": 100000,
-      "dragonTigerAtomicBetRpcThreeMarketAllowlist": true
+      "dragonTigerAtomicBetRpcThreeMarketAllowlist": true,
+      "dragonTigerRealtimeBroadcastPresent": true
     },
     "pendingReview": [
       {
