@@ -1023,8 +1023,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
                       Tie వచ్చినప్పుడు డ్రాగన్ లేదా టైగర్‌పై పెట్టిన బెట్‌లో 50% వాపస్ వస్తుంది లేదా హౌస్ రూల్ ప్రకారం టై బెట్ మాత్రమే 8:1 పేమెంట్ పొందుతుంది.
                     </p>
                   </div>
-
-                  </div>
                   <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
                     <h5 className="font-bold text-amber-400 mb-0.5">విన్నింగ్ అమౌంట్ ఎప్పుడు జమ అవుతుంది?</h5>
                     <p className="text-zinc-300">
