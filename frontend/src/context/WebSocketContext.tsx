@@ -87,6 +87,7 @@ interface WebSocketContextType {
   dragonTigerRound: DragonTigerRound;
   dragonTigerHistory: DragonTigerHistoryItem[];
   dragonTigerLiveBets: DragonTigerRoundBet[];
+  dragonTigerMyBets: Array<{ id: string; roundId: string; amount: string; type: string; status: string; payoutAmount: string }>;
   // Lucky 10 Dice shared synchronized multiplayer state
   diceRound: DiceRound;
   diceHistory: DiceHistoryItem[];
@@ -198,6 +199,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [dragonTigerHistory, setDragonTigerHistory] = useState<DragonTigerHistoryItem[]>([]);
 
   const [dragonTigerLiveBets, setDragonTigerLiveBets] = useState<DragonTigerRoundBet[]>([]);
+  const [dragonTigerMyBets, setDragonTigerMyBets] = useState<Array<{ id: string; roundId: string; amount: string; type: string; status: string; payoutAmount: string }>>([]);
 
   // Lucky 10 Dice initial synchronized multiplayer state
   const [diceRound, setDiceRound] = useState<DiceRound>({
@@ -609,6 +611,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               winner: h.result?.winner,
             })) as any);
             if (Array.isArray(data.bets)) setDragonTigerLiveBets(data.bets as any);
+            if (Array.isArray(data.myBets)) setDragonTigerMyBets(data.myBets as any);
           } else if (key === 'andarBahar') {
             if (data.round) {
               setAndarBaharRound(data.round as any);
@@ -925,6 +928,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         dragonTigerRound,
         dragonTigerHistory,
         dragonTigerLiveBets,
+        dragonTigerMyBets,
         diceRound,
         diceHistory,
         diceLiveBets,
