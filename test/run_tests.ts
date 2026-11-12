@@ -99,6 +99,17 @@ async function runTestSuite() {
     assert.ok(migration.includes('dragon_tiger.advance_round()'));
   });
 
+  test('Legacy Node backend fails closed for Dragon Tiger; Supabase remains canonical', () => {
+    const server = readFileSync('server.ts', 'utf8');
+    const production = readFileSync('backend/src/routes/production.routes.ts', 'utf8');
+    assert.ok(server.includes("'/api/games/dragon-tiger'"));
+    assert.ok(server.includes("'/api/games/dragon_tiger'"));
+    assert.ok(server.includes("DRAGON_TIGER_SUPABASE_API_ONLY"));
+    assert.ok(production.includes("replace(/-/g, '_')"));
+    assert.ok(production.includes("gameCode === 'dragon_tiger'"));
+    assert.ok(production.includes("DRAGON_TIGER_SUPABASE_API_ONLY"));
+  });
+
   test('Legacy Dragon Tiger engine exposes no simulated community bets or side markets', () => {
     const source = readFileSync('backend/src/games/dragon-tiger/dragon-tiger.engine.ts', 'utf8');
     assert.ok(!source.includes('suited_tie'));

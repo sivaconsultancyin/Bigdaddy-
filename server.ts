@@ -237,6 +237,11 @@ async function startServer() {
       if (!isDatabaseConnected()) return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
       next();
     });
+    // Dragon Tiger is operated exclusively by the canonical Supabase Edge API.
+    // Block the legacy Node state/bet/activation routes to prevent split game engines.
+    app.use(['/api/games/dragon-tiger', '/api/games/dragon_tiger'], (_req, res) =>
+      res.status(410).json({ error: 'DRAGON_TIGER_SUPABASE_API_ONLY' })
+    );
     app.use('/api', productionRouter);
     app.use('/api', productionRequestsRouter);
     app.use('/api', authoritativeGamesRouter);

@@ -360,8 +360,11 @@ productionRouter.post('/auth/bootstrap-owner', async (req, res: Response) => {
 productionRouter.post('/wallet/game-pool', requireDatabaseUser, async (req: AuthReq, res: Response) => {
   const actor = req.authUser!;
   if (actor.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
-  const gameCode = String(req.body?.gameCode ?? 'aviator').trim();
-  if (!['aviator','roulette','dice','dragon_tiger','andar_bahar'].includes(gameCode)) return res.status(400).json({ error: 'UNKNOWN_GAME' });
+  const gameCode = String(req.body?.gameCode ?? 'aviator').trim().replace(/-/g, '_');
+  if (gameCode === 'dragon_tiger') {
+    return res.status(410).json({ error: 'DRAGON_TIGER_SUPABASE_API_ONLY' });
+  }
+  if (!['aviator','roulette','dice','andar_bahar'].includes(gameCode)) return res.status(400).json({ error: 'UNKNOWN_GAME' });
   const amountText = String(req.body?.amount ?? '');
   if (!/^[1-9][0-9]*$/.test(amountText) || !Number.isSafeInteger(Number(amountText))) {
     return res.status(400).json({ error: 'POSITIVE_SAFE_INTEGER_AMOUNT_REQUIRED' });
