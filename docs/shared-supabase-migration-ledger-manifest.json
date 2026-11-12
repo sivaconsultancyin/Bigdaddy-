@@ -1278,7 +1278,15 @@
       "dragonTigerAdvanceRoundPresent": true,
       "dragonTigerSelectionGuardPresent": true,
       "dragonTigerRoundCount": 0,
-      "dragonTigerBetCount": 0
+      "dragonTigerBetCount": 0,
+      "dragonTigerCronWorkerPresent": true,
+      "dragonTigerCronWorkerSchedule": "1 second",
+      "dragonTigerCronWorkerActive": true,
+      "dragonTigerCronWorkerRecentRunsSucceeded": true,
+      "dragonTigerGameStatus": "COMING_SOON",
+      "dragonTigerPoolBalance": 1000000,
+      "dragonTigerPoolReservedBalance": 0,
+      "dragonTigerMaxBet": 100000
     },
     "pendingReview": [
       {
@@ -1292,7 +1300,7 @@
         "reason": "Read-only grant inspection showed browser-role EXECUTE already revoked; source is useful for reproducibility but does not require production DDL."
       }
     ],
-    "safety": "Two Dragon Tiger migrations are applied in the shared production project and recorded here. They add a three-market selection guard and authoritative round settlement; no production Dragon Tiger rounds or bets were created, and no wallet balances or transaction history were changed.",
+    "safety": "Dragon Tiger has a production three-market guard, authoritative round lifecycle, and an active one-second server-side cron worker. The worker intentionally does not advance rounds while platform.games.status is COMING_SOON. No production Dragon Tiger rounds or bets were created, and no wallet balances or transaction history were changed.",
     "poolArchitecture": {
       "observedPlatformGames": 5,
       "distinctPlatformGamePoolWallets": 5,
