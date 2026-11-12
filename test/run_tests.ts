@@ -190,6 +190,7 @@ async function runTestSuite() {
     assert.ok(!migration.includes('tiger_big'));
   });
 
+  // Compare the checked-out source tree to the audited Supabase migration manifest.
   test('Shared migration directory matches the reviewed ledger snapshot manifest', () => {
     const manifest = JSON.parse(readFileSync('docs/shared-supabase-migration-ledger-manifest.json', 'utf8'));
     const declaredFiles = [...(manifest.repositoryFiles as string[])].sort();
