@@ -290,6 +290,13 @@ async function handle(req: Request) {
     }
     // Dice lifecycle is advanced by the shared authoritative worker and on state reads
     // as a recovery path, so a missed worker tick cannot strand a round.
+    if (code === "dragon_tiger") {
+      const { error: lifecycleError } = await db.schema("dragon_tiger").rpc("advance_round");
+      if (lifecycleError) {
+        console.error("Dragon Tiger lifecycle advance failed:", lifecycleError.code ?? "unknown");
+        return response({ error: "DRAGON_TIGER_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
     if (code === "dice") {
       const { error: lifecycleError } = await db.schema("dice").rpc("advance_round");
       if (lifecycleError) {
@@ -321,7 +328,7 @@ async function handle(req: Request) {
     const row = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
     // Never expose a pre-settlement outcome, even if the database has already
     // persisted it internally to drive the animation and atomic settlement.
-    const result = row.status === "SETTLED" ? row.result : null;
+    const result = row.status === "SETTLED" || (code === "dragon_tiger" && row.status === "RUNNING") ? row.result : null;
     const current: Record<string, any> = {
       id: row.id, roundNumber: Number(row.round_number),
       status: row.status === "SETTLED" ? "RESULT" : row.status === "RUNNING" ? (code === "roulette" ? "SPINNING" : code === "dice" ? "ROLLING" : code === "dragon_tiger" ? "REVEALING" : "DEALING") : row.status,
@@ -331,7 +338,14 @@ async function handle(req: Request) {
     };
     if (code === "roulette") { current.spinEndsAt = row.status === "RUNNING" && row.state?.spinStartedAt ? new Date(row.state.spinStartedAt).getTime() + 1500 : current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
     if (code === "dice") { current.rolledNumber = row.status === "SETTLED" ? result?.number ?? null : null; current.numberBetsAmount = {}; }
-    if (code === "dragon_tiger") { current.dragonCard = result?.dragonCard ?? null; current.tigerCard = result?.tigerCard ?? null; current.winner = result?.winner ?? null; current.dragonBetAmount = "0"; current.tigerBetAmount = "0"; current.tieBetAmount = "0"; }
+    if (code === "dragon_tiger") {
+      current.dragonCard = result?.dragonCard ?? null;
+      current.tigerCard = result?.tigerCard ?? null;
+      current.winner = row.status === "SETTLED" ? result?.winner ?? null : null;
+      current.dragonBetAmount = "0";
+      current.tigerBetAmount = "0";
+      current.tieBetAmount = "0";
+    }
     if (code === "andar_bahar") {
       // Reveal only the cards that should have appeared by this point in the
       // 4.5-second deal. The winning side/card stay private until settlement.
@@ -354,7 +368,7 @@ async function handle(req: Request) {
     const totals = new Map<string,bigint>();
     for (const b of bets ?? []) { const type = String(b.selection?.type ?? ""); totals.set(type,(totals.get(type) ?? 0n)+BigInt(String(b.bet_amount))); }
     if (code === "dice") current.numberBetsAmount = Object.fromEntries([...totals].map(([k,v]) => [k,v.toString()]));
-    if (code === "dragon_tiger") { current.dragonBetAmount=String(totals.get("dragon")??0n); current.tigerBetAmount=String(totals.get("tiger")??0n); current.tieBetAmount=String((totals.get("tie")??0n)+(totals.get("suited_tie")??0n)); }
+    if (code === "dragon_tiger") { current.dragonBetAmount=String(totals.get("dragon")??0n); current.tigerBetAmount=String(totals.get("tiger")??0n); current.tieBetAmount=String(totals.get("tie")??0n); }
     if (code === "andar_bahar") { current.andarBetAmount=String(totals.get("andar")??0n); current.baharBetAmount=String(totals.get("bahar")??0n); }
     const history = rounds.filter(r => r.status === "SETTLED").map(r => ({ roundNumber:Number(r.round_number), result:r.result, timestamp:r.settled_at }));
     return response({ gameCode: code, status: gameConfig.status, round: current, history, bets: mappedBets, allBets: mappedBets }, 200, origin);
@@ -570,7 +584,7 @@ async function handle(req: Request) {
       : activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
     // Roulette now has a persisted PostgreSQL round lifecycle and atomic settlement.
     // Keep games without a verified production engine blocked.
-    if (code !== "aviator" && code !== "roulette" && code !== "dice" && code !== "andar_bahar") {
+    if (code !== "aviator" && code !== "roulette" && code !== "dice" && code !== "andar_bahar" && code !== "dragon_tiger") {
       return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
     }
     const { data: game, error: gameError } = await db.schema("platform").from("games")
@@ -593,7 +607,7 @@ async function handle(req: Request) {
       mappedWalletId: String(gamePool?.wallet_id ?? ""), walletType: String(pool?.wallet_type ?? ""),
       walletGameCode: String(pool?.game_code ?? ""), balance: String(pool?.balance ?? ""),
       reservedBalance: String(pool?.reserved_balance ?? ""), runtimeRoundStatus,
-      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : code === "andar_bahar" ? (BigInt(String(game.max_bet ?? "0")) * 2n).toString() : undefined,
+      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : code === "andar_bahar" ? (BigInt(String(game.max_bet ?? "0")) * 2n).toString() : code === "dragon_tiger" ? (BigInt(String(game.max_bet ?? "0")) * 9n).toString() : undefined,
     });
     if (!readiness.ok) return response({ error: readiness.error }, readiness.status, origin);
     const poolBalance = String(pool?.balance ?? "0");
@@ -612,6 +626,18 @@ async function handle(req: Request) {
         }).eq("code", code);
         console.error("Dice activation runtime check failed:", runtimeError?.code ?? "unavailable");
         return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
+      }
+    }
+    // Smoke-test Dragon Tiger's persisted round lifecycle before confirming activation.
+    if (code === "dragon_tiger") {
+      const { data: runtimeState, error: runtimeError } = await db.schema("dragon_tiger").rpc("advance_round");
+      if (runtimeError || !runtimeState || runtimeState.gameStateUnavailable || !runtimeState.round?.id ||
+          !["BETTING", "RUNNING"].includes(String(runtimeState.round.status))) {
+        await db.schema("platform").from("games").update({
+          status: game.status, updated_at: new Date().toISOString(),
+        }).eq("code", code);
+        console.error("Dragon Tiger activation runtime check failed:", runtimeError?.code ?? "unavailable");
+        return response({ error: "DRAGON_TIGER_RUNTIME_UNAVAILABLE" }, 503, origin);
       }
     }
     // Smoke-test Andar Bahar's durable lifecycle before confirming activation.
