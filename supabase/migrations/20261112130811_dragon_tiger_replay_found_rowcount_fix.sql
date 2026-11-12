@@ -24,6 +24,7 @@ DECLARE
   v_existing_count integer := 0;
   v_expected_count integer;
   v_existing record;
+  v_existing_rows integer := 0;
   v_replay_round_id uuid;
   v_placed jsonb := '[]'::jsonb;
   v_bet_id uuid;
