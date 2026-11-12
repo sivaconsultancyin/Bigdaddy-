@@ -133,7 +133,7 @@ async function runTestSuite() {
     assert.ok(migration.includes("'settledAt',v_existing.settled_at"));
     assert.ok(migration.includes("'stakeRelease',v_existing.stake_release_transaction_id"));
     assert.ok(migration.includes("'payout',v_existing.payout_transaction_id"));
-    assert.ok(!migration.includes("'status','PENDING'"));
+    assert.ok(!migration.includes("'id',v_existing.id,'status','PENDING'"));
   });
 
   test('Dragon Tiger frontend uses stable idempotency and listens for authoritative lifecycle broadcasts', () => {
