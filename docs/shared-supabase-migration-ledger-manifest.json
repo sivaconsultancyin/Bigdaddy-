@@ -1,12 +1,12 @@
 {
-  "snapshotDate": "2026-11-12",
+  "snapshotDate": "2026-11-13",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 78,
+    "sharedAppliedLedger": 79,
     "sharedRepositoryFiles": 69,
-    "sharedExactVersionNameMatches": 31,
+    "sharedExactVersionNameMatches": 32,
     "sharedAppliedOnly": 47,
-    "sharedFileOnly": 38,
+    "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
     "isolatedAppliedLedger": 0,
     "isolatedRepositoryFiles": 0,
@@ -331,6 +331,10 @@
     {
       "version": "20261113181312",
       "name": "aviator_hide_running_crash_target"
+    },
+    {
+      "version": "20261113185354",
+      "name": "aviator_bet_lookup_scoped_to_game"
     }
   ],
   "exactMatches": [
@@ -488,6 +492,11 @@
       "version": "20261113181312",
       "name": "aviator_hide_running_crash_target",
       "file": "20261113181312_aviator_hide_running_crash_target.sql"
+    },
+    {
+      "version": "20261113185354",
+      "name": "aviator_bet_lookup_scoped_to_game",
+      "file": "20261113185354_aviator_bet_lookup_scoped_to_game.sql"
     }
   ],
   "appliedOnly": [
@@ -749,7 +758,7 @@
     "20261112130720_dragon_tiger_replay_record_type_fix.sql",
     "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
     "20261113181312_aviator_hide_running_crash_target.sql",
-    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
+    "20261113185354_aviator_bet_lookup_scoped_to_game.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -788,8 +797,7 @@
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
-    "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
+    "20261110130100_dice_authoritative_round_lifecycle.sql"
   ],
   "duplicateVersionPrefixes": [
     "20261021120000",
@@ -865,7 +873,7 @@
     "20261112130720_dragon_tiger_replay_record_type_fix.sql",
     "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
     "20261113181312_aviator_hide_running_crash_target.sql",
-    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
+    "20261113185354_aviator_bet_lookup_scoped_to_game.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -1252,8 +1260,7 @@
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
-    "20261110130100_dice_authoritative_round_lifecycle.sql",
-    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
+    "20261110130100_dice_authoritative_round_lifecycle.sql"
   ],
   "legacyIsolatedSnapshot": {
     "appliedLedger": [
