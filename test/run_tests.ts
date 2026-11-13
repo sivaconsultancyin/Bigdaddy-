@@ -434,6 +434,13 @@ async function runTestSuite() {
     assert.ok(source.includes('}, [roundState.id, roundState.status]);'));
   });
 
+  test('Aviator personal bet state is scoped to the authoritative round ID', () => {
+    const source = readFileSync('frontend/src/games/aviator/AviatorGame.tsx', 'utf8');
+    assert.ok(source.includes('current.roundId === roundState.id'));
+    assert.ok(source.includes('}, [roundState.id]);'));
+    assert.ok(!source.includes('}, [roundState.status]);'));
+  });
+
   test('Aviator state API logs timing and preserves authoritative crash/cashout logic', () => {
     const apiSource = readFileSync('supabase/functions/api/index.ts', 'utf8');
     const aviatorSource = readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8');
