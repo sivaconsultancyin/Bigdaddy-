@@ -215,14 +215,14 @@ async function runTestSuite() {
     assert.deepStrictEqual(missingFiles, []);
     assert.deepStrictEqual(manifest.sharedProjectFiles, declaredFiles);
     assert.strictEqual(declaredFiles.length, manifest.counts.totalSupabaseMigrationFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 67);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 68);
     // Directory enumeration can be incomplete in GitHub's synthetic PR merge checkout.
     // Every manifest entry is already checked with readFileSync above; reject only unmanifested SQL files here.
     assert.ok(actualFiles.every((name: string) => declaredFiles.includes(name)));
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 77);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 67);
-    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 30);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 78);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 68);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 31);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     // Historical source-only migration candidates remain tracked; Dragon Tiger migrations are exact production ledger matches.
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
