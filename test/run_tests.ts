@@ -441,6 +441,13 @@ async function runTestSuite() {
     assert.ok(!source.includes('}, [roundState.status]);'));
   });
 
+  test('Aviator bet round lookup is scoped to the Aviator game code', () => {
+    const migration = readFileSync('supabase/migrations/20261114090000_aviator_bet_lookup_scoped_to_game.sql', 'utf8');
+    assert.ok(migration.includes("WHERE gr.game_code = 'aviator'"));
+    assert.ok(migration.includes("AND gr.status = 'WAITING'"));
+    assert.ok(migration.includes('place_crash_bet_atomic'));
+  });
+
   test('Aviator state API logs timing and preserves authoritative crash/cashout logic', () => {
     const apiSource = readFileSync('supabase/functions/api/index.ts', 'utf8');
     const aviatorSource = readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8');
