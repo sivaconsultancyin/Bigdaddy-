@@ -220,7 +220,7 @@ async function runTestSuite() {
     // Every manifest entry is already checked with readFileSync above; reject only unmanifested SQL files here.
     assert.ok(actualFiles.every((name: string) => declaredFiles.includes(name)));
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 78);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 79);
     assert.strictEqual(manifest.counts.sharedRepositoryFiles, 69);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 31);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
