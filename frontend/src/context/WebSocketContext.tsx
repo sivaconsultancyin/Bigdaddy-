@@ -280,10 +280,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         lastFallbackCountAtRef.current = now;
         setPollingFallbackCount((count) => count + 1);
       }
-      // Realtime is a fast path, not a substitute for polling. Poll every second
-      // outside RUNNING so WAITING -> RUNNING is detected even if a broadcast is lost.
-      // Keep the 200ms authoritative polling cadence while RUNNING.
-      const intervalMs = running ? 200 : 1000;
+      // Realtime is primary while healthy. Keep a 1s safety poll in RUNNING,
+      // and tighten to 200ms only when the subscription is disconnected or stale.
+      // Outside RUNNING, poll every second to detect WAITING -> RUNNING transitions.
+      const intervalMs = running && realtimeStale ? 200 : 1000;
       // Measure from request start, not request completion, while never overlapping
       // requests. If the API is slower than the target cadence, poll again immediately.
       const delay = Math.max(0, intervalMs - (Date.now() - pollStartedAt));
