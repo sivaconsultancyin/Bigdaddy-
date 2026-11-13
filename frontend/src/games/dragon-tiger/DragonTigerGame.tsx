@@ -50,6 +50,9 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     dragonTigerMyBets,
   } = useWebSocket();
 
+  const hasAuthoritativeRound = Boolean(dragonTigerRound.id);
+  const canPlaceBets = hasAuthoritativeRound && dragonTigerRound.status === 'BETTING';
+
   // Audio & Modals
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
@@ -327,8 +330,6 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     }
   };
 
-  const hasAuthoritativeRound = Boolean(dragonTigerRound.id);
-  const canPlaceBets = hasAuthoritativeRound && dragonTigerRound.status === 'BETTING';
   const totalMyBetAmount = Object.values(myBets).reduce((acc, v) => acc + v, 0);
 
   // Roadmap Statistics calculation
