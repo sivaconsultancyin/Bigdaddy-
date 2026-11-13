@@ -227,6 +227,11 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
 
   // Place a bet on one of the three supported markets
   const handlePlaceBet = async (side: string) => {
+    if (!hasAuthoritativeRound) {
+      setErrorMessage('Waiting for an authoritative server round. Betting is disabled.');
+      scheduleTimeout(() => setErrorMessage(null), 2500);
+      return;
+    }
     if (dragonTigerRound.status !== 'BETTING') {
       setErrorMessage('Betting is closed for this round. Please wait for next round.');
       scheduleTimeout(() => setErrorMessage(null), 2500);
@@ -260,7 +265,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
 
   // Double current bets
   const handleDoubleBets = async () => {
-    if (dragonTigerRound.status !== 'BETTING' || submittingBetRef.current || !user?.id) return;
+    if (!canPlaceBets || submittingBetRef.current || !user?.id) return;
     const currentKeys = Object.keys(myBets).filter((k) => myBets[k] > 0);
     if (currentKeys.length === 0) {
       setErrorMessage('No bets to double.');
@@ -322,6 +327,8 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
     }
   };
 
+  const hasAuthoritativeRound = Boolean(dragonTigerRound.id);
+  const canPlaceBets = hasAuthoritativeRound && dragonTigerRound.status === 'BETTING';
   const totalMyBetAmount = Object.values(myBets).reduce((acc, v) => acc + v, 0);
 
   // Roadmap Statistics calculation
@@ -362,9 +369,9 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
                 <span className="font-extrabold text-sm tracking-wide text-amber-300 font-serif">
                   Dragon Tiger Live
                 </span>
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  LIVE
+                <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold ${hasAuthoritativeRound ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-amber-500/10 text-amber-300 border-amber-500/30'}`}>
+                  {hasAuthoritativeRound && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                  {hasAuthoritativeRound ? 'LIVE' : 'WAITING'}
                 </span>
               </div>
               <span className="text-[10px] text-zinc-400 font-mono">
@@ -407,7 +414,10 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           {/* Status Label */}
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider">
-              {dragonTigerRound.status === 'BETTING' && (
+              {!hasAuthoritativeRound && (
+                <span className="flex items-center gap-1.5 text-amber-300 font-extrabold">WAITING FOR SERVER ROUND</span>
+              )}
+              {hasAuthoritativeRound && dragonTigerRound.status === 'BETTING' && (
                 <span className="flex items-center gap-1.5 text-emerald-400 font-extrabold">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                   PLACE YOUR BETS
@@ -432,7 +442,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
 
           {/* Compact Countdown / Timer */}
           <div className="flex items-center gap-2">
-            {dragonTigerRound.status === 'BETTING' ? (
+            {canPlaceBets ? (
               <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
                 <span className="text-[10px] text-zinc-400 uppercase font-semibold">Time:</span>
                 <span
@@ -445,7 +455,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
               </div>
             ) : (
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 border border-zinc-700">
-                Next round soon
+                {hasAuthoritativeRound ? 'Next round soon' : 'Waiting for server'}
               </span>
             )}
 
@@ -736,7 +746,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           {/* DRAGON SPOT */}
           <button
             onClick={() => handlePlaceBet('dragon')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
+            disabled={!canPlaceBets || isSubmittingBet}
             className={`col-span-1 rounded-xl p-2 border flex flex-col items-center justify-between transition-all duration-200 active:scale-95 relative overflow-hidden ${
               (myBets['dragon'] || 0) > 0
                 ? 'bg-red-950/80 border-red-500 ring-2 ring-red-500/50 shadow-lg'
