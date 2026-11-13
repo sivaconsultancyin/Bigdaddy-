@@ -3,10 +3,10 @@
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
     "sharedAppliedLedger": 78,
-    "sharedRepositoryFiles": 68,
+    "sharedRepositoryFiles": 69,
     "sharedExactVersionNameMatches": 31,
     "sharedAppliedOnly": 47,
-    "sharedFileOnly": 37,
+    "sharedFileOnly": 38,
     "sharedDuplicateVersionPrefixes": 2,
     "isolatedAppliedLedger": 0,
     "isolatedRepositoryFiles": 0,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 68,
+    "totalSupabaseMigrationFiles": 69,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -748,7 +748,8 @@
     "20261112130413_dragon_tiger_realtime_broadcast.sql",
     "20261112130720_dragon_tiger_replay_record_type_fix.sql",
     "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
-    "20261113181312_aviator_hide_running_crash_target.sql"
+    "20261113181312_aviator_hide_running_crash_target.sql",
+    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -787,7 +788,8 @@
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
-    "20261110130100_dice_authoritative_round_lifecycle.sql"
+    "20261110130100_dice_authoritative_round_lifecycle.sql",
+    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
   ],
   "duplicateVersionPrefixes": [
     "20261021120000",
@@ -862,7 +864,8 @@
     "20261112130413_dragon_tiger_realtime_broadcast.sql",
     "20261112130720_dragon_tiger_replay_record_type_fix.sql",
     "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
-    "20261113181312_aviator_hide_running_crash_target.sql"
+    "20261113181312_aviator_hide_running_crash_target.sql",
+    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -1249,7 +1252,8 @@
     "20261109090000_aviator_realtime_and_recovery_hardening.sql",
     "20261110120000_aviator_realtime_event_sequence.sql",
     "20261110130000_harden_rls_auto_enable_grants.sql",
-    "20261110130100_dice_authoritative_round_lifecycle.sql"
+    "20261110130100_dice_authoritative_round_lifecycle.sql",
+    "20261114090000_aviator_bet_lookup_scoped_to_game.sql"
   ],
   "legacyIsolatedSnapshot": {
     "appliedLedger": [
