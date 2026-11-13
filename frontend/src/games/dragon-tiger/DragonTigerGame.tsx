@@ -297,7 +297,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
 
   // Rebet previous round bets
   const handleRebet = async () => {
-    if (dragonTigerRound.status !== 'BETTING' || submittingBetRef.current || !user?.id) return;
+    if (!canPlaceBets || submittingBetRef.current || !user?.id) return;
     const rebetKeys = Object.keys(lastRoundBets).filter((k) => lastRoundBets[k] > 0);
     if (rebetKeys.length === 0) {
       setErrorMessage('No previous round bets found.');
@@ -751,7 +751,7 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
               (myBets['dragon'] || 0) > 0
                 ? 'bg-red-950/80 border-red-500 ring-2 ring-red-500/50 shadow-lg'
                 : 'bg-zinc-900/90 hover:bg-zinc-800/90 border-red-900/40 hover:border-red-500/60'
-            } ${dragonTigerRound.status !== 'BETTING' ? 'opacity-70 cursor-not-allowed' : ''}`}
+            } ${!canPlaceBets ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             <div className="flex items-center gap-1">
               <Flame className="w-3.5 h-3.5 text-red-500" />
@@ -770,12 +770,12 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           {/* TIE SPOT */}
           <button
             onClick={() => handlePlaceBet('tie')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
+            disabled={!canPlaceBets || isSubmittingBet}
             className={`col-span-1 rounded-xl p-2 border flex flex-col items-center justify-between transition-all duration-200 active:scale-95 relative overflow-hidden ${
               (myBets['tie'] || 0) > 0
                 ? 'bg-emerald-950/80 border-emerald-500 ring-2 ring-emerald-500/50 shadow-lg'
                 : 'bg-zinc-900/90 hover:bg-zinc-800/90 border-emerald-900/40 hover:border-emerald-500/60'
-            } ${dragonTigerRound.status !== 'BETTING' ? 'opacity-70 cursor-not-allowed' : ''}`}
+            } ${!canPlaceBets ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             <span className="text-xs font-black text-emerald-400 font-serif">TIE</span>
             <span className="text-[9px] text-emerald-300 font-mono font-bold">9 : 1</span>
@@ -791,12 +791,12 @@ export const DragonTigerGame: React.FC<{ onBackToLobby: () => void }> = ({ onBac
           {/* TIGER SPOT */}
           <button
             onClick={() => handlePlaceBet('tiger')}
-            disabled={dragonTigerRound.status !== 'BETTING' || isSubmittingBet}
+            disabled={!canPlaceBets || isSubmittingBet}
             className={`col-span-1 rounded-xl p-2 border flex flex-col items-center justify-between transition-all duration-200 active:scale-95 relative overflow-hidden ${
               (myBets['tiger'] || 0) > 0
                 ? 'bg-amber-950/80 border-amber-500 ring-2 ring-amber-500/50 shadow-lg'
                 : 'bg-zinc-900/90 hover:bg-zinc-800/90 border-amber-900/40 hover:border-amber-500/60'
-            } ${dragonTigerRound.status !== 'BETTING' ? 'opacity-70 cursor-not-allowed' : ''}`}
+            } ${!canPlaceBets ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             <div className="flex items-center gap-1">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
