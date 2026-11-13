@@ -215,17 +215,17 @@ async function runTestSuite() {
     assert.deepStrictEqual(missingFiles, []);
     assert.deepStrictEqual(manifest.sharedProjectFiles, declaredFiles);
     assert.strictEqual(declaredFiles.length, manifest.counts.totalSupabaseMigrationFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 68);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 69);
     // Directory enumeration can be incomplete in GitHub's synthetic PR merge checkout.
     // Every manifest entry is already checked with readFileSync above; reject only unmanifested SQL files here.
     assert.ok(actualFiles.every((name: string) => declaredFiles.includes(name)));
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
     assert.strictEqual(manifest.counts.sharedAppliedLedger, 78);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 68);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 69);
     assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 31);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     // Historical source-only migration candidates remain tracked; Dragon Tiger migrations are exact production ledger matches.
-    assert.strictEqual(manifest.counts.sharedFileOnly, 37);
+    assert.strictEqual(manifest.counts.sharedFileOnly, 38);
     const exactAppliedFiles = new Set(
       (manifest.appliedLedger as Array<{ version: string; name: string }>).map(
         (entry) => `${entry.version}_${entry.name}.sql`,
@@ -239,7 +239,7 @@ async function runTestSuite() {
       appliedNames.has(name.replace(/^\d{14}_/, '').replace(/\.sql$/, '')),
     );
     assert.strictEqual(sameNameDifferentVersion.length, 30);
-    assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 7);
+    assert.strictEqual(sourceOnlyFiles.length - sameNameDifferentVersion.length, 8);
     assert.ok(!sourceOnlyFiles.includes('20261025110000_shared_aviator_wallet_operations.sql'));
     assert.strictEqual(manifest.counts.legacyIsolatedAppliedLedgerSnapshot, 7);
     assert.strictEqual(manifest.counts.legacyArchivedMigrationFiles, 13);
