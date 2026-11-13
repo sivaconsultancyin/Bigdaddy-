@@ -69,13 +69,13 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onBackToLobby }) => {
     });
   }, [roundState.status, roundState.id, bet1, bet2]);
 
-  // Reset active bets when round changes to WAITING
+  // A bet belongs to exactly one round. Clear stale local bet state whenever the
+  // authoritative round ID changes, even if a fast transition skips an observed
+  // terminal status or the status value is unchanged between snapshots.
   useEffect(() => {
-    if (roundState.status === 'WAITING') {
-      setBet1(null);
-      setBet2(null);
-    }
-  }, [roundState.status]);
+    setBet1((current) => current && current.roundId === roundState.id ? current : null);
+    setBet2((current) => current && current.roundId === roundState.id ? current : null);
+  }, [roundState.id]);
 
   const handleBetPlaced = (bet: AviatorBet, panel: 1 | 2) => {
     if (panel === 1) setBet1(bet);
