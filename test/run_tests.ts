@@ -392,11 +392,20 @@ async function runTestSuite() {
     assert.ok(source.includes("setAuthoritativeMultiplier(1)"));
   });
 
-  test('Aviator polling keeps 200ms RUNNING cadence, 1s fallback, and no overlapping requests', () => {
+  test('Aviator polling prefers healthy Realtime and tightens fallback when stale', () => {
     const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
-    assert.ok(source.includes("const intervalMs = running ? 200 : 1000"));
-    assert.ok(source.includes("if (inFlight) {\n        rerunRequested = true;\n        return;"));
+    assert.ok(source.includes("const intervalMs = running && realtimeStale ? 200 : 1000"));
+    assert.ok(source.includes("if (inFlight) {\\n        rerunRequested = true;\\n        return;"));
     assert.ok(source.includes("scheduleNextPoll(pollStartedAt)"));
+    assert.ok(source.includes("now - lastEventAt > 1000"));
+  });
+
+  test('Aviator worker caches Dice catalog status instead of querying every engine tick', () => {
+    const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
+    assert.ok(source.includes('DICE_CONFIG_CACHE_TTL_MS = 15_000'));
+    assert.ok(source.includes('DICE_CONFIG_RETRY_MS = 5_000'));
+    assert.ok(source.includes('if (Date.now() >= nextDiceStatusRefreshAt)'));
+    assert.ok(source.includes('if (diceStatusCache === "ACTIVE")'));
   });
 
   test('Aviator state polling uses the canonical shared Supabase API only', () => {
