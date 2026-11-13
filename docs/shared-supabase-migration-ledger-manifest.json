@@ -2,9 +2,9 @@
   "snapshotDate": "2026-11-12",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 77,
-    "sharedRepositoryFiles": 67,
-    "sharedExactVersionNameMatches": 30,
+    "sharedAppliedLedger": 78,
+    "sharedRepositoryFiles": 68,
+    "sharedExactVersionNameMatches": 31,
     "sharedAppliedOnly": 47,
     "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 67,
+    "totalSupabaseMigrationFiles": 68,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -327,6 +327,10 @@
     {
       "version": "20261112130811",
       "name": "dragon_tiger_replay_found_rowcount_fix"
+    },
+    {
+      "version": "20261113181312",
+      "name": "aviator_hide_running_crash_target"
     }
   ],
   "exactMatches": [
@@ -479,6 +483,11 @@
       "version": "20261112130811",
       "name": "dragon_tiger_replay_found_rowcount_fix",
       "file": "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
+    },
+    {
+      "version": "20261113181312",
+      "name": "aviator_hide_running_crash_target",
+      "file": "20261113181312_aviator_hide_running_crash_target.sql"
     }
   ],
   "appliedOnly": [
@@ -738,7 +747,8 @@
     "20261112125941_dragon_tiger_idempotent_replay_status.sql",
     "20261112130413_dragon_tiger_realtime_broadcast.sql",
     "20261112130720_dragon_tiger_replay_record_type_fix.sql",
-    "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
+    "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
+    "20261113181312_aviator_hide_running_crash_target.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -851,7 +861,8 @@
     "20261112125941_dragon_tiger_idempotent_replay_status.sql",
     "20261112130413_dragon_tiger_realtime_broadcast.sql",
     "20261112130720_dragon_tiger_replay_record_type_fix.sql",
-    "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
+    "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
+    "20261113181312_aviator_hide_running_crash_target.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
@@ -1004,6 +1015,11 @@
       "version": "20261112130811",
       "name": "dragon_tiger_replay_found_rowcount_fix",
       "file": "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql"
+    },
+    {
+      "version": "20261113181312",
+      "name": "aviator_hide_running_crash_target",
+      "file": "20261113181312_aviator_hide_running_crash_target.sql"
     }
   ],
   "sharedAppliedOnly": [
