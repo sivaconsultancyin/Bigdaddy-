@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, LogOut, UserRound, Wallet, Clock3, ShieldCheck, RefreshCw } from 'lucide-react';
+import { ArrowLeft, LogOut, UserRound, Wallet, Clock3, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiClient } from '../api/client';
 import { LedgerEntry } from '../../../shared/src/types';
