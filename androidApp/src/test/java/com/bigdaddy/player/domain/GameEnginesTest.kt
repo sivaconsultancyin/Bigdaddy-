@@ -105,6 +105,43 @@ class GameEnginesTest {
         assertTrue(higherPair > lowerPairWithAceKicker)
     }
 
+    @Test fun dragonTigerRejectsInvalidCardRanks() {
+        val engine = DragonTigerEngine()
+        listOf(1, 15, 0).forEach { rank ->
+            try {
+                engine.cardStrength(rank)
+                throw AssertionError("Expected invalid Dragon Tiger rank to be rejected")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message!!.contains("between 2 and 14"))
+            }
+        }
+    }
+
+    @Test fun andarBaharRejectsDuplicateCardsInDeck() {
+        val engine = AndarBaharEngine()
+        try {
+            engine.dealSequence(listOf(
+                PlayingCard(8, 'S'),
+                PlayingCard(2, 'H'),
+                PlayingCard(2, 'H'),
+                PlayingCard(8, 'C')
+            ))
+            throw AssertionError("Expected duplicate Andar Bahar cards to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("duplicate"))
+        }
+    }
+
+    @Test fun teenPattiRejectsRanksOutsideStandardDeck() {
+        val engine = TeenPattiEngine()
+        try {
+            engine.evaluate(listOf(PlayingCard(1, 'S'), PlayingCard(8, 'H'), PlayingCard(9, 'D')))
+            throw AssertionError("Expected invalid Teen Patti rank to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("invalid card"))
+        }
+    }
+
     @Test fun dragonTigerAceIsLowestAndEqualRanksTie() {
         val engine = DragonTigerEngine()
         assertEquals("TIGER", engine.winner(14, 2))
