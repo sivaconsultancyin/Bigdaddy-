@@ -88,3 +88,14 @@ The separate Kotlin/Compose module now contains:
 - Tightened the native Lucky 10 payout helper to reject results outside the only legal result domain (1..10) before checking parity or range markets. This prevents invalid values such as 12 from being treated as an even win.
 - Added deterministic tests for Lucky 10 invalid-result boundaries, European Roulette zero behavior across outside markets, and invalid wheel numbers.
 - These are local engine-helper tests only. They do not enable wagering, create wallet transactions, or replace the legacy server's cryptographic outcome generation.
+
+
+## Latest CI verification — current PR head (2026-11-14)
+
+Verified against commit `b1fda17687156ffe16b9c5875a151a03bc634ed5` on PR #215:
+
+- Native Android CI run [43590073975](https://github.com/sivaconsultancyin/Bigdaddy-/actions/runs/43590073975): passed. `assembleDebug`, `testDebugUnitTest`, and debug APK artifact upload all completed successfully.
+- BigDaddy Casino CI run [43590074059](https://github.com/sivaconsultancyin/Bigdaddy-/actions/runs/43590074059): passed. Aviator recovery/Realtime fixtures, monotonic multiplier sequence, bounded tick retry, single-worker lease/heartbeat, Edge Function type-checks, schema cutover/migration fixtures, wallet idempotency/concurrency/rollback tests, frontend lint/type-check/build and financial/authorization tests all completed successfully.
+- Native debug APK artifact: `bigdaddy-native-debug-apk`, 12,680,182 bytes, SHA-256 `8d590e04b83fb8741527ba48022f903b13fa8a7c306eab00962b9bc4c75fc12f`. Artifact is available from the Android Actions run and is not a signed production release.
+
+CI success verifies repository automation and isolated fixtures only. It does not prove physical-device E2E, production Supabase migration, complete native game parity, real-money/virtual-wallet settlement, signed release, or staged cutover. PR #215 remains Draft and must not be merged as a production migration until those gates are completed. No production Supabase data or wallet balances were changed by this CI verification.
