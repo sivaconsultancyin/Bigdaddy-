@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
@@ -67,35 +68,56 @@ internal fun NativeAviatorScreen(
                 )
                 Box(Modifier.fillMaxWidth().height(190.dp)) {
                     Canvas(Modifier.fillMaxWidth().height(190.dp)) {
-                        val left = 12f
-                        val right = size.width - 12f
-                        val top = 12f
-                        val bottom = size.height - 12f
+                        val left = 18f
+                        val right = size.width - 18f
+                        val top = 14f
+                        val bottom = size.height - 14f
                         val chartWidth = right - left
                         val chartHeight = bottom - top
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                listOf(Color(0xFF111D38), Color(0xFF090D1B), Color(0xFF170F28))
+                            )
+                        )
+                        // Subtle stars and drifting cloud bands are tied to the same round clock.
+                        for (i in 0..18) {
+                            val x = ((i * 83f + elapsedMillis * (0.006f + (i % 3) * 0.002f)) % size.width)
+                            val y = 12f + (i * 37f % (size.height - 24f))
+                            drawCircle(Color.White.copy(alpha = 0.25f), radius = 1.4f, center = Offset(x, y))
+                        }
+                        for (i in 0..2) {
+                            val cloudX = ((i * 170f + elapsedMillis * 0.018f) % (size.width + 100f)) - 50f
+                            val cloudY = 34f + i * 42f
+                            val cloud = Color(0xFF9CB5D8).copy(alpha = 0.12f)
+                            drawCircle(cloud, 17f, Offset(cloudX, cloudY))
+                            drawCircle(cloud, 23f, Offset(cloudX + 18f, cloudY + 3f))
+                            drawCircle(cloud, 15f, Offset(cloudX + 39f, cloudY + 5f))
+                        }
                         for (i in 1..3) {
                             val y = top + chartHeight * i / 4f
-                            drawLine(Color.LightGray.copy(alpha = 0.35f), Offset(left, y), Offset(right, y), 1f)
-                        }
-                        for (i in 1..5) {
-                            val x = left + chartWidth * i / 6f
-                            drawLine(Color.LightGray.copy(alpha = 0.25f), Offset(x, top), Offset(x, bottom), 1f)
+                            drawLine(Color(0xFF91A5C9).copy(alpha = 0.16f), Offset(left, y), Offset(right, y), 1f)
                         }
                         val progress = animation.multiplierProgress(multiplier)
                         val xNow = left + chartWidth * progress
                         val yNow = bottom - chartHeight * progress
-                        val path = Path().apply {
+                        val flightPath = Path().apply {
                             moveTo(left, bottom)
                             cubicTo(left + chartWidth * 0.18f, bottom - chartHeight * 0.02f,
                                 left + chartWidth * 0.42f, bottom - chartHeight * 0.18f,
                                 xNow, yNow)
                         }
-                        drawPath(path, Color(0xFF16A34A), style = Stroke(width = 5f))
-                        drawCircle(
-                            color = if (phase == AviatorPhase.CRASHED) Color(0xFFDC2626) else Color(0xFF16A34A),
-                            radius = 8f,
-                            center = Offset(xNow, yNow)
-                        )
+                        drawPath(flightPath, Color(0xFFFFB84D).copy(alpha = 0.18f), style = Stroke(width = 16f))
+                        drawPath(flightPath, Color(0xFFFFC15A), style = Stroke(width = 5f))
+                        val planeColor = if (phase == AviatorPhase.CRASHED) Color(0xFFFF5A55) else Color(0xFFFFE1A0)
+                        drawCircle(planeColor.copy(alpha = 0.25f), radius = 19f, center = Offset(xNow, yNow))
+                        val plane = Path().apply {
+                            moveTo(xNow + 18f, yNow)
+                            lineTo(xNow - 13f, yNow - 10f)
+                            lineTo(xNow - 6f, yNow)
+                            lineTo(xNow - 13f, yNow + 10f)
+                            close()
+                        }
+                        drawPath(plane, planeColor)
                     }
                 }
                 Text("Elapsed: ${(elapsedMillis / 1000.0).let { String.format(Locale.US, "%.1fs", it) }}")
@@ -124,7 +146,7 @@ internal fun NativeAviatorScreen(
                     while (!snapshot.crashed) {
                         elapsedMillis = snapshot.elapsedMillis
                         multiplier = snapshot.multiplier
-                        delay(40)
+                        delay(16)
                         snapshot = round.snapshot()
                     }
                     elapsedMillis = snapshot.elapsedMillis
