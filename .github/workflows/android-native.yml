@@ -10,7 +10,7 @@ on:
       - "settings.gradle.kts"
       - ".github/workflows/android-native.yml"
   push:
-    branches: [main]
+    branches: [main, "feat/native-android-architecture-migration"]
     paths:
       - "androidApp/**"
       - "gradle/**"
