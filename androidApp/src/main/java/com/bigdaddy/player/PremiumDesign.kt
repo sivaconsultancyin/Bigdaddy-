@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -187,46 +189,123 @@ fun PremiumLoginPanel(
 @Composable
 fun PremiumGameLobby(onOpen: (String) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Text("THE GAME LOUNGE", color = Color(0xFFFFD27A), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-        Text("Choose your game", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-        Text("Six native experiences · Virtual demo mode", color = Color(0xFFAEB4C7), style = MaterialTheme.typography.bodySmall)
-        Spacer(Modifier.height(16.dp))
-        androidx.compose.foundation.lazy.LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(13.dp)
+        Text(
+            "CASINO GAMES",
+            color = Color(0xFFFDE68A),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Black
+        )
+        Text(
+            "Choose your game",
+            color = Color(0xFFF4F4F5),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black
+        )
+        Spacer(Modifier.height(10.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(premiumGames.size) { index ->
-                val game = premiumGames[index]
+            items(premiumGames) { game ->
                 val entrance by animateFloatAsState(
                     targetValue = 1f,
-                    animationSpec = tween(durationMillis = 520, delayMillis = index * 65),
-                    label = "game-card-entrance-$index"
+                    animationSpec = tween(durationMillis = 420),
+                    label = "game-card-entrance-${game.code}"
                 )
                 Card(
-                    Modifier.fillMaxWidth().height(112.dp)
-                        .graphicsLayer { alpha = entrance; translationY = (1f - entrance) * 22f }
+                    Modifier
+                        .fillMaxWidth()
+                        .height(126.dp)
+                        .graphicsLayer {
+                            alpha = entrance
+                            translationY = (1f - entrance) * 14f
+                        }
+                        .border(1.dp, Color(0xFF3F3F46), RoundedCornerShape(12.dp))
                         .clickable { onOpen(game.code) },
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF151827))
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF18181B))
                 ) {
-                    Row(
-                        Modifier.fillMaxSize().background(
-                            Brush.linearGradient(listOf(game.accent.copy(alpha = 0.30f), Color(0xFF171A2A), game.secondary.copy(alpha = 0.18f)))
-                        ).padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        game.accent.copy(alpha = 0.16f),
+                                        Color(0xFF18181B),
+                                        Color(0xFF09090B)
+                                    )
+                                )
+                            )
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            Modifier.size(68.dp).clip(RoundedCornerShape(20.dp))
-                                .background(Brush.linearGradient(listOf(game.accent, game.secondary))),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(game.symbol, style = MaterialTheme.typography.headlineLarge, color = Color.White)
+                            Box(
+                                Modifier
+                                    .size(30.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (game.code == "aviator") {
+                                            Brush.linearGradient(
+                                                listOf(Color(0xFFDC2626), Color(0xFFF59E0B))
+                                            )
+                                        } else {
+                                            Brush.linearGradient(
+                                                listOf(Color(0xFF27272A), Color(0xFF3F3F46))
+                                            )
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    game.symbol,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White
+                                )
+                            }
+                            Text(
+                                "PREVIEW",
+                                color = Color(0xFFA1A1AA),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                            Text(game.title, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
-                            Text(game.subtitle, color = Color(0xFFB8BED0), style = MaterialTheme.typography.bodySmall)
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(
+                                game.title,
+                                color = Color(0xFFE4E4E7),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF27272A), RoundedCornerShape(5.dp))
+                                    .padding(horizontal = 7.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Game",
+                                    color = Color(0xFF71717A),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Text(
+                                    "Play ›",
+                                    color = Color(0xFFFBBF24),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
-                        Text("›", color = game.secondary, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     }
                 }
             }
