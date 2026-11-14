@@ -23,11 +23,15 @@ class BigDaddyApi {
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
     private fun request(path: String, token: String? = null, body: JSONObject? = null): Request {
+        require(BuildConfig.SUPABASE_URL.startsWith("https://")) {
+            "Native app is not configured. Supply SUPABASE_URL through the build environment."
+        }
+        require(BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank()) {
+            "Native app is not configured. Supply SUPABASE_PUBLISHABLE_KEY through the build environment."
+        }
         val builder = Request.Builder().url(baseUrl + path)
             .header("Accept", "application/json")
-        if (BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank()) {
-            builder.header("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-        }
+            .header("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
         if (!token.isNullOrBlank()) builder.header("Authorization", "Bearer $token")
         return if (body != null) {
             builder.post(body.toString().toRequestBody(jsonType)).header("Content-Type", "application/json").build()
