@@ -89,8 +89,8 @@ class GameEnginesTest {
         val sequence = engine.dealSequence(deck)
         assertEquals(3, sequence.size)
         assertEquals(listOf("ANDAR", "BAHAR", "ANDAR"), sequence.map { it.side })
+        assertEquals(listOf(2, 3, 8), sequence.map { it.card.rank })
         assertEquals(8, sequence.last().card.rank)
-        assertTrue(sequence.all { it.card.rank != 8 } || sequence.last().card.rank == 8)
     }
 
     @Test fun andarBaharRejectsDeckWithoutMatchingJokerRank() {
