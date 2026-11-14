@@ -79,7 +79,7 @@ private fun PremiumBackdrop(content: @Composable () -> Unit) {
     Box(
         Modifier.fillMaxSize().background(
             Brush.linearGradient(
-                colors = listOf(Color(0xFF050711), Color(0xFF111329), Color(0xFF080B14))
+                colors = listOf(Color(0xFF050608), Color(0xFF09090B), Color(0xFF050608))
             )
         )
     ) {
@@ -87,14 +87,14 @@ private fun PremiumBackdrop(content: @Composable () -> Unit) {
             Modifier.align(Alignment.TopEnd).size(280.dp)
                 .graphicsLayer { alpha = glow }
                 .background(
-                    Brush.radialGradient(listOf(Color(0xFF7438C8), Color.Transparent))
+                    Brush.radialGradient(listOf(Color(0xFFF59E0B), Color.Transparent))
                 )
         )
         Box(
             Modifier.align(Alignment.BottomStart).size(240.dp)
                 .graphicsLayer { alpha = glow * 0.8f }
                 .background(
-                    Brush.radialGradient(listOf(Color(0xFFB77A2C), Color.Transparent))
+                    Brush.radialGradient(listOf(Color(0xFFD97706), Color.Transparent))
                 )
         )
         content()
@@ -118,18 +118,15 @@ fun PremiumLoginPanel(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("BIG", color = Color(0xFFFFD27A), style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black)
-            Text("DADDY", color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
-            Text("PREMIUM GAME LOUNGE", color = Color(0xFFC5A7F2), style = MaterialTheme.typography.labelLarge)
+            Text("BigDaddy Games", color = Color(0xFFFBBF24), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
+            Text("Mobile-first authoritative casino gaming platform", color = Color(0xFFA1A1AA), style = MaterialTheme.typography.labelSmall)
             Spacer(Modifier.height(30.dp))
             Card(
-                Modifier.fillMaxWidth().border(1.dp, Color(0xFF72549B), RoundedCornerShape(26.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xE6151929)),
-                shape = RoundedCornerShape(26.dp)
+                Modifier.fillMaxWidth().border(1.dp, Color(0x4DF59E0B), RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xE617181B)),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("WELCOME BACK", color = Color(0xFFFFD27A), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Sign in to enter the lounge", color = Color(0xFFD7D9E5), style = MaterialTheme.typography.bodyMedium)
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = loginName,
                         onValueChange = onLoginNameChange,
@@ -173,14 +170,14 @@ fun PremiumLoginPanel(
                     Button(
                         onClick = onSubmit,
                         enabled = !busy && loginName.isNotBlank() && password.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB77A2C), contentColor = Color(0xFF100C08))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B), contentColor = Color(0xFF09090B))
                     ) {
                         if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Color(0xFF100C08), strokeWidth = 2.dp)
-                        else Text("ENTER GAME LOUNGE", fontWeight = FontWeight.ExtraBold)
+                        else Text("Sign In", fontWeight = FontWeight.Bold)
                     }
-                    Text("Secure player sign-in · Native Android", color = Color(0xFF9CA3B8), style = MaterialTheme.typography.labelSmall)
+                    Text("Secure player sign-in", color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
