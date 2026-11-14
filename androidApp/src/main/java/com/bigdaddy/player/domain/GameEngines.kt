@@ -84,6 +84,9 @@ class DragonTigerEngine {
 
 class DiceEngine {
     internal fun payoutMultiplier(market: String, rolled: Int): Int {
+        // The legacy Lucky 10 engine can only produce 1..10. Reject out-of-domain
+        // values before evaluating parity markets (e.g. 12 must not win "even").
+        if (rolled !in 1..10) return 0
         val number = market.toIntOrNull()
         return when {
             number != null && number in 1..10 && number == rolled -> 9
