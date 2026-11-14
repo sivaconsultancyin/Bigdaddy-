@@ -155,12 +155,12 @@ class AviatorGameEngine {
 }
 
 class LocalDemoGameRegistry(
-    private val aviator = AviatorGameEngine(),
-    private val dragonTiger = DragonTigerEngine(),
-    private val dice = DiceEngine(),
-    private val andarBahar = AndarBaharEngine(),
-    private val roulette = RouletteEngine(),
-    private val teenPatti = TeenPattiEngine()
+    private val aviator: AviatorGameEngine = AviatorGameEngine(),
+    private val dragonTiger: DragonTigerEngine = DragonTigerEngine(),
+    private val dice: DiceEngine = DiceEngine(),
+    private val andarBahar: AndarBaharEngine = AndarBaharEngine(),
+    private val roulette: RouletteEngine = RouletteEngine(),
+    private val teenPatti: TeenPattiEngine = TeenPattiEngine()
 ) {
     fun play(gameCode: String, seed: Long = System.nanoTime()): DemoOutcome = when (gameCode) {
         "aviator" -> aviator.demoCrash(seed)
