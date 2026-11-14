@@ -8,10 +8,14 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// These are client-safe project settings. The publishable key is intentionally public;
+// never place a Supabase secret/service-role key in this Android application.
 val supabaseUrl = providers.gradleProperty("SUPABASE_URL")
-    .orElse(providers.environmentVariable("SUPABASE_URL")).orElse("").get()
+    .orElse(providers.environmentVariable("SUPABASE_URL"))
+    .orElse("https://nzvpuoeibqrpcltrszvr.supabase.co").get()
 val publishableKey = providers.gradleProperty("SUPABASE_PUBLISHABLE_KEY")
-    .orElse(providers.environmentVariable("SUPABASE_PUBLISHABLE_KEY")).orElse("").get()
+    .orElse(providers.environmentVariable("SUPABASE_PUBLISHABLE_KEY"))
+    .orElse("sb_publishable_3StQxumtXcMHvM9i3bTldw_e1toL-FR").get()
 
 android {
     namespace = "com.bigdaddy.player"
