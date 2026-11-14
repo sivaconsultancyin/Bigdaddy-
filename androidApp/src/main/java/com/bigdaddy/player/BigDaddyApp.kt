@@ -169,6 +169,22 @@ fun BigDaddyApp() {
                         }.onFailure { error = it.message ?: "Login failed." }
                         busy = false
                     }
+                },
+                onReferralRegister = { referralUser, referralEmail, referralPassword, referralCode ->
+                    api.registerReferral(referralUser, referralEmail, referralPassword, referralCode)
+                    val loginResult = api.login(referralUser, referralPassword)
+                    val verifiedAccount = api.verifySession(loginResult.token)
+                    sessions.save(loginResult.token)
+                    token = loginResult.token
+                    accountId = verifiedAccount.id
+                    username = verifiedAccount.username
+                    role = verifiedAccount.role
+                    balance = runCatching { api.walletBalance(loginResult.token) }.getOrElse {
+                        walletError = "Wallet balance is temporarily unavailable."
+                        "Unavailable"
+                    }
+                    loginName = referralUser
+                    password = ""
                 }
             )
         } else {
