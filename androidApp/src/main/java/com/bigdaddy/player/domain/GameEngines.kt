@@ -12,9 +12,9 @@ data class DemoOutcome(
 )
 
 class GameClock(private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000L }) {
-    private var startedAt = 0L
+    private var startedAt: Long? = null
     fun start() { startedAt = nowMillis() }
-    fun elapsedMillis(): Long = if (startedAt == 0L) 0L else (nowMillis() - startedAt).coerceAtLeast(0L)
+    fun elapsedMillis(): Long = startedAt?.let { (nowMillis() - it).coerceAtLeast(0L) } ?: 0L
 }
 
 class MultiplierController(private val growthPerSecond: Double = 0.06) {
@@ -144,6 +144,11 @@ class TeenPattiEngine {
 }
 
 class AviatorGameEngine {
+    fun createDemoRound(seed: Long): AviatorRoundManager {
+        val crashAt = 1.05 + Random(seed).nextDouble() * 24.0
+        return AviatorRoundManager(GameClock(), MultiplierController(), CrashStateController(crashAt))
+    }
+
     fun demoCrash(seed: Long): DemoOutcome {
         val crashAt = 1.05 + Random(seed).nextDouble() * 24.0
         val display = round(crashAt * 100.0) / 100.0
