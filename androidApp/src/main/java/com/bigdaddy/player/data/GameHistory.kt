@@ -20,6 +20,8 @@ data class GameHistoryEntity(
     val startedAtEpochMillis: Long,
     val endedAtEpochMillis: Long,
     val demoResult: String,
+    val virtualBetAmount: String = "0",
+    val virtualPayout: String = "0",
     val status: String = "COMPLETED"
 )
 
