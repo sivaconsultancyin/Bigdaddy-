@@ -28,11 +28,12 @@ import com.bigdaddy.player.domain.DemoOutcome
 import java.util.UUID
 
 @Composable
-fun AviatorDemoScreen(onCompleted: (DemoOutcome) -> Unit) {
+fun AviatorDemoScreen(onCompleted: (DemoOutcome, Long, Long) -> Unit) {
     val engine = remember { AviatorGameEngine() }
     var round by remember { mutableStateOf<AviatorRoundManager?>(null) }
     var snapshot by remember { mutableStateOf(AviatorSnapshot(0L, 1.0, false)) }
     var running by remember { mutableStateOf(false) }
+    var startedAtEpochMillis by remember { mutableStateOf(0L) }
 
     LaunchedEffect(round) {
         val active = round ?: return@LaunchedEffect
@@ -42,7 +43,7 @@ fun AviatorDemoScreen(onCompleted: (DemoOutcome) -> Unit) {
             snapshot = next
             if (next.crashed) {
                 running = false
-                onCompleted(DemoOutcome("aviator", UUID.randomUUID().toString(), "DEMO CRASH @ ${String.format("%.2f", next.multiplier)}x"))
+                onCompleted(DemoOutcome("aviator", UUID.randomUUID().toString(), "DEMO CRASH @ ${String.format("%.2f", next.multiplier)}x"), startedAtEpochMillis, System.currentTimeMillis())
                 break
             }
         }
@@ -65,6 +66,7 @@ fun AviatorDemoScreen(onCompleted: (DemoOutcome) -> Unit) {
         if (snapshot.crashed) Text("Round crashed · Demo only", color = MaterialTheme.colorScheme.error)
         Button(
             onClick = {
+                startedAtEpochMillis = System.currentTimeMillis()
                 val next = engine.createDemoRound(System.nanoTime())
                 next.start()
                 snapshot = AviatorSnapshot(0L, 1.0, false)
