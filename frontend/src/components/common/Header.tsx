@@ -48,8 +48,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenTokenRequest, onGoToLobby,
           </div>
           {isPlayer ? (
             <>
-              <button onClick={onOpenDeposit} aria-label="Open deposit page" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[9px] font-bold text-emerald-300"><ArrowDownToLine className="h-3 w-3" /><span>Deposit</span></button>
-              <button onClick={onOpenWithdrawal} aria-label="Open withdrawal page" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-1.5 text-[9px] font-bold text-rose-300"><ArrowUpFromLine className="h-3 w-3" /><span>Withdraw</span></button>
+              <button onClick={onOpenDeposit} aria-label="Open deposit page" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[9px] font-bold text-emerald-300"><ArrowDownToLine className="h-3 w-3" /><span className="hidden min-[360px]:inline">Deposit</span></button>
+              <button onClick={onOpenWithdrawal} aria-label="Open withdrawal page" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-1.5 text-[9px] font-bold text-rose-300"><ArrowUpFromLine className="h-3 w-3" /><span className="hidden min-[360px]:inline">Withdraw</span></button>
               <button onClick={onOpenProfile} aria-label="Open profile" title="Profile" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/40 bg-amber-500/15 text-amber-300"><UserIcon className="h-4 w-4" /></button>
             </>
           ) : (
