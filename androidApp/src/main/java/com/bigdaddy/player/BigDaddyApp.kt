@@ -35,6 +35,7 @@ import com.bigdaddy.player.data.GameHistoryDatabase
 import com.bigdaddy.player.data.GameHistoryEntity
 import com.bigdaddy.player.data.SecureSessionStore
 import com.bigdaddy.player.domain.LocalDemoGameRegistry
+import com.bigdaddy.player.ui.AviatorDemoScreen
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -161,30 +162,51 @@ fun BigDaddyApp() {
                             } else {
                                 val name = gameNames.first { it.first == selectedGame }.second
                                 TextButton(onClick = { selectedGame = null; lastResult = null }) { Text("← All games") }
-                                Text(name, style = MaterialTheme.typography.headlineSmall)
-                                Text("Local demo simulation only. No wallet payout is generated.")
-                                Button(
-                                    onClick = {
-                                        val started = System.currentTimeMillis()
-                                        val outcome = engine.play(selectedGame!!)
-                                        val ended = System.currentTimeMillis()
-                                        lastResult = outcome.result
-                                        scope.launch {
-                                            historyDao.insert(
-                                                GameHistoryEntity(
-                                                    id = UUID.randomUUID().toString(),
-                                                    gameCode = outcome.gameCode,
-                                                    roundId = outcome.roundId,
-                                                    startedAtEpochMillis = started,
-                                                    endedAtEpochMillis = ended,
-                                                    demoResult = outcome.result
+                                if (selectedGame == "aviator") {
+                                    AviatorDemoScreen(
+                                        onCompleted = { outcome ->
+                                            lastResult = outcome.result
+                                            val ended = System.currentTimeMillis()
+                                            scope.launch {
+                                                historyDao.insert(
+                                                    GameHistoryEntity(
+                                                        id = UUID.randomUUID().toString(),
+                                                        gameCode = outcome.gameCode,
+                                                        roundId = outcome.roundId,
+                                                        startedAtEpochMillis = ended,
+                                                        endedAtEpochMillis = ended,
+                                                        demoResult = outcome.result
+                                                    )
                                                 )
-                                            )
+                                            }
                                         }
-                                    },
-                                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
-                                ) { Text("Run demo round") }
-                                lastResult?.let { Text("Result: $it", modifier = Modifier.padding(top = 16.dp)) }
+                                    )
+                                } else {
+                                    Text(name, style = MaterialTheme.typography.headlineSmall)
+                                    Text("Local demo simulation only. No wallet payout is generated.")
+                                    Button(
+                                        onClick = {
+                                            val started = System.currentTimeMillis()
+                                            val outcome = engine.play(selectedGame!!)
+                                            val ended = System.currentTimeMillis()
+                                            lastResult = outcome.result
+                                            scope.launch {
+                                                historyDao.insert(
+                                                    GameHistoryEntity(
+                                                        id = UUID.randomUUID().toString(),
+                                                        gameCode = outcome.gameCode,
+                                                        roundId = outcome.roundId,
+                                                        startedAtEpochMillis = started,
+                                                        endedAtEpochMillis = ended,
+                                                        demoResult = outcome.result
+                                                    )
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
+                                    ) { Text("Run demo round") }
+                                    lastResult?.let { Text("Result: $it", modifier = Modifier.padding(top = 16.dp)) }
+                                }
                             }
                         }
                         "Wallet" -> {
