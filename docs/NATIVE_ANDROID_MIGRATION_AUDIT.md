@@ -64,7 +64,7 @@ The separate Kotlin/Compose module now contains:
 - Client-safe Supabase project URL and publishable key defaults, with Gradle property/environment overrides. No service-role key or JWT signing secret is packaged in the APK.
 - Room-backed local game history and six local demo game entry points.
 - Aviator local demo animation and multiplier using one monotonic time source.
-- Basic deterministic engine tests; Dragon Tiger treats Ace as high, and Teen Patti compares hand category and tie-break values.
+- Basic deterministic engine tests; Dragon Tiger treats Ace as the lowest card (matching the inspected legacy backend rule), Andar Bahar starts Andar for a black Joker and Bahar for a red Joker, and Teen Patti compares hand category and tie-break values.
 
 ## Release blockers — do not treat the preview APK as production
 
@@ -73,3 +73,11 @@ The separate Kotlin/Compose module now contains:
 - Native screens are a foundation, not a complete port of all existing player/admin flows.
 - No physical Android device E2E, accessibility/responsive QA, signed release build, Play distribution, or rollback/cutover verification has been completed.
 - Keep the existing web app, production game schemas, Edge Functions, scheduled jobs, wallet balances, and player records intact until the native release passes the staged acceptance plan.
+
+
+## Latest implementation and CI checkpoint (2026-11-14)
+
+- Player navigation was simplified so the main bottom navigation contains Games only; Profile is opened from the top-right action. Local game history is displayed within Profile. This removes the direct Wallet and History navigation tabs from the main game screen.
+- The latest verified Android CI run before this UI commit was run `43588998743` on commit `6caca28922f801c8daa2fef3eb290c8927b0dabd`: `assembleDebug` succeeded, `testDebugUnitTest` succeeded, and `bigdaddy-native-debug-apk` was uploaded (12,678,189 bytes). This verification does not cover the subsequent UI commits; CI must pass again on the latest head.
+- Deposit and Withdraw are not wired in the native UI because the inspected native API adapter exposes login/session and read-only wallet balance only. Do not add fake/inert transaction buttons. Implement these only after a secure, server-authoritative deposit/withdraw API contract, validation, idempotency, and audit trail are verified.
+- The current build remains a local-demo foundation. No real wager, client-side payout, or local game result may change the authoritative Supabase wallet.
