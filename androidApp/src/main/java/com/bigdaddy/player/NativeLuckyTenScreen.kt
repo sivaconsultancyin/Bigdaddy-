@@ -91,7 +91,7 @@ fun NativeLuckyTenScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit) {
                     val rolled = outcome.result.substringAfter(": ").toInt()
                     resultNumber = rolled
                     phase = DiceRoundPhase.RESULT
-                    val ended = SystemClock.elapsedRealtime()
+                    val ended = System.currentTimeMillis()
                     onRoundCompleted(
                         DemoOutcome(
                             gameCode = "dice",
