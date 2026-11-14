@@ -2,132 +2,59 @@ import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { UserRole } from '../../../../shared/src/types';
-import { Coins, Home, RefreshCw, Wifi, WifiOff, Sparkles, User as UserIcon } from 'lucide-react';
+import { Coins, Home, RefreshCw, Sparkles, User as UserIcon, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 
 interface HeaderProps {
   onOpenTokenRequest?: () => void;
   onGoToLobby?: () => void;
+  onOpenProfile?: () => void;
+  onOpenDeposit?: () => void;
+  onOpenWithdrawal?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenTokenRequest, onGoToLobby }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenTokenRequest, onGoToLobby, onOpenProfile, onOpenDeposit, onOpenWithdrawal }) => {
   const { user, wallet, refreshWallet } = useAuth();
   const { apiHealth } = useWebSocket();
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const isPlayer = user?.role === UserRole.PLAYER;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refreshWallet();
-    setTimeout(() => setIsRefreshing(false), 500);
+    setIsRefreshing(false);
   };
 
   const formattedBalance = React.useMemo(() => {
     if (!wallet) return '0';
-    try {
-      const b = BigInt(wallet.balance);
-      return b.toLocaleString();
-    } catch {
-      return wallet.balance;
-    }
+    try { return BigInt(wallet.balance).toLocaleString(); }
+    catch { return wallet.balance; }
   }, [wallet?.balance]);
 
-  const getRoleBadge = (role?: UserRole) => {
-    switch (role) {
-      case UserRole.OWNER:
-        return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-      case UserRole.SUPER_ADMIN:
-        return 'bg-purple-500/20 text-purple-300 border-purple-500/40';
-      case UserRole.ADMIN:
-        return 'bg-blue-500/20 text-blue-300 border-blue-500/40';
-      case UserRole.PLAYER:
-      default:
-        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-    }
-  };
-
   return (
-    <header className="bg-zinc-950/95 backdrop-blur-md border-b border-amber-500/20 sticky top-0 z-40 w-full">
-      <div className="w-full px-3 h-14 flex items-center justify-between gap-2">
-        {/* Brand / Logo */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 via-amber-600 to-yellow-700 flex items-center justify-center shadow-md shadow-amber-500/20 border border-amber-300/40">
-            <Sparkles className="w-4 h-4 text-zinc-950" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1 leading-none">
-              <span className="font-extrabold text-sm tracking-wide bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent uppercase font-serif">
-                BigDaddy
-              </span>
-              <span className="text-[8px] uppercase font-bold tracking-wider px-1 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                {user?.role === UserRole.PLAYER ? 'GAMES' : 'PORTAL'}
-              </span>
-            </div>
-            <div className="text-[9px] text-zinc-500 flex items-center gap-1 mt-0.5">
-              {apiHealth === 'online' ? (
-                <span className="flex items-center gap-0.5 text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> API Online
-                </span>
-              ) : apiHealth === 'degraded' ? (
-                <span className="flex items-center gap-0.5 text-amber-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> API Degraded
-                </span>
-              ) : apiHealth === 'offline' ? (
-                <span className="flex items-center gap-0.5 text-rose-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span> API Offline
-                </span>
-              ) : (
-                <span className="flex items-center gap-0.5 text-zinc-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-pulse"></span> Checking
-                </span>
-              )}
-              <span className="text-zinc-600">·</span>
-              <span className="text-zinc-400 truncate max-w-[70px]">{user?.username}</span>
-            </div>
+    <header className="sticky top-0 z-40 w-full border-b border-amber-500/20 bg-zinc-950/95 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <div className="flex h-14 w-full min-w-0 items-center justify-between gap-1.5 px-2 sm:px-3">
+        <div className="flex min-w-0 shrink items-center gap-1.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-300/40 bg-gradient-to-br from-amber-400 via-amber-600 to-yellow-700 shadow-md shadow-amber-500/20"><Sparkles className="h-4 w-4 text-zinc-950" /></div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 leading-none"><span className="truncate bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-xs font-extrabold uppercase tracking-wide text-transparent sm:text-sm">BigDaddy</span><span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[7px] font-bold uppercase tracking-wider text-amber-400">{isPlayer ? 'GAMES' : 'PORTAL'}</span></div>
+            {!isPlayer && <div className="mt-1 flex items-center gap-1 text-[9px] text-zinc-500"><span className={apiHealth === 'online' ? 'text-emerald-400' : apiHealth === 'degraded' ? 'text-amber-400' : apiHealth === 'offline' ? 'text-rose-400' : 'text-zinc-500'}>● {apiHealth === 'online' ? 'API Online' : apiHealth === 'degraded' ? 'API Degraded' : apiHealth === 'offline' ? 'API Offline' : 'Checking'}</span><span>·</span><span className="max-w-[70px] truncate text-zinc-400">{user?.username}</span></div>}
           </div>
         </div>
-
-        {/* Right Section: Mobile Balance Pill & Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Wallet Balance Pill */}
-          <div className="flex items-center bg-zinc-900/90 border border-amber-500/30 rounded-full pl-2 pr-1.5 py-1 shadow-inner">
-            <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center mr-1.5 text-amber-400 border border-amber-500/30 shrink-0">
-              <Coins className="w-3 h-3" />
-            </div>
-            <div className="text-right mr-1">
-              <div className="text-[8px] text-zinc-500 font-bold uppercase leading-none">
-                {user?.role === UserRole.OWNER ? 'Treasury' : 'Chips'}
-              </div>
-              <div className="text-xs font-black text-amber-300 font-mono tracking-tight flex items-center gap-0.5 leading-tight">
-                <span>{formattedBalance}</span>
-                <button
-                  onClick={handleRefresh}
-                  title="Refresh balance"
-                  className="text-zinc-500 hover:text-amber-400 transition p-0.5"
-                >
-                  <RefreshCw className={`w-2.5 h-2.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Request Tokens CTA for Non-Owners */}
-            {user?.role !== UserRole.OWNER && onOpenTokenRequest && (
-              <button
-                onClick={onOpenTokenRequest}
-                className="bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 text-[10px] font-bold px-2 py-0.5 rounded-full transition shadow-sm shadow-amber-500/20 shrink-0"
-              >
-                +
-              </button>
-            )}
+        <div className="flex min-w-0 shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center rounded-full border border-amber-500/30 bg-zinc-900/90 py-1 pl-1.5 pr-1 shadow-inner">
+            <span className="mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/20 text-amber-400"><Coins className="h-3 w-3" /></span>
+            <div className="mr-0.5 text-right"><div className="text-[7px] font-bold uppercase leading-none text-zinc-500">{isPlayer ? 'Balance' : user?.role === UserRole.OWNER ? 'Treasury' : 'Chips'}</div><div className="flex items-center gap-0.5 font-mono text-[10px] font-black leading-tight tracking-tight text-amber-300"><span>{formattedBalance}</span><button onClick={handleRefresh} title="Refresh balance" aria-label="Refresh balance" className="p-0.5 text-zinc-500"><RefreshCw className={`h-2.5 w-2.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} /></button></div></div>
+            {!isPlayer && user?.role !== UserRole.OWNER && onOpenTokenRequest && <button onClick={onOpenTokenRequest} className="ml-1 shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-zinc-950">+</button>}
           </div>
-
-          {/* Lobby / Dashboard Button */}
-          <button
-            onClick={onGoToLobby}
-            title={user?.role === UserRole.PLAYER ? 'Lobby' : 'Dashboard'}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-yellow-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 rounded-lg transition active:scale-95 text-[11px] font-bold shrink-0 shadow-sm shadow-amber-500/10 cursor-pointer"
-          >
-            <Home className="w-3.5 h-3.5 text-amber-400" />
-            <span>{user?.role === UserRole.PLAYER ? 'Lobby' : 'Dashboard'}</span>
-          </button>
+          {isPlayer ? (
+            <>
+              <button onClick={onOpenDeposit} aria-label="Open deposit page" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-1.5 text-[9px] font-bold text-emerald-300"><ArrowDownToLine className="h-3 w-3" /><span>Deposit</span></button>
+              <button onClick={onOpenWithdrawal} aria-label="Open withdrawal page" className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-1.5 text-[9px] font-bold text-rose-300"><ArrowUpFromLine className="h-3 w-3" /><span>Withdraw</span></button>
+              <button onClick={onOpenProfile} aria-label="Open profile" title="Profile" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/40 bg-amber-500/15 text-amber-300"><UserIcon className="h-4 w-4" /></button>
+            </>
+          ) : (
+            <button onClick={onGoToLobby} title="Dashboard" className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-bold text-amber-300"><Home className="h-3.5 w-3.5" /><span>Dashboard</span></button>
+          )}
         </div>
       </div>
     </header>
