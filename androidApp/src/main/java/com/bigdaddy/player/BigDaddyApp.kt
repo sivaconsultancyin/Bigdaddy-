@@ -123,51 +123,36 @@ fun BigDaddyApp() {
     MaterialTheme(colorScheme = BigDaddyDarkColors) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (token == null) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text("BigDaddy Games", style = MaterialTheme.typography.headlineMedium)
-                Text("Native Android · Virtual demo mode", modifier = Modifier.padding(bottom = 24.dp))
-                OutlinedTextField(
-                    value = loginName, onValueChange = { loginName = it },
-                    modifier = Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true
-                )
-                OutlinedTextField(
-                    value = password, onValueChange = { password = it },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true
-                )
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
-                Button(
-                    onClick = {
-                        scope.launch {
-                            busy = true
-                            error = null
-                            runCatching {
-                                val result = api.login(loginName, password)
-                                // Authentication alone unlocks local demo games. Wallet reads are
-                                // optional and must never block a valid player login.
-                                val verifiedAccount = api.verifySession(result.token)
-                                sessions.save(result.token)
-                                token = result.token
-                                accountId = verifiedAccount.id
-                                username = verifiedAccount.username
-                                role = verifiedAccount.role
-                                balance = runCatching { api.walletBalance(result.token) }.getOrElse {
-                                    walletError = "Wallet balance is temporarily unavailable."
-                                    "Unavailable"
-                                }
-                                password = ""
-                            }.onFailure { error = it.message ?: "Login failed." }
-                            busy = false
-                        }
-                    },
-                    enabled = !busy && loginName.isNotBlank() && password.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp)
-                ) { Text(if (busy) "Signing in…" else "Sign in") }
-            }
+            PremiumLoginPanel(
+                loginName = loginName,
+                onLoginNameChange = { loginName = it },
+                password = password,
+                onPasswordChange = { password = it },
+                busy = busy,
+                error = error,
+                onSubmit = {
+                    scope.launch {
+                        busy = true
+                        error = null
+                        runCatching {
+                            val result = api.login(loginName, password)
+                            // Preserve the existing authentication/session contract.
+                            val verifiedAccount = api.verifySession(result.token)
+                            sessions.save(result.token)
+                            token = result.token
+                            accountId = verifiedAccount.id
+                            username = verifiedAccount.username
+                            role = verifiedAccount.role
+                            balance = runCatching { api.walletBalance(result.token) }.getOrElse {
+                                walletError = "Wallet balance is temporarily unavailable."
+                                "Unavailable"
+                            }
+                            password = ""
+                        }.onFailure { error = it.message ?: "Login failed." }
+                        busy = false
+                    }
+                }
+            )
         } else {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -193,20 +178,21 @@ fun BigDaddyApp() {
                     when (tab) {
                         "Games" -> {
                             if (selectedGame == null) {
-                                Text("Choose a local demo game", style = MaterialTheme.typography.titleMedium)
-                                LazyColumn {
-                                    items(gameNames) { (code, name) ->
-                                        Card(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-                                            Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text(name)
-                                                TextButton(onClick = { selectedGame = code; lastResult = null }) { Text("Open") }
-                                            }
-                                        }
-                                    }
-                                }
+                                PremiumGameLobby(
+                                    onOpen = { code -> selectedGame = code; lastResult = null }
+                                )
                             } else {
                                 val name = gameNames.first { it.first == selectedGame }.second
                                 TextButton(onClick = { selectedGame = null; lastResult = null }) { Text("← All games") }
+                                val gameStyle = when (selectedGame) {
+                                    "aviator" -> Triple("AVIATOR", "Take flight · Virtual demo", Color(0xFFFF654F))
+                                    "dragon_tiger" -> Triple("DRAGON TIGER", "Classic card duel · Virtual demo", Color(0xFFFFC45C))
+                                    "dice" -> Triple("LUCKY 10 DICE", "Roll the number · Virtual demo", Color(0xFF8B7CFF))
+                                    "andar_bahar" -> Triple("ANDAR BAHAR", "Traditional card table · Virtual demo", Color(0xFF32C98A))
+                                    "roulette" -> Triple("ROULETTE", "European wheel · Virtual demo", Color(0xFFFF5364))
+                                    else -> Triple("TEEN PATTI", "Three-card showdown · Virtual demo", Color(0xFF45C99B))
+                                }
+                                PremiumGameHeader(gameStyle.first, gameStyle.second, gameStyle.third) {}
                                 if (selectedGame == "aviator") {
                                     NativeAviatorScreen(
                                         onRoundCompleted = { outcome, started, ended ->
