@@ -1,5 +1,6 @@
 package com.bigdaddy.player
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -43,16 +46,24 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 private val BigDaddyDarkColors = darkColorScheme(
-    primary = Color(0xFFEF4444),
-    onPrimary = Color.White,
-    secondary = Color(0xFF22C55E),
-    onSecondary = Color(0xFF07130B),
-    background = Color(0xFF080B12),
-    onBackground = Color(0xFFF8FAFC),
-    surface = Color(0xFF111827),
-    onSurface = Color(0xFFF8FAFC),
-    surfaceVariant = Color(0xFF1F2937),
-    onSurfaceVariant = Color(0xFFCBD5E1),
+    primary = Color(0xFFF59E0B),
+    onPrimary = Color(0xFF09090B),
+    secondary = Color(0xFFD97706),
+    onSecondary = Color(0xFF09090B),
+    background = Color(0xFF050608),
+    onBackground = Color(0xFFF4F4F5),
+    surface = Color(0xFF09090B),
+    onSurface = Color(0xFFF4F4F5),
+    surfaceVariant = Color(0xFF18181B),
+    onSurfaceVariant = Color(0xFFA1A1AA),
+    surfaceTint = Color(0xFFF59E0B),
+    surfaceContainerLowest = Color(0xFF050608),
+    surfaceContainerLow = Color(0xFF09090B),
+    surfaceContainer = Color(0xFF18181B),
+    surfaceContainerHigh = Color(0xFF27272A),
+    surfaceContainerHighest = Color(0xFF3F3F46),
+    tertiary = Color(0xFFFFC45C),
+    onTertiary = Color(0xFF09090B),
     error = Color(0xFFF87171)
 )
 
@@ -74,7 +85,6 @@ fun BigDaddyApp() {
     val historyDao = remember { GameHistoryDatabase.get(context).historyDao() }
     var accountId by remember { mutableStateOf("") }
     val history by historyDao.observeAll(accountId).collectAsState(initial = emptyList())
-    val engine = remember { LocalDemoGameRegistry() }
 
     var token by remember { mutableStateOf<String?>(null) }
     var username by remember { mutableStateOf("") }
@@ -85,7 +95,7 @@ fun BigDaddyApp() {
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf("Games") }
+    var tab by remember { mutableStateOf("All") }
     var selectedGame by remember { mutableStateOf<String?>(null) }
     var lastResult by remember { mutableStateOf<String?>(null) }
 
@@ -120,94 +130,84 @@ fun BigDaddyApp() {
         }
     }
 
+
     MaterialTheme(colorScheme = BigDaddyDarkColors) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (token == null) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text("BigDaddy Games", style = MaterialTheme.typography.headlineMedium)
-                Text("Native Android · Virtual demo mode", modifier = Modifier.padding(bottom = 24.dp))
-                OutlinedTextField(
-                    value = loginName, onValueChange = { loginName = it },
-                    modifier = Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true
-                )
-                OutlinedTextField(
-                    value = password, onValueChange = { password = it },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true
-                )
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
-                Button(
-                    onClick = {
-                        scope.launch {
-                            busy = true
-                            error = null
-                            runCatching {
-                                val result = api.login(loginName, password)
-                                // Authentication alone unlocks local demo games. Wallet reads are
-                                // optional and must never block a valid player login.
-                                val verifiedAccount = api.verifySession(result.token)
-                                sessions.save(result.token)
-                                token = result.token
-                                accountId = verifiedAccount.id
-                                username = verifiedAccount.username
-                                role = verifiedAccount.role
-                                balance = runCatching { api.walletBalance(result.token) }.getOrElse {
-                                    walletError = "Wallet balance is temporarily unavailable."
-                                    "Unavailable"
-                                }
-                                password = ""
-                            }.onFailure { error = it.message ?: "Login failed." }
-                            busy = false
-                        }
-                    },
-                    enabled = !busy && loginName.isNotBlank() && password.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp)
-                ) { Text(if (busy) "Signing in…" else "Sign in") }
-            }
-        } else {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                bottomBar = {
-                    NavigationBar {
-                        listOf("Games").forEach { item ->
-                            NavigationBarItem(
-                                selected = tab == item,
-                                onClick = { tab = item; selectedGame = null },
-                                icon = {},
-                                label = { Text(item) }
-                            )
-                        }
+            PremiumLoginPanel(
+                loginName = loginName,
+                onLoginNameChange = { loginName = it },
+                password = password,
+                onPasswordChange = { password = it },
+                busy = busy,
+                error = error,
+                onSubmit = {
+                    scope.launch {
+                        busy = true
+                        error = null
+                        runCatching {
+                            val result = api.login(loginName, password)
+                            // Preserve the existing authentication/session contract.
+                            val verifiedAccount = api.verifySession(result.token)
+                            sessions.save(result.token)
+                            token = result.token
+                            accountId = verifiedAccount.id
+                            username = verifiedAccount.username
+                            role = verifiedAccount.role
+                            balance = runCatching { api.walletBalance(result.token) }.getOrElse {
+                                walletError = "Wallet balance is temporarily unavailable."
+                                "Unavailable"
+                            }
+                            password = ""
+                        }.onFailure { error = it.message ?: "Login failed." }
+                        busy = false
                     }
+                },
+                onReferralRegister = { referralUser, referralEmail, referralPassword, referralCode ->
+                    api.registerReferral(referralUser, referralEmail, referralPassword, referralCode)
+                    val loginResult = api.login(referralUser, referralPassword)
+                    val verifiedAccount = api.verifySession(loginResult.token)
+                    sessions.save(loginResult.token)
+                    token = loginResult.token
+                    accountId = verifiedAccount.id
+                    username = verifiedAccount.username
+                    role = verifiedAccount.role
+                    balance = runCatching { api.walletBalance(loginResult.token) }.getOrElse {
+                        walletError = "Wallet balance is temporarily unavailable."
+                        "Unavailable"
+                    }
+                    loginName = referralUser
+                    password = ""
                 }
-            ) { padding ->
-                Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            )
+        } else {
+            Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
+                Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 10.dp).then(if (tab == "Profile") Modifier else Modifier.verticalScroll(rememberScrollState()))) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("BigDaddy", style = MaterialTheme.typography.headlineSmall)
-                        TextButton(onClick = { tab = "Profile"; selectedGame = null }) { Text("Profile") }
+                        Text("BigDaddy Games", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
                     }
-                    Spacer(Modifier.padding(4.dp))
+                    PremiumDashboardFilters(
+                        selected = tab,
+                        onSelect = { selected -> tab = selected; selectedGame = null }
+                    )
+                    Spacer(Modifier.padding(3.dp))
                     when (tab) {
-                        "Games" -> {
+                        "All", "Games" -> {
                             if (selectedGame == null) {
-                                Text("Choose a local demo game", style = MaterialTheme.typography.titleMedium)
-                                LazyColumn {
-                                    items(gameNames) { (code, name) ->
-                                        Card(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-                                            Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text(name)
-                                                TextButton(onClick = { selectedGame = code; lastResult = null }) { Text("Open") }
-                                            }
-                                        }
-                                    }
-                                }
+                                PremiumGameLobby(
+                                    onOpen = { code -> selectedGame = code; lastResult = null },
+                                    showSummary = tab == "All",
+                                    username = username,
+                                    balance = balance,
+                                    onWalletClick = { tab = "Wallet" },
+                                    onProfileClick = { tab = "Profile" }
+                                )
                             } else {
                                 val name = gameNames.first { it.first == selectedGame }.second
                                 TextButton(onClick = { selectedGame = null; lastResult = null }) { Text("← All games") }
                                 if (selectedGame == "aviator") {
+                                    PremiumGameHeader("AVIATOR", "Native visual demo · not connected to live rounds", Color(0xFFFF654F)) {}
                                     NativeAviatorScreen(
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
@@ -220,133 +220,52 @@ fun BigDaddyApp() {
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
                                                         demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "dragon_tiger") {
-                                    NativeDragonTigerScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "dice") {
-                                    NativeLuckyTenScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "andar_bahar") {
-                                    NativeAndarBaharScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "roulette") {
-                                    NativeRouletteScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "teen_patti") {
-                                    NativeTeenPattiScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
+                                                        playerAccountId = accountId
                                                     )
                                                 )
                                             }
                                         }
                                     )
                                 } else {
-                                    Text(name, style = MaterialTheme.typography.headlineSmall)
-                                    Text("APK-local demo engine. No server game round or wallet payout is used.")
-                                    Button(
-                                        onClick = {
-                                            val started = System.currentTimeMillis()
-                                            val outcome = engine.play(selectedGame!!)
-                                            val ended = System.currentTimeMillis()
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
-                                    ) { Text("Play local demo round") }
-                                    lastResult?.let { Text("Result: $it", modifier = Modifier.padding(top = 16.dp)) }
+                                    val preview = when (selectedGame) {
+                                        "dragon_tiger" -> arrayOf(
+                                            "DRAGON TIGER", "Classic fast-action card duel", "🐉", "Under Development",
+                                            "Fast-Action Card Architecture",
+                                            "Rapid 2-card showdown with Dragon, Tiger, or Tie selections. This native screen is a preview only; it does not deal cards or settle wagers."
+                                        )
+                                        "dice" -> arrayOf(
+                                            "LUCKY 10 DICE", "Pick a number from 1 to 10", "🎲", "Engine Under Audit",
+                                            "Provably Fair Architecture",
+                                            "Lucky 10 number picks plus Small, Big, Even and Odd markets. Results must come from the authoritative server round."
+                                        )
+                                        "andar_bahar" -> arrayOf(
+                                            "ANDAR BAHAR", "Traditional joker card matching", "🃏", "Under Development",
+                                            "Classic Traditional Game",
+                                            "Joker card matching with Andar (Inside) and Bahar (Outside) selections. Authoritative card sequence and settlement are not available in this native preview."
+                                        )
+                                        "roulette" -> arrayOf(
+                                            "ROULETTE", "European single-zero wheel", "🎡", "Engine Under Audit",
+                                            "European Roulette Architecture",
+                                            "European Roulette will feature a single-zero wheel, inside and outside selections, and server-authoritative round settlement."
+                                        )
+                                        else -> arrayOf(
+                                            "TEEN PATTI", "Three-card showdown", "♠", "Under Development",
+                                            "Multiplayer Card Architecture",
+                                            "Three-card game preview. Chaal, Blind and Showdown mechanics require authoritative table state and server settlement before native play is enabled."
+                                        )
+                                    }
+                                    NativeComingSoonScreen(
+                                        title = preview[0],
+                                        subtitle = preview[1],
+                                        symbol = preview[2],
+                                        status = preview[3],
+                                        architectureTitle = preview[4],
+                                        description = preview[5],
+                                        poolBalance = "",
+                                        minBet = "",
+                                        maxBet = "",
+                                        onBack = { selectedGame = null; lastResult = null }
+                                    )
                                 }
                             }
                         }
@@ -380,14 +299,31 @@ fun BigDaddyApp() {
                             }
                         }
                         else -> {
-                            Text("Player profile", style = MaterialTheme.typography.titleLarge)
-                            Text("Username: $username")
-                            Text("Role: $role")
-                            Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("Wallet balance", style = MaterialTheme.typography.titleMedium)
-                                    Text(balance, style = MaterialTheme.typography.headlineSmall)
-                                    Text("Balance is read-only from the secure backend. Local demo rounds cannot change it.")
+                            Text("PLAYER PROFILE", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
+                            Card(
+                                Modifier.fillMaxWidth().padding(top = 8.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF09090B))
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("My Profile", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                        Text("VERIFIED", color = Color(0xFF86EFAC), style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.background(Color(0x1A22C55E), androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).padding(horizontal = 9.dp, vertical = 5.dp))
+                                    }
+                                    ProfileInfoRow("Username", username)
+                                    ProfileInfoRow("Account Role", role)
+                                    ProfileInfoRow("Session Status", "Signed in")
+                                }
+                            }
+                            Card(
+                                Modifier.fillMaxWidth().padding(top = 10.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF09090B))
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Wallet Balance", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium)
+                                    Text(balance, color = Color(0xFFFBBF24), style = MaterialTheme.typography.headlineMedium)
+                                    Text("Read-only balance from the secure backend. Native visual demos cannot debit or credit this wallet.",
+                                        color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
                                     TextButton(onClick = {
                                         scope.launch {
                                             walletError = null
@@ -396,19 +332,20 @@ fun BigDaddyApp() {
                                                 "Unavailable"
                                             }
                                         }
-                                    }) { Text("Refresh balance") }
+                                    }) { Text("Refresh balance", color = Color(0xFFFBBF24)) }
                                     walletError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                                 }
                             }
-                            Text("Game history is stored privately on this device for this player account.")
-                            Text("Local game history", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+                            Text("Local game history", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 14.dp))
+                            Text("Stored privately on this device for this player account.", color = Color(0xFF71717A), style = MaterialTheme.typography.bodySmall)
                             LazyColumn(modifier = Modifier.weight(1f)) {
                                 items(history) { item ->
-                                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                        Column(Modifier.padding(12.dp)) {
-                                            Text(gameNames.firstOrNull { it.first == item.gameCode }?.second ?: item.gameCode)
-                                            Text(item.demoResult)
-                                            Text("Round ${item.roundId}", style = MaterialTheme.typography.labelSmall)
+                                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF18181B))) {
+                                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text(gameNames.firstOrNull { it.first == item.gameCode }?.second ?: item.gameCode, color = Color(0xFFE4E4E7))
+                                            Text(item.demoResult, color = Color(0xFFFBBF24))
+                                            Text("Round \${item.roundId}", color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
                                 }
@@ -424,7 +361,7 @@ fun BigDaddyApp() {
                                     walletError = null
                                     password = ""
                                 }
-                            }) { Text("Sign out") }
+                            }) { Text("Sign out", color = Color(0xFFFCA5A5)) }
                         }
                     }
                 }
@@ -434,3 +371,11 @@ fun BigDaddyApp() {
     }
 }
 
+
+@Composable
+private fun ProfileInfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().background(Color(0xFF18181B), androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
+        Text(value.ifBlank { "—" }, color = Color(0xFFF4F4F5), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+    }
+}
