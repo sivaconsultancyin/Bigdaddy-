@@ -3,6 +3,7 @@ package com.bigdaddy.player.domain
 import java.util.UUID
 import kotlin.random.Random
 import kotlin.math.exp
+import kotlin.math.ln
 import kotlin.math.round
 
 data class DemoOutcome(
@@ -44,6 +45,12 @@ class AviatorRoundManager(
 class FlightAnimationController {
     fun progress(elapsedMillis: Long, durationMillis: Long = 12_000L): Float =
         (elapsedMillis.toFloat() / durationMillis.coerceAtLeast(1L)).coerceIn(0f, 1f)
+
+    fun multiplierProgress(multiplier: Double, maxMultiplier: Double = 25.05): Float {
+        val safeMax = maxMultiplier.coerceAtLeast(1.0001)
+        val safeValue = multiplier.coerceAtLeast(1.0).coerceAtMost(safeMax)
+        return (ln(safeValue) / ln(safeMax)).toFloat().coerceIn(0f, 1f)
+    }
 }
 
 class GameSessionManager {
