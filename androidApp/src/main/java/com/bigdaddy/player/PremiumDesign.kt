@@ -413,7 +413,7 @@ fun PremiumDashboardFilters(selected: String, onSelect: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         listOf("All", "Games", "Wallet", "Profile").forEach { label ->
-            val active = selected == label || (selected == "All" && label == "Games")
+            val active = selected == label
             Box(
                 Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
                     .background(if (active) Color(0xFFF59E0B) else Color.Transparent)
