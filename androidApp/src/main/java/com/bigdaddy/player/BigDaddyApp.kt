@@ -51,8 +51,16 @@ private val BigDaddyDarkColors = darkColorScheme(
     onBackground = Color(0xFFF8FAFC),
     surface = Color(0xFF111827),
     onSurface = Color(0xFFF8FAFC),
-    surfaceVariant = Color(0xFF1F2937),
-    onSurfaceVariant = Color(0xFFCBD5E1),
+    surfaceVariant = Color(0xFF222943),
+    onSurfaceVariant = Color(0xFFD4D8E6),
+    surfaceTint = Color(0xFFFFC45C),
+    surfaceContainerLowest = Color(0xFF080B14),
+    surfaceContainerLow = Color(0xFF11182A),
+    surfaceContainer = Color(0xFF171F34),
+    surfaceContainerHigh = Color(0xFF202A43),
+    surfaceContainerHighest = Color(0xFF2A3552),
+    tertiary = Color(0xFFFFC45C),
+    onTertiary = Color(0xFF171009),
     error = Color(0xFFF87171)
 )
 
