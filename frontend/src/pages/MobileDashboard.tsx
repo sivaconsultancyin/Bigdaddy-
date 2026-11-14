@@ -309,7 +309,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const pendingRequests = requests.filter((r) => r.status === TokenRequestStatus.PENDING);
 
   return (
-    <div className="w-full px-3 py-2.5 space-y-3 pb-24 text-zinc-100">
+    <div className={`w-full min-w-0 max-w-full overflow-x-clip px-3 py-2.5 space-y-3 ${isPlayer ? 'pb-6' : 'pb-24'} text-zinc-100`}>
       {isOwner && activeTab === 'api-health' ? (
         <ApiHealthPanel />
       ) : null}
