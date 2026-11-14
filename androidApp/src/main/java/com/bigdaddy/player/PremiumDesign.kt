@@ -260,7 +260,14 @@ fun PremiumLoginPanel(
 }
 
 @Composable
-fun PremiumGameLobby(onOpen: (String) -> Unit) {
+fun PremiumGameLobby(
+    onOpen: (String) -> Unit,
+    showSummary: Boolean = false,
+    username: String = "",
+    balance: String = "Unavailable",
+    onWalletClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {}
+) {
     Column(Modifier.fillMaxSize()) {
         Text(
             "CASINO GAMES",
@@ -277,7 +284,7 @@ fun PremiumGameLobby(onOpen: (String) -> Unit) {
         Spacer(Modifier.height(10.dp))
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = Modifier.weight(1f),
+            modifier = if (showSummary) Modifier.height(300.dp) else Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -380,6 +387,34 @@ fun PremiumGameLobby(onOpen: (String) -> Unit) {
                             }
                         }
                     }
+                }
+            }
+        }
+        if (showSummary) {
+            Card(
+                Modifier.fillMaxWidth().padding(top = 10.dp).clickable(onClick = onWalletClick),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF09090B)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("MY WALLET", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Text("Available balance · read-only", color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text(balance, color = Color(0xFFFBBF24), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                }
+            }
+            Card(
+                Modifier.fillMaxWidth().padding(top = 8.dp).clickable(onClick = onProfileClick),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF09090B)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("PLAYER PROFILE", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Text(username.ifBlank { "Player account" }, color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("View ›", color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 }
             }
         }
