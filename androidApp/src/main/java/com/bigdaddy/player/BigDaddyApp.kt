@@ -79,8 +79,19 @@ fun BigDaddyApp() {
                 username = account.username
                 role = account.role
                 balance = api.walletBalance(saved)
-            }.onFailure {
-                error = "Saved session could not be verified: ${it.message}"
+            }.onFailure { failure ->
+                val message = failure.message.orEmpty()
+                if (listOf("AUTH_REQUIRED", "INVALID_TOKEN", "USER_NOT_FOUND_OR_DISABLED", "TOKEN_ROLE_STALE")
+                        .any { message.contains(it, ignoreCase = true) }) {
+                    sessions.clear()
+                    token = null
+                    username = ""
+                    role = ""
+                    balance = "—"
+                    error = "Your session expired. Please sign in again."
+                } else {
+                    error = "Saved session could not be verified: $message"
+                }
             }
         }
     }
