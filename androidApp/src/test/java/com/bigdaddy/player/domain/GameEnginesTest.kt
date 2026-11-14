@@ -17,6 +17,14 @@ class GameEnginesTest {
         assertEquals(1f, controller.progress(20_000))
     }
 
+    @Test fun aviatorMultiplierProgressIsMonotonicAndClamped() {
+        val controller = FlightAnimationController()
+        assertEquals(0f, controller.multiplierProgress(1.0))
+        assertTrue(controller.multiplierProgress(2.0) > controller.multiplierProgress(1.5))
+        assertEquals(1f, controller.multiplierProgress(100.0))
+        assertEquals(0f, controller.multiplierProgress(0.5))
+    }
+
     @Test fun crashControllerUsesSameMultiplierValue() {
         val controller = CrashStateController(2.0)
         assertTrue(!controller.hasCrashed(1.99))
