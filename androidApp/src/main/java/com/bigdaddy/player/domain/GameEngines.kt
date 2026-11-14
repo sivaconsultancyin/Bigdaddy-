@@ -65,13 +65,15 @@ private fun deck(): List<PlayingCard> = listOf('S', 'H', 'D', 'C').flatMap { sui
 }
 
 class DragonTigerEngine {
+    internal fun cardStrength(rank: Int): Int = if (rank == 1) 14 else rank
+
     fun play(seed: Long): DemoOutcome {
         val cards = deck().shuffled(Random(seed)).take(2)
         val dragon = cards[0]
         val tiger = cards[1]
         val winner = when {
             dragon.rank == tiger.rank -> "TIE"
-            dragon.rank > tiger.rank -> "DRAGON"
+            cardStrength(dragon.rank) > cardStrength(tiger.rank) -> "DRAGON"
             else -> "TIGER"
         }
         return DemoOutcome("dragon_tiger", result = "Dragon ${dragon.label()} · Tiger ${tiger.label()} · $winner")
@@ -111,38 +113,67 @@ class RouletteEngine {
     }
 }
 
+internal data class TeenPattiHandValue(
+    val category: Int,
+    val tieBreakers: List<Int>
+) : Comparable<TeenPattiHandValue> {
+    override fun compareTo(other: TeenPattiHandValue): Int {
+        if (category != other.category) return category.compareTo(other.category)
+        for (index in 0 until minOf(tieBreakers.size, other.tieBreakers.size)) {
+            val compared = tieBreakers[index].compareTo(other.tieBreakers[index])
+            if (compared != 0) return compared
+        }
+        return tieBreakers.size.compareTo(other.tieBreakers.size)
+    }
+}
+
 class TeenPattiEngine {
-    private fun handScore(cards: List<PlayingCard>): String {
-        val ranks = cards.map { it.rank }.sorted()
-        val counts = ranks.groupingBy { it }.eachCount().values.sortedDescending()
+    internal fun evaluate(cards: List<PlayingCard>): TeenPattiHandValue {
+        require(cards.size == 3) { "Teen Patti hands must contain exactly three cards." }
+        require(cards.map { it.rank to it.suit }.distinct().size == 3) { "Teen Patti hand cannot contain duplicate cards." }
+
+        val ranks = cards.map { if (it.rank == 1) 14 else it.rank }.sortedDescending()
+        val counts = ranks.groupingBy { it }.eachCount().entries
+            .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key })
         val flush = cards.map { it.suit }.distinct().size == 1
-        val sequence = ranks == listOf(ranks.first(), ranks.first() + 1, ranks.first() + 2) ||
-            ranks == listOf(1, 2, 3) || ranks == listOf(1, 12, 13)
+        val ascending = ranks.sorted()
+        val aceToKingQueen = ascending == listOf(2, 13, 14)
+        val aceTwoThree = ascending == listOf(2, 3, 14)
+        val consecutive = ascending[2] - ascending[1] == 1 && ascending[1] - ascending[0] == 1
+        val sequenceHigh = when {
+            aceToKingQueen -> 15
+            aceTwoThree -> 14
+            consecutive -> ascending[2]
+            else -> null
+        }
+
         return when {
-            counts == listOf(3) -> "TRAIL"
-            flush && sequence -> "PURE_SEQUENCE"
-            sequence -> "SEQUENCE"
-            flush -> "COLOR"
-            counts == listOf(2, 1) -> "PAIR"
-            else -> "HIGH_CARD"
+            counts.first().value == 3 -> TeenPattiHandValue(6, listOf(counts.first().key))
+            flush && sequenceHigh != null -> TeenPattiHandValue(5, listOf(sequenceHigh))
+            sequenceHigh != null -> TeenPattiHandValue(4, listOf(sequenceHigh))
+            flush -> TeenPattiHandValue(3, ranks)
+            counts.first().value == 2 -> TeenPattiHandValue(2, listOf(counts.first().key, counts.last().key))
+            else -> TeenPattiHandValue(1, ranks)
         }
     }
+
     fun play(seed: Long): DemoOutcome {
         val cards = deck().shuffled(Random(seed))
         val player = cards.take(3)
         val dealer = cards.drop(3).take(3)
-        val playerScore = handScore(player)
-        val dealerScore = handScore(dealer)
-        val order = listOf("TRAIL", "PURE_SEQUENCE", "SEQUENCE", "COLOR", "PAIR", "HIGH_CARD")
+        val playerValue = evaluate(player)
+        val dealerValue = evaluate(dealer)
         val winner = when {
-            order.indexOf(playerScore) < order.indexOf(dealerScore) -> "PLAYER"
-            order.indexOf(playerScore) > order.indexOf(dealerScore) -> "DEALER"
+            playerValue > dealerValue -> "PLAYER"
+            playerValue < dealerValue -> "DEALER"
             else -> "TIE"
         }
-        return DemoOutcome("teen_patti", result = "Player $playerScore · Dealer $dealerScore · $winner")
+        return DemoOutcome(
+            "teen_patti",
+            result = "Player ${player.joinToString(" ") { it.label() }} · Dealer ${dealer.joinToString(" ") { it.label() }} · $winner"
+        )
     }
 }
-
 class AviatorGameEngine {
     fun createDemoRound(seed: Long): AviatorRoundManager {
         val crashAt = 1.05 + Random(seed).nextDouble() * 24.0
