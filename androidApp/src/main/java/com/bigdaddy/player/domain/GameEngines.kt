@@ -83,13 +83,16 @@ class DragonTigerEngine {
 }
 
 class DiceEngine {
-    internal fun payoutMultiplier(market: String, rolled: Int): Int = when {
-        market.toIntOrNull() in 1..10 && market.toInt() == rolled -> 9
-        market == "small" && rolled in 1..5 -> 2
-        market == "big" && rolled in 6..10 -> 2
-        market == "even" && rolled % 2 == 0 -> 2
-        market == "odd" && rolled % 2 != 0 -> 2
-        else -> 0
+    internal fun payoutMultiplier(market: String, rolled: Int): Int {
+        val number = market.toIntOrNull()
+        return when {
+            number != null && number in 1..10 && number == rolled -> 9
+            market == "small" && rolled in 1..5 -> 2
+            market == "big" && rolled in 6..10 -> 2
+            market == "even" && rolled % 2 == 0 -> 2
+            market == "odd" && rolled % 2 != 0 -> 2
+            else -> 0
+        }
     }
 
     fun play(seed: Long): DemoOutcome {
