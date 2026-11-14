@@ -126,7 +126,7 @@ fun BigDaddyApp() {
                                 // Do not persist or expose a bearer token until the server confirms
                                 // the session and the wallet endpoint is reachable.
                                 val verifiedAccount = api.verifySession(result.token)
-                                val verifiedBalance = result.walletBalance ?: api.walletBalance(result.token)
+                                val verifiedBalance = api.walletBalance(result.token)
                                 sessions.save(result.token)
                                 token = result.token
                                 username = verifiedAccount.username
