@@ -80,10 +80,8 @@ class DragonTigerEngine {
 
 class DiceEngine {
     fun play(seed: Long): DemoOutcome {
-        val random = Random(seed)
-        val first = random.nextInt(6) + 1
-        val second = random.nextInt(6) + 1
-        return DemoOutcome("dice", result = "Dice $first + $second = ${first + second}")
+        val result = Random(seed).nextInt(10) + 1
+        return DemoOutcome("dice", result = "Lucky 10 result: $result")
     }
 }
 
