@@ -70,6 +70,44 @@ class GameEnginesTest {
         assertTrue(higherPair > lowerPairWithAceKicker)
     }
 
+    @Test fun dragonTigerAceIsLowestAndEqualRanksTie() {
+        val engine = DragonTigerEngine()
+        assertEquals("TIGER", engine.winner(14, 2))
+        assertEquals("DRAGON", engine.winner(2, 14))
+        assertEquals("TIE", engine.winner(10, 10))
+    }
+
+    @Test fun andarBaharFirstSideUsesJokerSuitColor() {
+        val engine = AndarBaharEngine()
+        assertEquals("ANDAR", engine.openingSide('S'))
+        assertEquals("ANDAR", engine.openingSide('C'))
+        assertEquals("BAHAR", engine.openingSide('H'))
+        assertEquals("BAHAR", engine.openingSide('D'))
+    }
+
+    @Test fun diceMarketsUseLegacyPayoutRules() {
+        val engine = DiceEngine()
+        assertEquals(9, engine.payoutMultiplier("7", 7))
+        assertEquals(0, engine.payoutMultiplier("7", 8))
+        assertEquals(2, engine.payoutMultiplier("small", 5))
+        assertEquals(2, engine.payoutMultiplier("big", 10))
+        assertEquals(2, engine.payoutMultiplier("even", 8))
+        assertEquals(2, engine.payoutMultiplier("odd", 9))
+        assertEquals(0, engine.payoutMultiplier("invalid", 5))
+    }
+
+    @Test fun rouletteMarketsUseSingleZeroWheelRules() {
+        val engine = RouletteEngine()
+        assertEquals("GREEN", engine.color(0))
+        assertEquals("RED", engine.color(1))
+        assertEquals("BLACK", engine.color(2))
+        assertTrue(engine.wins("red", emptyList(), 1))
+        assertTrue(!engine.wins("red", emptyList(), 0))
+        assertTrue(engine.wins("straight", listOf(0), 0))
+        assertEquals(36, engine.payoutMultiplier("straight"))
+        assertEquals(2, engine.payoutMultiplier("red"))
+    }
+
     @Test fun gameClockUsesInjectedMonotonicSource() {
         var now = 100L
         val clock = GameClock { now }
