@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
 import java.security.SecureRandom
 import java.util.Collections
 import java.util.UUID
-import kotlin.math.ceil
 
 private enum class DragonTigerPhase { READY, BETTING, REVEALING, RESULT }
 
@@ -42,8 +41,7 @@ fun NativeDragonTigerScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit)
     var running by remember { mutableStateOf(false) }
 
     fun dealCards(): Pair<PlayingCard, PlayingCard> {
-        val cards = ('S'..'S').flatMap { listOf('S', 'H', 'D', 'C') }
-            .flatMap { suit -> (2..14).map { rank -> PlayingCard(rank, suit) } }
+        val cards = listOf('S', 'H', 'D', 'C').flatMap { suit -> (2..14).map { rank -> PlayingCard(rank, suit) } }
             .toMutableList()
         Collections.shuffle(cards, SecureRandom())
         return cards[0] to cards[1]
