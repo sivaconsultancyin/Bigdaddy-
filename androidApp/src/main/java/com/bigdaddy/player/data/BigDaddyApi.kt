@@ -94,6 +94,15 @@ class BigDaddyApi {
     }
 
 
+    suspend fun registerReferral(username: String, email: String, password: String, referralCode: String) {
+        val payload = JSONObject()
+            .put("username", username.trim())
+            .put("email", email.trim())
+            .put("password", password)
+            .put("referralCode", referralCode.trim().uppercase())
+        execute(request("/auth/register-referral", body = payload))
+    }
+
     suspend fun gamesList(token: String): List<NativeGameInfo> {
         val response = execute(request("/games/list", token))
         val games = response.optJSONArray("games") ?: return emptyList()
