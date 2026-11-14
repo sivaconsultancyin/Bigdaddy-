@@ -71,7 +71,14 @@ class BigDaddyApi {
     suspend fun verifySession(token: String): NativeAccount {
         val response = execute(request("/auth/me", token))
         val user = response.optJSONObject("user") ?: throw IllegalStateException("Session response did not contain a user.")
-        return NativeAccount(user.optString("id"), user.optString("username"), user.optString("role"))
+        val account = NativeAccount(user.optString("id"), user.optString("username"), user.optString("role"))
+        require(account.id.isNotBlank() && account.username.isNotBlank()) {
+            "The authentication service returned an incomplete account."
+        }
+        require(account.role.equals("PLAYER", ignoreCase = true)) {
+            "This app is for Player accounts only. Please sign in with a Player account."
+        }
+        return account
     }
 
     suspend fun walletBalance(token: String): String {
