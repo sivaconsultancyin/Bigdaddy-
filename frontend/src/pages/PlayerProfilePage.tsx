@@ -43,7 +43,7 @@ export const PlayerProfilePage: React.FC<Props> = ({ onBack }) => {
           <Info label="Email" value={user?.email || '—'} />
           <Info label="Account role" value={user?.role || '—'} />
           <Info label="Registered" value={created} />
-          <Info label="Account status" value="Authenticated" />
+          <Info label="Session status" value="Signed in" />
         </div>
       </section>
       <section className="rounded-2xl border border-amber-500/20 bg-zinc-900/70 p-4">
