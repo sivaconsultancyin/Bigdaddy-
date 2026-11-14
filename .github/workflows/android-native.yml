@@ -9,6 +9,7 @@ on:
       - "*.gradle.kts"
       - "settings.gradle.kts"
       - ".github/workflows/android-native.yml"
+      - "scripts/check-native-android-boundary.sh"
   push:
     branches: [main, "feat/native-android-architecture-migration"]
     paths:
