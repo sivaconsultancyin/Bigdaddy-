@@ -161,3 +161,13 @@ CI success verifies repository automation and isolated fixtures only. It does no
 - Added selectable outside-market previews for red/black, even/odd, low/high, dozens and columns, using the single-zero European wheel semantics and zero exclusions.
 - Wired the screen into Games and Room history. This remains virtual-only; no bet placement, wallet mutation, or server game round is used.
 - Rule fixtures for zero, wheel colors, outside bets and invalid numbers are covered by native engine unit tests. Full Android CI and device UX verification remain pending.
+
+
+## Native Teen Patti screen checkpoint — 2026-11-14
+
+- Added `NativeTeenPattiScreen.kt` and connected it to the Games screen.
+- Implements a 15-second local round-start countdown, secure shuffle of a standard 52-card deck, unique 3-card player/dealer hands, sequential card reveal, native hand comparison and result display.
+- Uses the inspected legacy Teen Patti ranking: Trail > Pure Sequence > Sequence > Color > Pair > High Card; AKQ is highest sequence and A23 is second-highest. Pair/high-card tie-breakers compare ranks.
+- Added tests for AKQ/A23/KQJ ordering, pure sequence vs sequence, flush vs pair, and invalid/duplicate cards.
+- Persists the round result to local Room history. This is virtual demo gameplay only; it does not place stakes, call Supabase game APIs, debit wallets, or issue payouts.
+- Android CI, physical-device layout/accessibility checks and full E2E remain required before release/cutover.
