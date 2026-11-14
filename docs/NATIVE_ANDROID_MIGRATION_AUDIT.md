@@ -118,3 +118,15 @@ CI success verifies repository automation and isolated fixtures only. It does no
 - This is an integration/display milestone, not a native Aviator engine cutover: the existing Supabase Aviator worker remains authoritative for round state. Bet placement/cashout remain unavailable from this native UI until a complete tested client contract and physical-device E2E are delivered.
 - No production database, game rounds, player records, wallet balances, or Supabase function deployments were changed by this work.
 - CI for this commit must be checked before treating the changes as verified.
+
+
+## APK-only game execution architecture update (2026-11-14)
+
+- Removed the native Android client's authenticated GET `/games/aviator/state` method and typed server-round model.
+- Removed the one-second Aviator server polling loop from the Player app.
+- Added a native Compose Aviator demo flight screen. The local engine creates the round, advances the multiplier from a monotonic clock, detects the local demo crash, and records the completed round in Room history.
+- The native game UI no longer needs a server game-state request to render or advance the Aviator demo. The API adapter is limited to account/session verification and wallet-balance reads at this stage.
+- Other five games still use local deterministic demo outcome entry points; they are not yet full-featured interactive game screens. Exact legacy-rule parity and game-specific controls remain open work.
+- The Aviator demo result is device-generated and untrusted. It must never be accepted as proof for a wallet debit/credit. No betting, cashout, deposit, withdrawal, or payout mutation is enabled.
+- No production Supabase game tables, Edge Functions, cron jobs, Realtime subscriptions, player records, or wallet balances were changed or disabled.
+- CI for commits `d313d727af943233e18594d7127735abf79f83f0`, `75c90950b77f6f075d3e0d83f94064168318d872`, and `24630c965f64c48422d90f33b75dbfde9b56181e` must complete successfully before treating this checkpoint as build-verified.
