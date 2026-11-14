@@ -1,6 +1,5 @@
 package com.bigdaddy.player
 
-import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -91,7 +90,7 @@ fun NativeDragonTigerScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit)
                     winner = null
                     dragonCard = null
                     tigerCard = null
-                    val started = SystemClock.elapsedRealtime()
+                    val started = System.currentTimeMillis()
                     val (dragon, tiger) = dealCards()
                     phase = DragonTigerPhase.BETTING
                     for (remaining in 12 downTo 1) {
