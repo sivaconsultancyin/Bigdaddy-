@@ -130,3 +130,13 @@ CI success verifies repository automation and isolated fixtures only. It does no
 - The Aviator demo result is device-generated and untrusted. It must never be accepted as proof for a wallet debit/credit. No betting, cashout, deposit, withdrawal, or payout mutation is enabled.
 - No production Supabase game tables, Edge Functions, cron jobs, Realtime subscriptions, player records, or wallet balances were changed or disabled.
 - CI for commits `d313d727af943233e18594d7127735abf79f83f0`, `75c90950b77f6f075d3e0d83f94064168318d872`, and `24630c965f64c48422d90f33b75dbfde9b56181e` must complete successfully before treating this checkpoint as build-verified.
+
+
+## Native game-screen implementation checkpoint — 2026-11-14
+
+- Added and wired an interactive local Dragon Tiger round screen: 12-second betting countdown, shuffled two-card deal using Android SecureRandom, reveal/result phases, Ace-low comparison through the native DragonTigerEngine, and Room history callback.
+- Added and wired an interactive local Lucky 10 screen: 14-second betting countdown, rolling animation phase, local 1..10 result generated from a SecureRandom seed, market preview for exact number / small / big / even / odd, and Room history callback.
+- Both screens are explicitly virtual-demo only. The market preview is informational and does not accept stakes, debit a wallet, or issue payouts.
+- Latest source commits for this checkpoint: `089962d` (Dragon Tiger screen), `7ac8f8e` (Dragon Tiger app integration), `6354c5f` (deck construction cleanup), `a27a9b1` (Lucky 10 screen), `fd32260` (Lucky 10 app integration).
+- CI for the final integration commit must pass before this checkpoint is considered build-verified. The earlier CI runs passing on commit `6354c5f` do not validate the later Lucky 10 screen/integration commits.
+- Remaining: full legacy rule/fixture parity, accessibility and responsive UI QA, lifecycle interruption/recovery, complete Andar Bahar / Roulette / Teen Patti screens, production-quality Aviator screen, device E2E, signed release and staged cutover.
