@@ -73,12 +73,13 @@ fun BigDaddyApp() {
     LaunchedEffect(Unit) {
         val saved = sessions.read()
         if (saved != null) {
-            token = saved
             runCatching {
                 val account = api.verifySession(saved)
+                val currentBalance = api.walletBalance(saved)
+                token = saved
                 username = account.username
                 role = account.role
-                balance = api.walletBalance(saved)
+                balance = currentBalance
             }.onFailure { failure ->
                 val message = failure.message.orEmpty()
                 if (listOf("AUTH_REQUIRED", "INVALID_TOKEN", "USER_NOT_FOUND_OR_DISABLED", "TOKEN_ROLE_STALE")
