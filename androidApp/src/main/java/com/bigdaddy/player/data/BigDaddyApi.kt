@@ -44,9 +44,20 @@ class BigDaddyApi {
         }
         client.newCall(request).execute().use { response ->
             val raw = response.body?.string().orEmpty()
-            val parsed = if (raw.isBlank()) JSONObject() else JSONObject(raw)
+            val parsed = runCatching { if (raw.isBlank()) JSONObject() else JSONObject(raw) }.getOrElse { JSONObject() }
             if (!response.isSuccessful) {
-                throw IllegalStateException(parsed.optString("error", parsed.optString("message", "Request failed (${response.code})")))
+                val serverMessage = parsed.optString(
+                    "error",
+                    parsed.optString("message", raw.take(240).ifBlank { "Request failed" })
+                )
+                // Keep auth failures machine-detectable by the session restore flow.
+                val code = when (response.code) {
+                    401 -> "AUTH_REQUIRED"
+                    403 -> "TOKEN_ROLE_STALE"
+                    404 -> "USER_NOT_FOUND_OR_DISABLED"
+                    else -> "HTTP_${response.code}"
+                }
+                throw IllegalStateException("$code: $serverMessage")
             }
             parsed
         }
