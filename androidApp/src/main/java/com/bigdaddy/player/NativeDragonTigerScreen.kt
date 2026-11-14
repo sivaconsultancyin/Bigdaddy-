@@ -103,7 +103,7 @@ fun NativeDragonTigerScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit)
                     winner = engine.winner(dragon.rank, tiger.rank)
                     delay(4_500)
                     phase = DragonTigerPhase.RESULT
-                    val ended = SystemClock.elapsedRealtime()
+                    val ended = System.currentTimeMillis()
                     onRoundCompleted(
                         DemoOutcome(
                             gameCode = "dragon_tiger",
