@@ -34,6 +34,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.window.Dialog
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,9 +114,18 @@ fun PremiumLoginPanel(
     onPasswordChange: (String) -> Unit,
     busy: Boolean,
     error: String?,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    onReferralRegister: suspend (String, String, String, String) -> Unit
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+    var showReferralDialog by remember { mutableStateOf(false) }
+    var referralUsername by remember { mutableStateOf("") }
+    var referralEmail by remember { mutableStateOf("") }
+    var referralPassword by remember { mutableStateOf("") }
+    var referralCode by remember { mutableStateOf("BIGDADDY777") }
+    var referralBusy by remember { mutableStateOf(false) }
+    var referralError by remember { mutableStateOf<String?>(null) }
+    val referralScope = rememberCoroutineScope()
     PremiumBackdrop {
         Column(
             Modifier.fillMaxSize().padding(horizontal = 26.dp, vertical = 28.dp),
@@ -180,6 +192,58 @@ fun PremiumLoginPanel(
                         else Text("Sign In", fontWeight = FontWeight.Bold)
                     }
                     Text("Secure player sign-in", color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
+                    TextButton(
+                        onClick = { referralError = null; showReferralDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("✦  Have a referral code? Register", color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+    }
+    if (showReferralDialog) {
+        Dialog(onDismissRequest = { if (!referralBusy) showReferralDialog = false }) {
+            Card(
+                Modifier.fillMaxWidth().border(1.dp, Color(0x66F59E0B), RoundedCornerShape(18.dp)),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF09090B))
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Referral Registration", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Registration requires a sponsor code. New accounts are registered as Players.", color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(value = referralCode, onValueChange = { referralCode = it.uppercase() }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Referral Code") })
+                    OutlinedTextField(value = referralUsername, onValueChange = { referralUsername = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Username") })
+                    OutlinedTextField(value = referralEmail, onValueChange = { referralEmail = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Email") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                    OutlinedTextField(value = referralPassword, onValueChange = { referralPassword = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation())
+                    referralError?.let { Text(it, color = Color(0xFFFF7777), style = MaterialTheme.typography.bodySmall) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { showReferralDialog = false }, enabled = !referralBusy) { Text("Cancel", color = Color(0xFFA1A1AA)) }
+                        Button(
+                            enabled = !referralBusy && referralCode.isNotBlank() && referralUsername.isNotBlank() && referralEmail.isNotBlank() && referralPassword.length >= 6,
+                            onClick = {
+                                referralScope.launch {
+                                    referralBusy = true
+                                    referralError = null
+                                    runCatching {
+                                        onReferralRegister(referralUsername, referralEmail, referralPassword, referralCode)
+                                    }.onSuccess {
+                                        showReferralDialog = false
+                                        referralUsername = ""
+                                        referralEmail = ""
+                                        referralPassword = ""
+                                    }.onFailure {
+                                        referralError = it.message ?: "Registration failed. Please try again."
+                                    }
+                                    referralBusy = false
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B), contentColor = Color(0xFF09090B))
+                        ) {
+                            if (referralBusy) CircularProgressIndicator(Modifier.size(16.dp), color = Color(0xFF09090B), strokeWidth = 2.dp)
+                            else Text("Register", fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
