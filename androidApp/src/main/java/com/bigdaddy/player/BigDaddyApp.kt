@@ -182,7 +182,7 @@ fun BigDaddyApp() {
             )
         } else {
             Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-                Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 10.dp).verticalScroll(rememberScrollState())) {
+                Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 10.dp).then(if (tab == "Profile") Modifier else Modifier.verticalScroll(rememberScrollState()))) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("BigDaddy Games", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleLarge,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
