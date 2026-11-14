@@ -77,6 +77,32 @@ class GameEnginesTest {
         assertEquals("BAHAR", engine.openingSide('D'))
     }
 
+    @Test fun andarBaharDealsAlternateUntilFirstJokerRankMatch() {
+        val engine = AndarBaharEngine()
+        val deck = listOf(
+            PlayingCard(8, 'S'),
+            PlayingCard(2, 'H'),
+            PlayingCard(3, 'D'),
+            PlayingCard(8, 'C'),
+            PlayingCard(4, 'S')
+        )
+        val sequence = engine.dealSequence(deck)
+        assertEquals(3, sequence.size)
+        assertEquals(listOf("ANDAR", "BAHAR", "ANDAR"), sequence.map { it.side })
+        assertEquals(8, sequence.last().card.rank)
+        assertTrue(sequence.all { it.card.rank != 8 } || sequence.last().card.rank == 8)
+    }
+
+    @Test fun andarBaharRejectsDeckWithoutMatchingJokerRank() {
+        val engine = AndarBaharEngine()
+        try {
+            engine.dealSequence(listOf(PlayingCard(8, 'S'), PlayingCard(2, 'H'), PlayingCard(3, 'D')))
+            throw AssertionError("Expected missing matching rank to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("matching rank"))
+        }
+    }
+
     @Test fun diceMarketsUseLegacyPayoutRules() {
         val engine = DiceEngine()
         assertEquals(9, engine.payoutMultiplier("7", 7))
