@@ -128,7 +128,7 @@ fun NativeTeenPattiScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit) {
                     playerHandName = ""
                     dealerHandName = ""
                     val started = System.currentTimeMillis()
-                    val shuffled = ('S'..'S').flatMap { listOf('S', 'H', 'D', 'C') }
+                    val shuffled = listOf('S', 'H', 'D', 'C')
                         .flatMap { suit -> (2..14).map { rank -> PlayingCard(rank, suit) } }
                         .toMutableList()
                     Collections.shuffle(shuffled, SecureRandom())
