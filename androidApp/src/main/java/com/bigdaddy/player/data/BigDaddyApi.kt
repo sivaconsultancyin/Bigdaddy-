@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit
 
 data class NativeAccount(val id: String, val username: String, val role: String)
 data class NativeLoginResult(val token: String, val account: NativeAccount, val walletBalance: String?)
+data class AviatorRoundState(val id: String, val roundNumber: Long, val status: String, val multiplier: Double, val crashMultiplier: Double?, val startedAt: String?)
 
 class BigDaddyApi {
     private val client = OkHttpClient.Builder()
@@ -90,6 +91,22 @@ class BigDaddyApi {
             "This app is for Player accounts only. Please sign in with a Player account."
         }
         return account
+    }
+
+
+    suspend fun aviatorState(token: String): AviatorRoundState? {
+        val response = execute(request("/games/aviator/state", token))
+        val round = response.optJSONObject("round") ?: return null
+        val id = round.optString("id")
+        if (id.isBlank()) throw IllegalStateException("Aviator state returned an invalid round.")
+        return AviatorRoundState(
+            id = id,
+            roundNumber = round.optLong("roundNumber"),
+            status = round.optString("status", "UNKNOWN"),
+            multiplier = round.optDouble("multiplier", 1.0),
+            crashMultiplier = if (round.isNull("crashMultiplier")) null else round.optDouble("crashMultiplier"),
+            startedAt = round.optString("startedAt").takeIf { it.isNotBlank() && it != "null" }
+        )
     }
 
     suspend fun walletBalance(token: String): String {
