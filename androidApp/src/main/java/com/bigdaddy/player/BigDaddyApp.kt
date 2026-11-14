@@ -16,6 +16,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -38,6 +41,20 @@ import com.bigdaddy.player.domain.LocalDemoGameRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
+
+private val BigDaddyDarkColors = darkColorScheme(
+    primary = Color(0xFFEF4444),
+    onPrimary = Color.White,
+    secondary = Color(0xFF22C55E),
+    onSecondary = Color(0xFF07130B),
+    background = Color(0xFF080B12),
+    onBackground = Color(0xFFF8FAFC),
+    surface = Color(0xFF111827),
+    onSurface = Color(0xFFF8FAFC),
+    surfaceVariant = Color(0xFF1F2937),
+    onSurfaceVariant = Color(0xFFCBD5E1),
+    error = Color(0xFFF87171)
+)
 
 private val gameNames = listOf(
     "aviator" to "Aviator",
@@ -103,7 +120,8 @@ fun BigDaddyApp() {
         }
     }
 
-    MaterialTheme {
+    MaterialTheme(colorScheme = BigDaddyDarkColors) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (token == null) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -152,6 +170,7 @@ fun BigDaddyApp() {
             }
         } else {
             Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
                 bottomBar = {
                     NavigationBar {
                         listOf("Games").forEach { item ->
@@ -410,6 +429,7 @@ fun BigDaddyApp() {
                     }
                 }
             }
+        }
         }
     }
 }
