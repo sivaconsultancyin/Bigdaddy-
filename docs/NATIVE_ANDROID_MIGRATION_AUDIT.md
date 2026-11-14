@@ -153,3 +153,11 @@ CI success verifies repository automation and isolated fixtures only. It does no
 - Wired the screen into the Games navigation and Room local history. No wager, server round, Supabase game API, wallet debit, or payout is used.
 - Corrected the two prior screen timestamp expressions to use Unix epoch milliseconds for Room history; the previous CI logs showed unresolved `SystemClock` references in both screens.
 - This remains virtual local gameplay, not production betting or a trusted wallet settlement engine. Android CI and full legacy fixture parity must pass before this checkpoint is considered verified.
+
+
+## Native European Roulette screen checkpoint — 2026-11-14
+
+- Added a local Compose roulette screen with 14-second betting countdown, a 9.5-second approximate visual spin, and a SecureRandom-seeded 0–36 final result from the native RouletteEngine.
+- Added selectable outside-market previews for red/black, even/odd, low/high, dozens and columns, using the single-zero European wheel semantics and zero exclusions.
+- Wired the screen into Games and Room history. This remains virtual-only; no bet placement, wallet mutation, or server game round is used.
+- Rule fixtures for zero, wheel colors, outside bets and invalid numbers are covered by native engine unit tests. Full Android CI and device UX verification remain pending.
