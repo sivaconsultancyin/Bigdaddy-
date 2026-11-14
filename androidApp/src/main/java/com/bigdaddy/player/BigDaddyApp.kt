@@ -194,7 +194,12 @@ fun BigDaddyApp() {
                         "All", "Games" -> {
                             if (selectedGame == null) {
                                 PremiumGameLobby(
-                                    onOpen = { code -> selectedGame = code; lastResult = null }
+                                    onOpen = { code -> selectedGame = code; lastResult = null },
+                                    showSummary = tab == "All",
+                                    username = username,
+                                    balance = balance,
+                                    onWalletClick = { tab = "Wallet" },
+                                    onProfileClick = { tab = "Profile" }
                                 )
                             } else {
                                 val name = gameNames.first { it.first == selectedGame }.second
