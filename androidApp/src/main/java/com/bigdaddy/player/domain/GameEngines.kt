@@ -1,7 +1,7 @@
 package com.bigdaddy.player.domain
 
 import java.util.UUID
-import java.util.Random
+import kotlin.random.Random
 import kotlin.math.exp
 import kotlin.math.round
 
