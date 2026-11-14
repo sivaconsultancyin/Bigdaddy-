@@ -403,3 +403,30 @@ fun PremiumGameHeader(title: String, subtitle: String, accent: Color, content: @
         content()
     }
 }
+
+
+@Composable
+fun PremiumDashboardFilters(selected: String, onSelect: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF18181B)).padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        listOf("All", "Games", "Wallet", "Profile").forEach { label ->
+            val active = selected == label || (selected == "All" && label == "Games")
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                    .background(if (active) Color(0xFFF59E0B) else Color.Transparent)
+                    .clickable { onSelect(label) }.padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    label,
+                    color = if (active) Color(0xFF09090B) else Color(0xFFA1A1AA),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
