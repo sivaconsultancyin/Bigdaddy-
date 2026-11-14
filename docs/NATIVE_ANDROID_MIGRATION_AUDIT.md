@@ -144,3 +144,12 @@ CI success verifies repository automation and isolated fixtures only. It does no
 
 - Follow-up correctness fix: both new game screens now persist Unix epoch-millisecond timestamps (rather than device-uptime values) into Room history. Lucky 10 market buttons are grouped four per row to reduce narrow-screen overflow risk.
 - Follow-up commits: `387a0b3`, `a2eb41f`. The final branch head after these changes requires a fresh successful Android CI run; earlier passing runs do not cover it.
+
+
+## Native Andar Bahar screen checkpoint — 2026-11-14
+
+- Added an interactive local Andar Bahar Compose screen with a 13-second betting countdown, secure shuffled 52-card deck, Joker reveal, alternating card-by-card dealing at the legacy 650 ms cadence, and stop on the first rank match.
+- Preserves the legacy opening-side rule: black Joker (Spades/Clubs) starts Andar; red Joker (Hearts/Diamonds) starts Bahar. The winning side is the side assigned to the first matching-rank card.
+- Wired the screen into the Games navigation and Room local history. No wager, server round, Supabase game API, wallet debit, or payout is used.
+- Corrected the two prior screen timestamp expressions to use Unix epoch milliseconds for Room history; the previous CI logs showed unresolved `SystemClock` references in both screens.
+- This remains virtual local gameplay, not production betting or a trusted wallet settlement engine. Android CI and full legacy fixture parity must pass before this checkpoint is considered verified.
