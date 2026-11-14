@@ -1,6 +1,5 @@
 package com.bigdaddy.player
 
-import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,7 +61,7 @@ fun NativeLuckyTenScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit) {
             }
         }
         Text("Select a virtual market (no money is wagered)", style = MaterialTheme.typography.titleMedium)
-        markets.chunked(5).forEach { row ->
+        markets.chunked(4).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { market ->
                     if (selectedMarket == market) {
@@ -80,7 +79,7 @@ fun NativeLuckyTenScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit) {
                 scope.launch {
                     running = true
                     resultNumber = null
-                    val started = SystemClock.elapsedRealtime()
+                    val started = System.currentTimeMillis()
                     phase = DiceRoundPhase.BETTING
                     for (remaining in 14 downTo 1) {
                         secondsLeft = remaining
