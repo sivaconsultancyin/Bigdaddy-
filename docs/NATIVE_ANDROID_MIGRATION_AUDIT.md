@@ -81,3 +81,10 @@ The separate Kotlin/Compose module now contains:
 - The latest verified Android CI run before this UI commit was run `43588998743` on commit `6caca28922f801c8daa2fef3eb290c8927b0dabd`: `assembleDebug` succeeded, `testDebugUnitTest` succeeded, and `bigdaddy-native-debug-apk` was uploaded (12,678,189 bytes). This verification does not cover the subsequent UI commits; CI must pass again on the latest head.
 - Deposit and Withdraw are not wired in the native UI because the inspected native API adapter exposes login/session and read-only wallet balance only. Do not add fake/inert transaction buttons. Implement these only after a secure, server-authoritative deposit/withdraw API contract, validation, idempotency, and audit trail are verified.
 - The current build remains a local-demo foundation. No real wager, client-side payout, or local game result may change the authoritative Supabase wallet.
+
+
+## Engine edge-case hardening update (2026-11-14)
+
+- Tightened the native Lucky 10 payout helper to reject results outside the only legal result domain (1..10) before checking parity or range markets. This prevents invalid values such as 12 from being treated as an even win.
+- Added deterministic tests for Lucky 10 invalid-result boundaries, European Roulette zero behavior across outside markets, and invalid wheel numbers.
+- These are local engine-helper tests only. They do not enable wagering, create wallet transactions, or replace the legacy server's cryptographic outcome generation.
