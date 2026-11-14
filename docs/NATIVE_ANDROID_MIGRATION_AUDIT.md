@@ -54,3 +54,22 @@ The repository has frontend game screens and backend engines/routes. The Supabas
 - Local demo engines and deterministic tests for each discovered game.
 - API contract tests and strict wallet boundary.
 - Supabase caller/cron/function inventory, then reversible cleanup only after native release verification.
+
+
+## Native foundation implementation update (2026-11-14)
+
+The separate Kotlin/Compose module now contains:
+- Encrypted BigDaddy bearer-token storage backed by Android Keystore + DataStore.
+- Login and session verification through the existing `/functions/v1/api/auth/login` and `/auth/me` routes, followed by a fresh `/wallet/my-wallet` read. The app does not expose or persist the token until session verification and wallet retrieval succeed.
+- Client-safe Supabase project URL and publishable key defaults, with Gradle property/environment overrides. No service-role key or JWT signing secret is packaged in the APK.
+- Room-backed local game history and six local demo game entry points.
+- Aviator local demo animation and multiplier using one monotonic time source.
+- Basic deterministic engine tests; Dragon Tiger treats Ace as high, and Teen Patti compares hand category and tie-break values.
+
+## Release blockers — do not treat the preview APK as production
+
+- The six local game engines are still demo implementations and have not been reconciled against every legacy game rule, payout table, tie rule, and edge case.
+- Wallet balance is read-only in the native app. A client-generated local result is untrusted and must not directly debit or credit the Supabase wallet. Any real virtual-token wager/settlement needs a server-authoritative validation and idempotent ledger contract, or must remain local-only and clearly marked as demo.
+- Native screens are a foundation, not a complete port of all existing player/admin flows.
+- No physical Android device E2E, accessibility/responsive QA, signed release build, Play distribution, or rollback/cutover verification has been completed.
+- Keep the existing web app, production game schemas, Edge Functions, scheduled jobs, wallet balances, and player records intact until the native release passes the staged acceptance plan.
