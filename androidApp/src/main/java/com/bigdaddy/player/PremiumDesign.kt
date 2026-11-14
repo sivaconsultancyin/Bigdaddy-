@@ -64,12 +64,12 @@ private data class PremiumGameStyle(
 )
 
 private val premiumGames = listOf(
-    PremiumGameStyle("aviator", "AVIATOR", "Native visual demo · live connection pending", "✈", Color(0xFFFF4D4D), Color(0xFFFF9B42)),
-    PremiumGameStyle("dragon_tiger", "DRAGON TIGER", "Preview · Coming Soon", "🐉", Color(0xFFE34A4A), Color(0xFFFFC45C)),
-    PremiumGameStyle("dice", "LUCKY 10 DICE", "Preview · Coming Soon", "🎲", Color(0xFF5C7CFA), Color(0xFFB56CFF)),
-    PremiumGameStyle("andar_bahar", "ANDAR BAHAR", "Preview · Coming Soon", "🃏", Color(0xFF16A36A), Color(0xFFDBB65C)),
-    PremiumGameStyle("roulette", "ROULETTE", "Preview · Coming Soon", "🎡", Color(0xFFDA3545), Color(0xFF171923)),
-    PremiumGameStyle("teen_patti", "TEEN PATTI", "Preview · Coming Soon", "♠", Color(0xFF15966A), Color(0xFFFFC45C))
+    PremiumGameStyle("aviator", "Aviator / Crash", "Native visual demo · not live", "✈", Color(0xFFFF4D4D), Color(0xFFFF9B42)),
+    PremiumGameStyle("roulette", "European Roulette", "Preview · Coming Soon", "◎", Color(0xFFDA3545), Color(0xFFFFC45C)),
+    PremiumGameStyle("teen_patti", "Teen Patti", "Preview · Coming Soon", "♣", Color(0xFF15966A), Color(0xFFFFC45C)),
+    PremiumGameStyle("dice", "Dice", "Preview · Coming Soon", "⚄", Color(0xFF5C7CFA), Color(0xFFB56CFF)),
+    PremiumGameStyle("dragon_tiger", "Dragon Tiger", "Preview · Coming Soon", "🐉", Color(0xFFE34A4A), Color(0xFFFFC45C)),
+    PremiumGameStyle("andar_bahar", "Andar Bahar", "Preview · Coming Soon", "♠", Color(0xFF16A36A), Color(0xFFDBB65C))
 )
 
 @Composable
@@ -270,7 +270,7 @@ fun PremiumGameLobby(
 ) {
     Column(Modifier.fillMaxSize()) {
         Text(
-            "CASINO GAMES",
+            "GAMES",
             color = Color(0xFFFDE68A),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Black
@@ -284,7 +284,7 @@ fun PremiumGameLobby(
         Spacer(Modifier.height(10.dp))
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = if (showSummary) Modifier.height(300.dp) else Modifier.weight(1f),
+            modifier = Modifier.height(410.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -374,7 +374,7 @@ fun PremiumGameLobby(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "Game",
+                                    "Pool: —",
                                     color = Color(0xFF71717A),
                                     style = MaterialTheme.typography.labelSmall
                                 )
@@ -398,7 +398,7 @@ fun PremiumGameLobby(
             ) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("MY WALLET", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Text("WALLET", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         Text("Available balance · read-only", color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
                     }
                     Text(balance, color = Color(0xFFFBBF24), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
@@ -411,7 +411,7 @@ fun PremiumGameLobby(
             ) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("PLAYER PROFILE", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Text("PROFILE", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         Text(username.ifBlank { "Player account" }, color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
                     }
                     Text("View ›", color = Color(0xFFFBBF24), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
