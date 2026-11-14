@@ -164,16 +164,15 @@ fun BigDaddyApp() {
                                 TextButton(onClick = { selectedGame = null; lastResult = null }) { Text("← All games") }
                                 if (selectedGame == "aviator") {
                                     AviatorDemoScreen(
-                                        onCompleted = { outcome ->
+                                        onCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
-                                            val ended = System.currentTimeMillis()
                                             scope.launch {
                                                 historyDao.insert(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
-                                                        startedAtEpochMillis = ended,
+                                                        startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
                                                         demoResult = outcome.result
                                                     )
