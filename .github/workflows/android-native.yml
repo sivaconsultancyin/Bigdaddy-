@@ -14,6 +14,7 @@ on:
     paths:
       - "androidApp/**"
       - "gradle/**"
+      - "gradle.properties"
       - "*.gradle.kts"
       - "settings.gradle.kts"
       - ".github/workflows/android-native.yml"
