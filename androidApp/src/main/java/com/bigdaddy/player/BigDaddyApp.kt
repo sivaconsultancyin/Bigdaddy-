@@ -92,7 +92,7 @@ fun BigDaddyApp() {
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf("Games") }
+    var tab by remember { mutableStateOf("All") }
     var selectedGame by remember { mutableStateOf<String?>(null) }
     var lastResult by remember { mutableStateOf<String?>(null) }
 
@@ -178,29 +178,19 @@ fun BigDaddyApp() {
                 }
             )
         } else {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                bottomBar = {
-                    NavigationBar {
-                        listOf("Games").forEach { item ->
-                            NavigationBarItem(
-                                selected = tab == item,
-                                onClick = { tab = item; selectedGame = null },
-                                icon = {},
-                                label = { Text(item) }
-                            )
-                        }
-                    }
-                }
-            ) { padding ->
-                Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
+                Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("BigDaddy", style = MaterialTheme.typography.headlineSmall)
-                        TextButton(onClick = { tab = "Profile"; selectedGame = null }) { Text("Profile") }
+                        Text("BigDaddy Games", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
                     }
-                    Spacer(Modifier.padding(4.dp))
+                    PremiumDashboardFilters(
+                        selected = tab,
+                        onSelect = { selected -> tab = selected; selectedGame = null }
+                    )
+                    Spacer(Modifier.padding(3.dp))
                     when (tab) {
-                        "Games" -> {
+                        "All", "Games" -> {
                             if (selectedGame == null) {
                                 PremiumGameLobby(
                                     onOpen = { code -> selectedGame = code; lastResult = null }
