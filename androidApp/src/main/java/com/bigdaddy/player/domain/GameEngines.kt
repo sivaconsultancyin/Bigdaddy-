@@ -57,15 +57,15 @@ class GameSessionManager {
 }
 
 data class PlayingCard(val rank: Int, val suit: Char) {
-    fun label(): String = "${when (rank) { 1 -> "A"; 11 -> "J"; 12 -> "Q"; 13 -> "K"; else -> rank.toString() }}$suit"
+    fun label(): String = "${when (rank) { 14 -> "A"; 11 -> "J"; 12 -> "Q"; 13 -> "K"; else -> rank.toString() }}$suit"
 }
 
 private fun deck(): List<PlayingCard> = listOf('S', 'H', 'D', 'C').flatMap { suit ->
-    (1..13).map { rank -> PlayingCard(rank, suit) }
+    (2..14).map { rank -> PlayingCard(rank, suit) }
 }
 
 class DragonTigerEngine {
-    internal fun cardStrength(rank: Int): Int = if (rank == 1) 14 else rank
+    internal fun cardStrength(rank: Int): Int = if (rank == 14) 1 else rank
 
     fun play(seed: Long): DemoOutcome {
         val cards = deck().shuffled(Random(seed)).take(2)
@@ -92,7 +92,8 @@ class AndarBaharEngine {
         val cards = deck().shuffled(Random(seed))
         val joker = cards.first()
         // Opening side is independent of the joker card's suit.
-        val firstSide = if (Random(seed xor 0x5A5A5A5AL).nextBoolean()) "ANDAR" else "BAHAR"
+        val jokerIsBlack = joker.suit == 'S' || joker.suit == 'C'
+        val firstSide = if (jokerIsBlack) "ANDAR" else "BAHAR"
         var winner = firstSide
         var dealt = 0
         for (card in cards.drop(1)) {
@@ -132,12 +133,12 @@ class TeenPattiEngine {
         require(cards.size == 3) { "Teen Patti hands must contain exactly three cards." }
         require(cards.map { it.rank to it.suit }.distinct().size == 3) { "Teen Patti hand cannot contain duplicate cards." }
 
-        val ranks = cards.map { if (it.rank == 1) 14 else it.rank }.sortedDescending()
+        val ranks = cards.map { it.rank }.sortedDescending()
         val counts = ranks.groupingBy { it }.eachCount().entries
             .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key })
         val flush = cards.map { it.suit }.distinct().size == 1
         val ascending = ranks.sorted()
-        val aceToKingQueen = ascending == listOf(2, 13, 14)
+        val aceToKingQueen = ascending == listOf(12, 13, 14)
         val aceTwoThree = ascending == listOf(2, 3, 14)
         val consecutive = ascending[2] - ascending[1] == 1 && ascending[1] - ascending[0] == 1
         val sequenceHigh = when {
