@@ -30,6 +30,22 @@ class GameEnginesTest {
         }
     }
 
+    @Test fun luckyTenResultAlwaysFallsWithinOneToTen() {
+        val engine = DiceEngine()
+        repeat(500) { seed ->
+            val value = engine.play(seed.toLong()).result.substringAfter(": ").toInt()
+            assertTrue(value in 1..10)
+        }
+    }
+
+    @Test fun gameClockUsesInjectedMonotonicSource() {
+        var now = 100L
+        val clock = GameClock { now }
+        clock.start()
+        now = 375L
+        assertEquals(275L, clock.elapsedMillis())
+    }
+
     @Test fun gameSessionManagerKeepsOneSessionUntilEnded() {
         val manager = GameSessionManager()
         assertEquals(manager.begin(), manager.begin())
