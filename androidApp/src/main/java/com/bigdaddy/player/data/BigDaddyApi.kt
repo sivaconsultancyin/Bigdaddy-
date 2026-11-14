@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit
 
 data class NativeAccount(val id: String, val username: String, val role: String)
 data class NativeLoginResult(val token: String, val account: NativeAccount, val walletBalance: String?)
+data class NativeGameInfo(val code: String, val name: String, val status: String, val description: String, val poolBalance: String, val minBet: String, val maxBet: String)
 
 class BigDaddyApi {
     private val client = OkHttpClient.Builder()
@@ -92,6 +93,25 @@ class BigDaddyApi {
         return account
     }
 
+
+    suspend fun gamesList(token: String): List<NativeGameInfo> {
+        val response = execute(request("/games/list", token))
+        val games = response.optJSONArray("games") ?: return emptyList()
+        return (0 until games.length()).mapNotNull { index ->
+            val item = games.optJSONObject(index) ?: return@mapNotNull null
+            val code = item.optString("code")
+            if (code.isBlank()) return@mapNotNull null
+            NativeGameInfo(
+                code = code,
+                name = item.optString("name", code),
+                status = item.optString("status", "UNKNOWN"),
+                description = item.optString("description", ""),
+                poolBalance = item.optString("poolBalance", ""),
+                minBet = item.optString("minBet", ""),
+                maxBet = item.optString("maxBet", "")
+            )
+        }
+    }
 
     suspend fun walletBalance(token: String): String {
         val response = execute(request("/wallet/my-wallet", token))
