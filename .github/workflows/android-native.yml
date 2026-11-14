@@ -1,0 +1,53 @@
+name: Native Android CI
+
+on:
+  pull_request:
+    paths:
+      - "androidApp/**"
+      - "gradle/**"
+      - "gradle.properties"
+      - "*.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/android-native.yml"
+      - "scripts/check-native-android-boundary.sh"
+  push:
+    branches: [main, "feat/native-android-architecture-migration"]
+    paths:
+      - "androidApp/**"
+      - "gradle/**"
+      - "gradle.properties"
+      - "*.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/android-native.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-android-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Enforce APK-local game and wallet API boundary
+        run: bash scripts/check-native-android-boundary.sh
+      - name: Assemble debug APK
+        run: gradle --no-daemon :androidApp:assembleDebug
+      - name: Run unit tests
+        run: gradle --no-daemon :androidApp:testDebugUnitTest
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigdaddy-native-debug-apk
+          path: androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
