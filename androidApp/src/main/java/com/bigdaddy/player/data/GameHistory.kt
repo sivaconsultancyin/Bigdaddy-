@@ -1,6 +1,7 @@
 package com.bigdaddy.player.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -23,7 +24,7 @@ data class GameHistoryEntity(
     val startedAtEpochMillis: Long,
     val endedAtEpochMillis: Long,
     val demoResult: String,
-    val playerAccountId: String = "",
+    @ColumnInfo(defaultValue = "''") val playerAccountId: String = "",
     val virtualBetAmount: String = "0",
     val virtualPayout: String = "0",
     val status: String = "COMPLETED"
