@@ -140,3 +140,7 @@ CI success verifies repository automation and isolated fixtures only. It does no
 - Latest source commits for this checkpoint: `089962d` (Dragon Tiger screen), `7ac8f8e` (Dragon Tiger app integration), `6354c5f` (deck construction cleanup), `a27a9b1` (Lucky 10 screen), `fd32260` (Lucky 10 app integration).
 - CI for the final integration commit must pass before this checkpoint is considered build-verified. The earlier CI runs passing on commit `6354c5f` do not validate the later Lucky 10 screen/integration commits.
 - Remaining: full legacy rule/fixture parity, accessibility and responsive UI QA, lifecycle interruption/recovery, complete Andar Bahar / Roulette / Teen Patti screens, production-quality Aviator screen, device E2E, signed release and staged cutover.
+
+
+- Follow-up correctness fix: both new game screens now persist Unix epoch-millisecond timestamps (rather than device-uptime values) into Room history. Lucky 10 market buttons are grouped four per row to reduce narrow-screen overflow risk.
+- Follow-up commits: `387a0b3`, `a2eb41f`. The final branch head after these changes requires a fresh successful Android CI run; earlier passing runs do not cover it.
