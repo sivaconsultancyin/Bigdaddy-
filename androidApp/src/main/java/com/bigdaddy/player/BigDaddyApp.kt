@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bigdaddy.player.data.BigDaddyApi
+import com.bigdaddy.player.data.NativeGameInfo
 import com.bigdaddy.player.data.GameHistoryDatabase
 import com.bigdaddy.player.data.GameHistoryEntity
 import com.bigdaddy.player.data.SecureSessionStore
@@ -82,7 +83,6 @@ fun BigDaddyApp() {
     val historyDao = remember { GameHistoryDatabase.get(context).historyDao() }
     var accountId by remember { mutableStateOf("") }
     val history by historyDao.observeAll(accountId).collectAsState(initial = emptyList())
-    val engine = remember { LocalDemoGameRegistry() }
 
     var token by remember { mutableStateOf<String?>(null) }
     var username by remember { mutableStateOf("") }
@@ -96,6 +96,7 @@ fun BigDaddyApp() {
     var tab by remember { mutableStateOf("Games") }
     var selectedGame by remember { mutableStateOf<String?>(null) }
     var lastResult by remember { mutableStateOf<String?>(null) }
+    var gameInventory by remember { mutableStateOf<List<NativeGameInfo>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         val saved = sessions.read()
@@ -125,6 +126,15 @@ fun BigDaddyApp() {
                     error = "Saved session could not be verified: $message"
                 }
             }
+        }
+    }
+
+    LaunchedEffect(token) {
+        val activeToken = token
+        if (activeToken.isNullOrBlank()) {
+            gameInventory = emptyList()
+        } else {
+            gameInventory = runCatching { api.gamesList(activeToken) }.getOrElse { emptyList() }
         }
     }
 
@@ -192,16 +202,8 @@ fun BigDaddyApp() {
                             } else {
                                 val name = gameNames.first { it.first == selectedGame }.second
                                 TextButton(onClick = { selectedGame = null; lastResult = null }) { Text("← All games") }
-                                val gameStyle = when (selectedGame) {
-                                    "aviator" -> Triple("AVIATOR", "Take flight · Virtual demo", Color(0xFFFF654F))
-                                    "dragon_tiger" -> Triple("DRAGON TIGER", "Classic card duel · Virtual demo", Color(0xFFFFC45C))
-                                    "dice" -> Triple("LUCKY 10 DICE", "Roll the number · Virtual demo", Color(0xFF8B7CFF))
-                                    "andar_bahar" -> Triple("ANDAR BAHAR", "Traditional card table · Virtual demo", Color(0xFF32C98A))
-                                    "roulette" -> Triple("ROULETTE", "European wheel · Virtual demo", Color(0xFFFF5364))
-                                    else -> Triple("TEEN PATTI", "Three-card showdown · Virtual demo", Color(0xFF45C99B))
-                                }
-                                PremiumGameHeader(gameStyle.first, gameStyle.second, gameStyle.third) {}
                                 if (selectedGame == "aviator") {
+                                    PremiumGameHeader("AVIATOR", "Native visual demo · not connected to live rounds", Color(0xFFFF654F)) {}
                                     NativeAviatorScreen(
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
@@ -214,133 +216,55 @@ fun BigDaddyApp() {
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
                                                         demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "dragon_tiger") {
-                                    NativeDragonTigerScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "dice") {
-                                    NativeLuckyTenScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "andar_bahar") {
-                                    NativeAndarBaharScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "roulette") {
-                                    NativeRouletteScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "teen_patti") {
-                                    NativeTeenPattiScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
+                                                        playerAccountId = accountId
                                                     )
                                                 )
                                             }
                                         }
                                     )
                                 } else {
-                                    Text(name, style = MaterialTheme.typography.headlineSmall)
-                                    Text("APK-local demo engine. No server game round or wallet payout is used.")
-                                    Button(
-                                        onClick = {
-                                            val started = System.currentTimeMillis()
-                                            val outcome = engine.play(selectedGame!!)
-                                            val ended = System.currentTimeMillis()
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
-                                    ) { Text("Play local demo round") }
-                                    lastResult?.let { Text("Result: $it", modifier = Modifier.padding(top = 16.dp)) }
+                                    val preview = when (selectedGame) {
+                                        "dragon_tiger" -> arrayOf(
+                                            "DRAGON TIGER", "Classic fast-action card duel", "🐉", "Under Development",
+                                            "Fast-Action Card Architecture",
+                                            "Rapid 2-card showdown with Dragon, Tiger, or Tie selections. This native screen is a preview only; it does not deal cards or settle wagers."
+                                        )
+                                        "dice" -> arrayOf(
+                                            "LUCKY 10 DICE", "Pick a number from 1 to 10", "🎲", "Engine Under Audit",
+                                            "Provably Fair Architecture",
+                                            "Lucky 10 number picks plus Small, Big, Even and Odd markets. Results must come from the authoritative server round."
+                                        )
+                                        "andar_bahar" -> arrayOf(
+                                            "ANDAR BAHAR", "Traditional joker card matching", "🃏", "Under Development",
+                                            "Classic Traditional Game",
+                                            "Joker card matching with Andar (Inside) and Bahar (Outside) selections. Authoritative card sequence and settlement are not available in this native preview."
+                                        )
+                                        "roulette" -> arrayOf(
+                                            "ROULETTE", "European single-zero wheel", "🎡", "Engine Under Audit",
+                                            "European Roulette Architecture",
+                                            "European Roulette will feature a single-zero wheel, inside and outside selections, and server-authoritative round settlement."
+                                        )
+                                        else -> arrayOf(
+                                            "TEEN PATTI", "Three-card showdown", "♠", "Under Development",
+                                            "Multiplayer Card Architecture",
+                                            "Three-card game preview. Chaal, Blind and Showdown mechanics require authoritative table state and server settlement before native play is enabled."
+                                        )
+                                    }
+                                    val serverGame = gameInventory.firstOrNull { it.code.replace('-', '_') == selectedGame }
+                                    NativeComingSoonScreen(
+                                        title = preview[0],
+                                        subtitle = preview[1],
+                                        symbol = preview[2],
+                                        status = preview[3],
+                                        architectureTitle = preview[4],
+                                        description = preview[5],
+                                        poolBalance = serverGame?.poolBalance?.takeIf { it.isNotBlank() }?.let {
+                                            runCatching { java.math.BigInteger(it).toString() }.getOrDefault(it)
+                                        } ?: "",
+                                        minBet = serverGame?.minBet.orEmpty(),
+                                        maxBet = serverGame?.maxBet.orEmpty(),
+                                        onBack = { selectedGame = null; lastResult = null }
+                                    )
                                 }
                             }
                         }
