@@ -55,13 +55,15 @@ fun BigDaddyApp() {
     val api = remember { BigDaddyApi() }
     val sessions = remember { SecureSessionStore(context) }
     val historyDao = remember { GameHistoryDatabase.get(context).historyDao() }
-    val history by historyDao.observeAll().collectAsState(initial = emptyList())
+    var accountId by remember { mutableStateOf("") }
+    val history by historyDao.observeAll(accountId).collectAsState(initial = emptyList())
     val engine = remember { LocalDemoGameRegistry() }
 
     var token by remember { mutableStateOf<String?>(null) }
     var username by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("") }
-    var balance by remember { mutableStateOf("—") }
+    var balance by remember { mutableStateOf("Unavailable") }
+    var walletError by remember { mutableStateOf<String?>(null) }
     var loginName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -75,20 +77,24 @@ fun BigDaddyApp() {
         if (saved != null) {
             runCatching {
                 val account = api.verifySession(saved)
-                val currentBalance = api.walletBalance(saved)
                 token = saved
+                accountId = account.id
                 username = account.username
                 role = account.role
-                balance = currentBalance
+                balance = runCatching { api.walletBalance(saved) }.getOrElse {
+                    walletError = "Wallet balance is temporarily unavailable."
+                    "Unavailable"
+                }
             }.onFailure { failure ->
                 val message = failure.message.orEmpty()
                 if (listOf("AUTH_REQUIRED", "INVALID_TOKEN", "USER_NOT_FOUND_OR_DISABLED", "TOKEN_ROLE_STALE")
                         .any { message.contains(it, ignoreCase = true) }) {
                     sessions.clear()
                     token = null
+                    accountId = ""
                     username = ""
                     role = ""
-                    balance = "—"
+                    balance = "Unavailable"
                     error = "Your session expired. Please sign in again."
                 } else {
                     error = "Saved session could not be verified: $message"
@@ -123,15 +129,18 @@ fun BigDaddyApp() {
                             error = null
                             runCatching {
                                 val result = api.login(loginName, password)
-                                // Do not persist or expose a bearer token until the server confirms
-                                // the session and the wallet endpoint is reachable.
+                                // Authentication alone unlocks local demo games. Wallet reads are
+                                // optional and must never block a valid player login.
                                 val verifiedAccount = api.verifySession(result.token)
-                                val verifiedBalance = api.walletBalance(result.token)
                                 sessions.save(result.token)
                                 token = result.token
+                                accountId = verifiedAccount.id
                                 username = verifiedAccount.username
                                 role = verifiedAccount.role
-                                balance = verifiedBalance
+                                balance = runCatching { api.walletBalance(result.token) }.getOrElse {
+                                    walletError = "Wallet balance is temporarily unavailable."
+                                    "Unavailable"
+                                }
                                 password = ""
                             }.onFailure { error = it.message ?: "Login failed." }
                             busy = false
@@ -184,14 +193,15 @@ fun BigDaddyApp() {
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
                                             scope.launch {
-                                                historyDao.insert(
+                                                historyDao.insertAndPrune(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result
+                                                        demoResult = outcome.result,
+                                                    playerAccountId = accountId
                                                     )
                                                 )
                                             }
@@ -202,14 +212,15 @@ fun BigDaddyApp() {
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
                                             scope.launch {
-                                                historyDao.insert(
+                                                historyDao.insertAndPrune(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result
+                                                        demoResult = outcome.result,
+                                                    playerAccountId = accountId
                                                     )
                                                 )
                                             }
@@ -220,14 +231,15 @@ fun BigDaddyApp() {
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
                                             scope.launch {
-                                                historyDao.insert(
+                                                historyDao.insertAndPrune(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result
+                                                        demoResult = outcome.result,
+                                                    playerAccountId = accountId
                                                     )
                                                 )
                                             }
@@ -238,14 +250,15 @@ fun BigDaddyApp() {
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
                                             scope.launch {
-                                                historyDao.insert(
+                                                historyDao.insertAndPrune(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result
+                                                        demoResult = outcome.result,
+                                                    playerAccountId = accountId
                                                     )
                                                 )
                                             }
@@ -256,14 +269,15 @@ fun BigDaddyApp() {
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
                                             scope.launch {
-                                                historyDao.insert(
+                                                historyDao.insertAndPrune(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result
+                                                        demoResult = outcome.result,
+                                                    playerAccountId = accountId
                                                     )
                                                 )
                                             }
@@ -274,14 +288,15 @@ fun BigDaddyApp() {
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
                                             scope.launch {
-                                                historyDao.insert(
+                                                historyDao.insertAndPrune(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result
+                                                        demoResult = outcome.result,
+                                                    playerAccountId = accountId
                                                     )
                                                 )
                                             }
@@ -297,14 +312,15 @@ fun BigDaddyApp() {
                                             val ended = System.currentTimeMillis()
                                             lastResult = outcome.result
                                             scope.launch {
-                                                historyDao.insert(
+                                                historyDao.insertAndPrune(
                                                     GameHistoryEntity(
                                                         id = UUID.randomUUID().toString(),
                                                         gameCode = outcome.gameCode,
                                                         roundId = outcome.roundId,
                                                         startedAtEpochMillis = started,
                                                         endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result
+                                                        demoResult = outcome.result,
+                                                    playerAccountId = accountId
                                                     )
                                                 )
                                             }
@@ -321,8 +337,11 @@ fun BigDaddyApp() {
                             Text("Balance is read from the secure backend. This native demo does not create credits or payouts.")
                             TextButton(onClick = {
                                 scope.launch {
-                                    runCatching { balance = api.walletBalance(token!!) }
-                                        .onFailure { error = it.message }
+                                    walletError = null
+                                    balance = runCatching { api.walletBalance(token!!) }.getOrElse {
+                                        walletError = "Wallet balance could not be refreshed."
+                                        "Unavailable"
+                                    }
                                 }
                             }) { Text("Refresh balance") }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -345,7 +364,24 @@ fun BigDaddyApp() {
                             Text("Player profile", style = MaterialTheme.typography.titleLarge)
                             Text("Username: $username")
                             Text("Role: $role")
-                            Text("Game history is stored on this device.")
+                            Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text("Wallet balance", style = MaterialTheme.typography.titleMedium)
+                                    Text(balance, style = MaterialTheme.typography.headlineSmall)
+                                    Text("Balance is read-only from the secure backend. Local demo rounds cannot change it.")
+                                    TextButton(onClick = {
+                                        scope.launch {
+                                            walletError = null
+                                            balance = runCatching { api.walletBalance(token!!) }.getOrElse {
+                                                walletError = "Wallet balance could not be refreshed."
+                                                "Unavailable"
+                                            }
+                                        }
+                                    }) { Text("Refresh balance") }
+                                    walletError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                                }
+                            }
+                            Text("Game history is stored privately on this device for this player account.")
                             Text("Local game history", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
                             LazyColumn(modifier = Modifier.weight(1f)) {
                                 items(history) { item ->
@@ -362,9 +398,11 @@ fun BigDaddyApp() {
                                 scope.launch {
                                     sessions.clear()
                                     token = null
+                                    accountId = ""
                                     username = ""
                                     role = ""
-                                    balance = "—"
+                                    balance = "Unavailable"
+                                    walletError = null
                                     password = ""
                                 }
                             }) { Text("Sign out") }
