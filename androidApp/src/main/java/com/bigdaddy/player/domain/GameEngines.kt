@@ -73,7 +73,10 @@ private fun deck(): List<PlayingCard> = listOf('S', 'H', 'D', 'C').flatMap { sui
 
 class DragonTigerEngine {
     // Legacy Dragon Tiger rules treat Ace as the lowest card.
-    internal fun cardStrength(rank: Int): Int = if (rank == 14) 1 else rank
+    internal fun cardStrength(rank: Int): Int {
+        require(rank in 2..14) { "Dragon Tiger card rank must be between 2 and 14." }
+        return if (rank == 14) 1 else rank
+    }
     internal fun winner(dragonRank: Int, tigerRank: Int): String = when {
         cardStrength(dragonRank) > cardStrength(tigerRank) -> "DRAGON"
         cardStrength(dragonRank) < cardStrength(tigerRank) -> "TIGER"
@@ -119,6 +122,12 @@ class AndarBaharEngine {
 
     internal fun dealSequence(shuffledDeck: List<PlayingCard>): List<AndarBaharCardDeal> {
         require(shuffledDeck.size >= 2) { "Andar Bahar needs a Joker and at least one remaining card." }
+        require(shuffledDeck.all { it.rank in 2..14 && it.suit in setOf('S', 'H', 'D', 'C') }) {
+            "Andar Bahar deck contains an invalid card."
+        }
+        require(shuffledDeck.map { it.rank to it.suit }.distinct().size == shuffledDeck.size) {
+            "Andar Bahar deck cannot contain duplicate cards."
+        }
         val joker = shuffledDeck.first()
         var side = openingSide(joker.suit)
         val sequence = mutableListOf<AndarBaharCardDeal>()
@@ -207,6 +216,9 @@ internal data class TeenPattiHandValue(
 class TeenPattiEngine {
     internal fun evaluate(cards: List<PlayingCard>): TeenPattiHandValue {
         require(cards.size == 3) { "Teen Patti hands must contain exactly three cards." }
+        require(cards.all { it.rank in 2..14 && it.suit in setOf('S', 'H', 'D', 'C') }) {
+            "Teen Patti hand contains an invalid card."
+        }
         require(cards.map { it.rank to it.suit }.distinct().size == 3) { "Teen Patti hand cannot contain duplicate cards." }
 
         val ranks = cards.map { it.rank }.sortedDescending()
