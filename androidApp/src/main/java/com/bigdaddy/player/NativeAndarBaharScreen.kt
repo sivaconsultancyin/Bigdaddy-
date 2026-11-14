@@ -17,6 +17,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.bigdaddy.player.domain.AndarBaharCardDeal
+import com.bigdaddy.player.domain.AndarBaharEngine
 import com.bigdaddy.player.domain.DemoOutcome
 import com.bigdaddy.player.domain.PlayingCard
 import kotlinx.coroutines.delay
@@ -27,34 +29,25 @@ import java.util.UUID
 
 private enum class AndarBaharPhase { READY, BETTING, DEALING, RESULT }
 
-private data class AndarBaharDealtCard(val side: String, val card: PlayingCard)
-
 @Composable
 fun NativeAndarBaharScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit) {
     val scope = rememberCoroutineScope()
+    val engine = remember { AndarBaharEngine() }
     var phase by remember { mutableStateOf(AndarBaharPhase.READY) }
     var secondsLeft by remember { mutableStateOf(13) }
     var joker by remember { mutableStateOf<PlayingCard?>(null) }
-    var dealt by remember { mutableStateOf<List<AndarBaharDealtCard>>(emptyList()) }
+    var dealt by remember { mutableStateOf<List<AndarBaharCardDeal>>(emptyList()) }
     var firstSide by remember { mutableStateOf("ANDAR") }
     var winner by remember { mutableStateOf<String?>(null) }
     var running by remember { mutableStateOf(false) }
 
-    fun createDeal(): Pair<PlayingCard, List<AndarBaharDealtCard>> {
-        val deck = ('S'..'S').flatMap { listOf('S', 'H', 'D', 'C') }
+    fun createDeal(): Pair<PlayingCard, List<AndarBaharCardDeal>> {
+        val deck = listOf('S', 'H', 'D', 'C')
             .flatMap { suit -> (2..14).map { rank -> PlayingCard(rank, suit) } }
             .toMutableList()
         Collections.shuffle(deck, SecureRandom())
-        val jokerCard = deck.first()
-        val opening = if (jokerCard.suit == 'S' || jokerCard.suit == 'C') "ANDAR" else "BAHAR"
-        val queue = mutableListOf<AndarBaharDealtCard>()
-        var side = opening
-        for (card in deck.drop(1)) {
-            queue += AndarBaharDealtCard(side, card)
-            if (card.rank == jokerCard.rank) break
-            side = if (side == "ANDAR") "BAHAR" else "ANDAR"
-        }
-        return jokerCard to queue
+        return deck.first() to engine.dealSequence(deck)
+
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -100,7 +93,7 @@ fun NativeAndarBaharScreen(onRoundCompleted: (DemoOutcome, Long, Long) -> Unit) 
                     val started = System.currentTimeMillis()
                     val (jokerCard, queue) = createDeal()
                     joker = jokerCard
-                    firstSide = if (jokerCard.suit == 'S' || jokerCard.suit == 'C') "ANDAR" else "BAHAR"
+                    firstSide = engine.openingSide(jokerCard.suit)
                     phase = AndarBaharPhase.BETTING
                     for (remaining in 13 downTo 1) {
                         secondsLeft = remaining
