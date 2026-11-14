@@ -89,7 +89,8 @@ class AndarBaharEngine {
     fun play(seed: Long): DemoOutcome {
         val cards = deck().shuffled(Random(seed))
         val joker = cards.first()
-        val firstSide = if (joker.suit == 'S' || joker.suit == 'C') "ANDAR" else "BAHAR"
+        // Opening side is independent of the joker card's suit.
+        val firstSide = if (Random(seed xor 0x5A5A5A5AL).nextBoolean()) "ANDAR" else "BAHAR"
         var winner = firstSide
         var dealt = 0
         for (card in cards.drop(1)) {
@@ -115,7 +116,8 @@ class TeenPattiEngine {
         val ranks = cards.map { it.rank }.sorted()
         val counts = ranks.groupingBy { it }.eachCount().values.sortedDescending()
         val flush = cards.map { it.suit }.distinct().size == 1
-        val sequence = ranks == listOf(ranks.first(), ranks.first() + 1, ranks.first() + 2)
+        val sequence = ranks == listOf(ranks.first(), ranks.first() + 1, ranks.first() + 2) ||
+            ranks == listOf(1, 2, 3) || ranks == listOf(1, 12, 13)
         return when {
             counts == listOf(3) -> "TRAIL"
             flush && sequence -> "PURE_SEQUENCE"
