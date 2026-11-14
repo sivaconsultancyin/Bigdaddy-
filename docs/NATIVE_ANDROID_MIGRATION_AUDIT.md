@@ -99,3 +99,12 @@ Verified against commit `b1fda17687156ffe16b9c5875a151a03bc634ed5` on PR #215:
 - Native debug APK artifact: `bigdaddy-native-debug-apk`, 12,680,182 bytes, SHA-256 `8d590e04b83fb8741527ba48022f903b13fa8a7c306eab00962b9bc4c75fc12f`. Artifact is available from the Android Actions run and is not a signed production release.
 
 CI success verifies repository automation and isolated fixtures only. It does not prove physical-device E2E, production Supabase migration, complete native game parity, real-money/virtual-wallet settlement, signed release, or staged cutover. PR #215 remains Draft and must not be merged as a production migration until those gates are completed. No production Supabase data or wallet balances were changed by this CI verification.
+
+
+## Player-account authorization hardening (2026-11-14)
+
+- Native Android session verification now rejects accounts whose server-verified role is not `PLAYER`.
+- The same verification path is used after password login and when restoring a saved session, so an OWNER / SUPER_ADMIN / ADMIN token cannot unlock the player game UI through this client.
+- Account ID and username are also required to be present in the verified `/auth/me` response.
+- This is a client-side access boundary for the Player APK, not a replacement for backend authorization. Every wallet/game mutation must still enforce role and ownership server-side.
+- No production Supabase data, wallet balances, or auth configuration were modified.
