@@ -215,6 +215,24 @@ fun BigDaddyApp() {
                                             }
                                         }
                                     )
+                                } else if (selectedGame == "dice") {
+                                    NativeLuckyTenScreen(
+                                        onRoundCompleted = { outcome, started, ended ->
+                                            lastResult = outcome.result
+                                            scope.launch {
+                                                historyDao.insert(
+                                                    GameHistoryEntity(
+                                                        id = UUID.randomUUID().toString(),
+                                                        gameCode = outcome.gameCode,
+                                                        roundId = outcome.roundId,
+                                                        startedAtEpochMillis = started,
+                                                        endedAtEpochMillis = ended,
+                                                        demoResult = outcome.result
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    )
                                 } else {
                                     Text(name, style = MaterialTheme.typography.headlineSmall)
                                     Text("APK-local demo engine. No server game round or wallet payout is used.")
