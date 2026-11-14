@@ -108,3 +108,13 @@ CI success verifies repository automation and isolated fixtures only. It does no
 - Account ID and username are also required to be present in the verified `/auth/me` response.
 - This is a client-side access boundary for the Player APK, not a replacement for backend authorization. Every wallet/game mutation must still enforce role and ownership server-side.
 - No production Supabase data, wallet balances, or auth configuration were modified.
+
+
+## Native Aviator server-state integration (2026-11-14)
+
+- Added a typed native API adapter for authenticated GET `/games/aviator/state`. It parses the current server round ID, round number, status, multiplier, and final crash multiplier without generating a client-side outcome.
+- Replaced the Aviator demo crash-result screen in the native Player app with a read-only live round status screen. It refreshes sequentially at a one-second interval while the Aviator screen is visible; Compose cancels the polling coroutine when leaving the screen.
+- The screen explicitly states that native betting, cashout, and wallet settlement are not enabled. It cannot create a payout or modify wallet balances.
+- This is an integration/display milestone, not a native Aviator engine cutover: the existing Supabase Aviator worker remains authoritative for round state. Bet placement/cashout remain unavailable from this native UI until a complete tested client contract and physical-device E2E are delivered.
+- No production database, game rounds, player records, wallet balances, or Supabase function deployments were changed by this work.
+- CI for this commit must be checked before treating the changes as verified.
