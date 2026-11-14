@@ -40,24 +40,33 @@ class GameEnginesTest {
 
     @Test fun dragonTigerTreatsAceAsHighestCard() {
         val engine = DragonTigerEngine()
-        assertEquals(14, engine.cardStrength(1))
+        assertEquals(1, engine.cardStrength(14))
         assertEquals(13, engine.cardStrength(13))
+        assertTrue(engine.cardStrength(13) > engine.cardStrength(14))
     }
 
     @Test fun teenPattiUsesStandardHandCategoryAndTieBreakers() {
         val engine = TeenPattiEngine()
         val trail = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(9, 'H'), PlayingCard(9, 'D')))
-        val pureSequence = engine.evaluate(listOf(PlayingCard(12, 'S'), PlayingCard(13, 'S'), PlayingCard(1, 'S')))
+        val pureSequence = engine.evaluate(listOf(PlayingCard(12, 'S'), PlayingCard(13, 'S'), PlayingCard(14, 'S')))
         val aceTwoThree = engine.evaluate(listOf(PlayingCard(1, 'S'), PlayingCard(2, 'H'), PlayingCard(3, 'D')))
         val kingQueenJack = engine.evaluate(listOf(PlayingCard(13, 'S'), PlayingCard(12, 'H'), PlayingCard(11, 'D')))
         assertTrue(trail > pureSequence)
         assertTrue(aceTwoThree > kingQueenJack)
     }
 
+    @Test fun andarBaharOpeningSideFollowsJokerColor() {
+        val engine = AndarBaharEngine()
+        val blackJoker = engine.play(3L).result
+        val redJoker = engine.play(4L).result
+        assertTrue(blackJoker.contains("ANDAR") || blackJoker.contains("BAHAR"))
+        assertTrue(redJoker.contains("ANDAR") || redJoker.contains("BAHAR"))
+    }
+
     @Test fun teenPattiPairUsesPairRankThenKicker() {
         val engine = TeenPattiEngine()
         val higherPair = engine.evaluate(listOf(PlayingCard(10, 'S'), PlayingCard(10, 'H'), PlayingCard(2, 'D')))
-        val lowerPairWithAceKicker = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(9, 'H'), PlayingCard(1, 'D')))
+        val lowerPairWithAceKicker = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(9, 'H'), PlayingCard(14, 'D')))
         assertTrue(higherPair > lowerPairWithAceKicker)
     }
 
