@@ -132,6 +132,15 @@ fun PremiumLoginPanel(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Box(
+                Modifier.size(56.dp).clip(RoundedCornerShape(16.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFFFBBF24), Color(0xFFD97706), Color(0xFFB45309))))
+                    .border(1.dp, Color(0x66FDE68A), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✦", color = Color(0xFF09090B), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
+            }
+            Spacer(Modifier.height(8.dp))
             Text("BigDaddy Games", color = Color(0xFFFBBF24), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
             Text("Mobile-first authoritative casino gaming platform", color = Color(0xFFA1A1AA), style = MaterialTheme.typography.labelSmall)
             Spacer(Modifier.height(30.dp))
