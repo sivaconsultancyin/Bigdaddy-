@@ -88,6 +88,32 @@ class GameEnginesTest {
         assertEquals(0, engine.payoutMultiplier("invalid", 5))
     }
 
+    @Test fun diceMarketsRejectResultsOutsideTheLegalOneToTenRange() {
+        val engine = DiceEngine()
+        listOf(-1, 0, 11, 12, 100).forEach { rolled ->
+            listOf("1", "small", "big", "even", "odd").forEach { market ->
+                assertEquals("market=$market rolled=$rolled", 0, engine.payoutMultiplier(market, rolled))
+            }
+        }
+    }
+
+    @Test fun rouletteZeroCannotWinOutsideZeroNumberCombinations() {
+        val engine = RouletteEngine()
+        listOf("red", "black", "even", "odd", "low", "high", "dozen1", "dozen2", "dozen3", "col1", "col2", "col3", "line")
+            .forEach { market -> assertTrue("market=$market", !engine.wins(market, listOf(0), 0)) }
+        assertTrue(engine.wins("straight", listOf(0), 0))
+        assertTrue(engine.wins("split", listOf(0, 1), 0))
+    }
+
+    @Test fun rouletteRejectsNumbersOutsideTheEuropeanWheel() {
+        val engine = RouletteEngine()
+        listOf(-1, 37, 100).forEach { number ->
+            assertEquals("INVALID", engine.color(number))
+            assertTrue(!engine.wins("straight", listOf(number), number))
+            assertTrue(!engine.wins("red", emptyList(), number))
+        }
+    }
+
     @Test fun rouletteMarketsUseSingleZeroWheelRules() {
         val engine = RouletteEngine()
         assertEquals("GREEN", engine.color(0))
