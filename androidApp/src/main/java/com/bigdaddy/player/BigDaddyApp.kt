@@ -44,24 +44,24 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 private val BigDaddyDarkColors = darkColorScheme(
-    primary = Color(0xFFEF4444),
-    onPrimary = Color.White,
-    secondary = Color(0xFF22C55E),
-    onSecondary = Color(0xFF07130B),
-    background = Color(0xFF080B12),
-    onBackground = Color(0xFFF8FAFC),
-    surface = Color(0xFF111827),
-    onSurface = Color(0xFFF8FAFC),
-    surfaceVariant = Color(0xFF222943),
-    onSurfaceVariant = Color(0xFFD4D8E6),
-    surfaceTint = Color(0xFFFFC45C),
-    surfaceContainerLowest = Color(0xFF080B14),
-    surfaceContainerLow = Color(0xFF11182A),
-    surfaceContainer = Color(0xFF171F34),
-    surfaceContainerHigh = Color(0xFF202A43),
-    surfaceContainerHighest = Color(0xFF2A3552),
+    primary = Color(0xFFF59E0B),
+    onPrimary = Color(0xFF09090B),
+    secondary = Color(0xFFD97706),
+    onSecondary = Color(0xFF09090B),
+    background = Color(0xFF050608),
+    onBackground = Color(0xFFF4F4F5),
+    surface = Color(0xFF09090B),
+    onSurface = Color(0xFFF4F4F5),
+    surfaceVariant = Color(0xFF18181B),
+    onSurfaceVariant = Color(0xFFA1A1AA),
+    surfaceTint = Color(0xFFF59E0B),
+    surfaceContainerLowest = Color(0xFF050608),
+    surfaceContainerLow = Color(0xFF09090B),
+    surfaceContainer = Color(0xFF18181B),
+    surfaceContainerHigh = Color(0xFF27272A),
+    surfaceContainerHighest = Color(0xFF3F3F46),
     tertiary = Color(0xFFFFC45C),
-    onTertiary = Color(0xFF171009),
+    onTertiary = Color(0xFF09090B),
     error = Color(0xFFF87171)
 )
 
@@ -314,14 +314,31 @@ fun BigDaddyApp() {
                             }
                         }
                         else -> {
-                            Text("Player profile", style = MaterialTheme.typography.titleLarge)
-                            Text("Username: $username")
-                            Text("Role: $role")
-                            Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("Wallet balance", style = MaterialTheme.typography.titleMedium)
-                                    Text(balance, style = MaterialTheme.typography.headlineSmall)
-                                    Text("Balance is read-only from the secure backend. Local demo rounds cannot change it.")
+                            Text("PLAYER PROFILE", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
+                            Card(
+                                Modifier.fillMaxWidth().padding(top = 8.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF09090B))
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("My Profile", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                        Text("VERIFIED", color = Color(0xFF86EFAC), style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.background(Color(0x1A22C55E), androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).padding(horizontal = 9.dp, vertical = 5.dp))
+                                    }
+                                    ProfileInfoRow("Username", username)
+                                    ProfileInfoRow("Account Role", role)
+                                    ProfileInfoRow("Session Status", "Signed in")
+                                }
+                            }
+                            Card(
+                                Modifier.fillMaxWidth().padding(top = 10.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF09090B))
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Wallet Balance", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium)
+                                    Text(balance, color = Color(0xFFFBBF24), style = MaterialTheme.typography.headlineMedium)
+                                    Text("Read-only balance from the secure backend. Native visual demos cannot debit or credit this wallet.",
+                                        color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
                                     TextButton(onClick = {
                                         scope.launch {
                                             walletError = null
@@ -330,19 +347,20 @@ fun BigDaddyApp() {
                                                 "Unavailable"
                                             }
                                         }
-                                    }) { Text("Refresh balance") }
+                                    }) { Text("Refresh balance", color = Color(0xFFFBBF24)) }
                                     walletError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                                 }
                             }
-                            Text("Game history is stored privately on this device for this player account.")
-                            Text("Local game history", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+                            Text("Local game history", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 14.dp))
+                            Text("Stored privately on this device for this player account.", color = Color(0xFF71717A), style = MaterialTheme.typography.bodySmall)
                             LazyColumn(modifier = Modifier.weight(1f)) {
                                 items(history) { item ->
-                                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                        Column(Modifier.padding(12.dp)) {
-                                            Text(gameNames.firstOrNull { it.first == item.gameCode }?.second ?: item.gameCode)
-                                            Text(item.demoResult)
-                                            Text("Round ${item.roundId}", style = MaterialTheme.typography.labelSmall)
+                                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF18181B))) {
+                                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text(gameNames.firstOrNull { it.first == item.gameCode }?.second ?: item.gameCode, color = Color(0xFFE4E4E7))
+                                            Text(item.demoResult, color = Color(0xFFFBBF24))
+                                            Text("Round \${item.roundId}", color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
                                 }
@@ -358,7 +376,7 @@ fun BigDaddyApp() {
                                     walletError = null
                                     password = ""
                                 }
-                            }) { Text("Sign out") }
+                            }) { Text("Sign out", color = Color(0xFFFCA5A5)) }
                         }
                     }
                 }
@@ -368,3 +386,11 @@ fun BigDaddyApp() {
     }
 }
 
+
+@Composable
+private fun ProfileInfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().background(Color(0xFF18181B), androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
+        Text(value.ifBlank { "—" }, color = Color(0xFFF4F4F5), style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+    }
+}
