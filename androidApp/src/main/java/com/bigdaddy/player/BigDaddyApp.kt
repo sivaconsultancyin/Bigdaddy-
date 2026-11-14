@@ -34,7 +34,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bigdaddy.player.data.BigDaddyApi
-import com.bigdaddy.player.data.NativeGameInfo
 import com.bigdaddy.player.data.GameHistoryDatabase
 import com.bigdaddy.player.data.GameHistoryEntity
 import com.bigdaddy.player.data.SecureSessionStore
@@ -96,7 +95,6 @@ fun BigDaddyApp() {
     var tab by remember { mutableStateOf("Games") }
     var selectedGame by remember { mutableStateOf<String?>(null) }
     var lastResult by remember { mutableStateOf<String?>(null) }
-    var gameInventory by remember { mutableStateOf<List<NativeGameInfo>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         val saved = sessions.read()
@@ -129,14 +127,6 @@ fun BigDaddyApp() {
         }
     }
 
-    LaunchedEffect(token) {
-        val activeToken = token
-        if (activeToken.isNullOrBlank()) {
-            gameInventory = emptyList()
-        } else {
-            gameInventory = runCatching { api.gamesList(activeToken) }.getOrElse { emptyList() }
-        }
-    }
 
     MaterialTheme(colorScheme = BigDaddyDarkColors) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -266,7 +256,6 @@ fun BigDaddyApp() {
                                             "Three-card game preview. Chaal, Blind and Showdown mechanics require authoritative table state and server settlement before native play is enabled."
                                         )
                                     }
-                                    val serverGame = gameInventory.firstOrNull { it.code.replace('-', '_') == selectedGame }
                                     NativeComingSoonScreen(
                                         title = preview[0],
                                         subtitle = preview[1],
@@ -274,11 +263,9 @@ fun BigDaddyApp() {
                                         status = preview[3],
                                         architectureTitle = preview[4],
                                         description = preview[5],
-                                        poolBalance = serverGame?.poolBalance?.takeIf { it.isNotBlank() }?.let {
-                                            runCatching { java.math.BigInteger(it).toString() }.getOrDefault(it)
-                                        } ?: "",
-                                        minBet = serverGame?.minBet.orEmpty(),
-                                        maxBet = serverGame?.maxBet.orEmpty(),
+                                        poolBalance = "",
+                                        minBet = "",
+                                        maxBet = "",
                                         onBack = { selectedGame = null; lastResult = null }
                                     )
                                 }
