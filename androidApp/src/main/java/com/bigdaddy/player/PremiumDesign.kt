@@ -61,12 +61,12 @@ private data class PremiumGameStyle(
 )
 
 private val premiumGames = listOf(
-    PremiumGameStyle("aviator", "AVIATOR", "Take flight · Multiplier demo", "✈", Color(0xFFFF4D4D), Color(0xFFFF9B42)),
-    PremiumGameStyle("dragon_tiger", "DRAGON TIGER", "Classic card duel", "🐉", Color(0xFFE34A4A), Color(0xFFFFC45C)),
-    PremiumGameStyle("dice", "LUCKY 10 DICE", "Roll the winning number", "🎲", Color(0xFF5C7CFA), Color(0xFFB56CFF)),
-    PremiumGameStyle("andar_bahar", "ANDAR BAHAR", "Traditional card table", "🃏", Color(0xFF16A36A), Color(0xFFDBB65C)),
-    PremiumGameStyle("roulette", "ROULETTE", "European single-zero wheel", "🎡", Color(0xFFDA3545), Color(0xFF171923)),
-    PremiumGameStyle("teen_patti", "TEEN PATTI", "Three-card showdown", "♠", Color(0xFF15966A), Color(0xFFFFC45C))
+    PremiumGameStyle("aviator", "AVIATOR", "Native visual demo · live connection pending", "✈", Color(0xFFFF4D4D), Color(0xFFFF9B42)),
+    PremiumGameStyle("dragon_tiger", "DRAGON TIGER", "Preview · Coming Soon", "🐉", Color(0xFFE34A4A), Color(0xFFFFC45C)),
+    PremiumGameStyle("dice", "LUCKY 10 DICE", "Preview · Coming Soon", "🎲", Color(0xFF5C7CFA), Color(0xFFB56CFF)),
+    PremiumGameStyle("andar_bahar", "ANDAR BAHAR", "Preview · Coming Soon", "🃏", Color(0xFF16A36A), Color(0xFFDBB65C)),
+    PremiumGameStyle("roulette", "ROULETTE", "Preview · Coming Soon", "🎡", Color(0xFFDA3545), Color(0xFF171923)),
+    PremiumGameStyle("teen_patti", "TEEN PATTI", "Preview · Coming Soon", "♠", Color(0xFF15966A), Color(0xFFFFC45C))
 )
 
 @Composable
@@ -271,8 +271,8 @@ fun PremiumGameLobby(onOpen: (String) -> Unit) {
                                 )
                             }
                             Text(
-                                "PREVIEW",
-                                color = Color(0xFFA1A1AA),
+                                if (game.code == "aviator") "DEMO" else "PREVIEW",
+                                color = if (game.code == "aviator") Color(0xFFFBBF24) else Color(0xFFA1A1AA),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
                             )
