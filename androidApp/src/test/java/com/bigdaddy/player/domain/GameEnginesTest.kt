@@ -55,6 +55,41 @@ class GameEnginesTest {
         assertTrue(aceTwoThree > kingQueenJack)
     }
 
+    @Test fun teenPattiSequenceOrderingMatchesLegacyAKQAndA23Rules() {
+        val engine = TeenPattiEngine()
+        val akq = engine.evaluate(listOf(PlayingCard(14, 'S'), PlayingCard(13, 'H'), PlayingCard(12, 'D')))
+        val a23 = engine.evaluate(listOf(PlayingCard(14, 'S'), PlayingCard(3, 'H'), PlayingCard(2, 'D')))
+        val kqj = engine.evaluate(listOf(PlayingCard(13, 'S'), PlayingCard(12, 'H'), PlayingCard(11, 'D')))
+        assertTrue(akq > a23)
+        assertTrue(a23 > kqj)
+    }
+
+    @Test fun teenPattiPureSequenceBeatsNormalSequenceAndFlushBeatsPair() {
+        val engine = TeenPattiEngine()
+        val pure = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(10, 'S'), PlayingCard(11, 'S')))
+        val sequence = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(10, 'H'), PlayingCard(11, 'D')))
+        val flush = engine.evaluate(listOf(PlayingCard(14, 'S'), PlayingCard(9, 'S'), PlayingCard(4, 'S')))
+        val pair = engine.evaluate(listOf(PlayingCard(13, 'S'), PlayingCard(13, 'H'), PlayingCard(2, 'D')))
+        assertTrue(pure > sequence)
+        assertTrue(flush > pair)
+    }
+
+    @Test fun teenPattiRejectsIncompleteAndDuplicateHands() {
+        val engine = TeenPattiEngine()
+        try {
+            engine.evaluate(listOf(PlayingCard(2, 'S'), PlayingCard(3, 'H')))
+            throw AssertionError("Expected incomplete hand to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("exactly three"))
+        }
+        try {
+            engine.evaluate(listOf(PlayingCard(8, 'S'), PlayingCard(8, 'S'), PlayingCard(4, 'D')))
+            throw AssertionError("Expected duplicate card to be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("duplicate"))
+        }
+    }
+
     @Test fun teenPattiPairUsesPairRankThenKicker() {
         val engine = TeenPattiEngine()
         val higherPair = engine.evaluate(listOf(PlayingCard(10, 'S'), PlayingCard(10, 'H'), PlayingCard(2, 'D')))
