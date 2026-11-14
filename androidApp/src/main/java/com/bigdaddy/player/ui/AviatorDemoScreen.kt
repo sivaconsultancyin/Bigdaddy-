@@ -26,6 +26,7 @@ import com.bigdaddy.player.domain.AviatorRoundManager
 import com.bigdaddy.player.domain.AviatorSnapshot
 import com.bigdaddy.player.domain.DemoOutcome
 import java.util.UUID
+import kotlin.math.exp
 
 @Composable
 fun AviatorDemoScreen(onCompleted: (DemoOutcome, Long, Long) -> Unit) {
@@ -53,7 +54,7 @@ fun AviatorDemoScreen(onCompleted: (DemoOutcome, Long, Long) -> Unit) {
         Text("Aviator · Local demo", style = MaterialTheme.typography.headlineSmall)
         Text("Multiplier: ${String.format("%.2f", snapshot.multiplier)}x", style = MaterialTheme.typography.headlineMedium)
         Canvas(Modifier.fillMaxWidth().height(220.dp)) {
-            val progress = (snapshot.elapsedMillis / 14_000f).coerceIn(0f, 1f)
+            val progress = (1.0 - exp(-snapshot.elapsedMillis / 12_000.0)).toFloat().coerceIn(0f, 1f)
             val x = size.width * progress
             val y = size.height * (0.92f - (snapshot.multiplier.toFloat() - 1f).coerceAtMost(12f) / 14f)
             val path = Path().apply {
