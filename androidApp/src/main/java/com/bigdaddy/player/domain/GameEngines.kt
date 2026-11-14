@@ -65,22 +65,33 @@ private fun deck(): List<PlayingCard> = listOf('S', 'H', 'D', 'C').flatMap { sui
 }
 
 class DragonTigerEngine {
+    // Legacy Dragon Tiger rules treat Ace as the lowest card.
     internal fun cardStrength(rank: Int): Int = if (rank == 14) 1 else rank
+    internal fun winner(dragonRank: Int, tigerRank: Int): String = when {
+        cardStrength(dragonRank) > cardStrength(tigerRank) -> "DRAGON"
+        cardStrength(dragonRank) < cardStrength(tigerRank) -> "TIGER"
+        else -> "TIE"
+    }
 
     fun play(seed: Long): DemoOutcome {
         val cards = deck().shuffled(Random(seed)).take(2)
         val dragon = cards[0]
         val tiger = cards[1]
-        val winner = when {
-            dragon.rank == tiger.rank -> "TIE"
-            cardStrength(dragon.rank) > cardStrength(tiger.rank) -> "DRAGON"
-            else -> "TIGER"
-        }
+        val winner = winner(dragon.rank, tiger.rank)
         return DemoOutcome("dragon_tiger", result = "Dragon ${dragon.label()} · Tiger ${tiger.label()} · $winner")
     }
 }
 
 class DiceEngine {
+    internal fun payoutMultiplier(market: String, rolled: Int): Int = when {
+        market.toIntOrNull() in 1..10 && market.toInt() == rolled -> 9
+        market == "small" && rolled in 1..5 -> 2
+        market == "big" && rolled in 6..10 -> 2
+        market == "even" && rolled % 2 == 0 -> 2
+        market == "odd" && rolled % 2 != 0 -> 2
+        else -> 0
+    }
+
     fun play(seed: Long): DemoOutcome {
         val result = Random(seed).nextInt(10) + 1
         return DemoOutcome("dice", result = "Lucky 10 result: $result")
@@ -88,12 +99,14 @@ class DiceEngine {
 }
 
 class AndarBaharEngine {
+    internal fun openingSide(jokerSuit: Char): String =
+        if (jokerSuit == 'S' || jokerSuit == 'C') "ANDAR" else "BAHAR"
+
     fun play(seed: Long): DemoOutcome {
         val cards = deck().shuffled(Random(seed))
         val joker = cards.first()
-        // Opening side is independent of the joker card's suit.
-        val jokerIsBlack = joker.suit == 'S' || joker.suit == 'C'
-        val firstSide = if (jokerIsBlack) "ANDAR" else "BAHAR"
+        // Legacy rule: a black joker starts on Andar; a red joker starts on Bahar.
+        val firstSide = openingSide(joker.suit)
         var winner = firstSide
         var dealt = 0
         for (card in cards.drop(1)) {
@@ -107,9 +120,41 @@ class AndarBaharEngine {
 
 class RouletteEngine {
     private val red = setOf(1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36)
+    private val black = setOf(2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35)
+    internal fun color(number: Int): String = when { number == 0 -> "GREEN"; number in red -> "RED"; number in black -> "BLACK"; else -> "INVALID" }
+    internal fun payoutMultiplier(market: String): Int = when (market) {
+        "straight" -> 36
+        "split" -> 18
+        "street" -> 12
+        "corner" -> 9
+        "line" -> 6
+        "col1", "col2", "col3", "dozen1", "dozen2", "dozen3" -> 3
+        "red", "black", "even", "odd", "low", "high" -> 2
+        else -> 0
+    }
+    internal fun wins(market: String, numbers: List<Int>, result: Int): Boolean {
+        if (result !in 0..36) return false
+        if (result == 0) return market in setOf("straight", "split", "street", "corner") && 0 in numbers
+        return when (market) {
+            "straight", "split", "street", "corner", "line" -> result in numbers
+            "red" -> result in red
+            "black" -> result in black
+            "even" -> result % 2 == 0
+            "odd" -> result % 2 != 0
+            "low" -> result in 1..18
+            "high" -> result in 19..36
+            "dozen1" -> result in 1..12
+            "dozen2" -> result in 13..24
+            "dozen3" -> result in 25..36
+            "col1" -> result % 3 == 1
+            "col2" -> result % 3 == 2
+            "col3" -> result % 3 == 0
+            else -> false
+        }
+    }
     fun play(seed: Long): DemoOutcome {
         val number = Random(seed).nextInt(37)
-        val color = when { number == 0 -> "GREEN"; number in red -> "RED"; else -> "BLACK" }
+        val color = color(number)
         return DemoOutcome("roulette", result = "$number · $color")
     }
 }
