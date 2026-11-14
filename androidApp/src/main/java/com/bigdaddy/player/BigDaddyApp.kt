@@ -256,6 +256,18 @@ fun BigDaddyApp() {
                             Text("Username: $username")
                             Text("Role: $role")
                             Text("Game history is stored on this device.")
+                            Text("Local game history", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+                            LazyColumn(modifier = Modifier.weight(1f)) {
+                                items(history) { item ->
+                                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                        Column(Modifier.padding(12.dp)) {
+                                            Text(gameNames.firstOrNull { it.first == item.gameCode }?.second ?: item.gameCode)
+                                            Text(item.demoResult)
+                                            Text("Round ${item.roundId}", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
                             TextButton(onClick = {
                                 scope.launch {
                                     sessions.clear()
