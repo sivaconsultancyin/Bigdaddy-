@@ -55,7 +55,7 @@ fun AviatorDemoScreen(onCompleted: (DemoOutcome, Long, Long) -> Unit) {
         Canvas(Modifier.fillMaxWidth().height(220.dp)) {
             val progress = (snapshot.elapsedMillis / 14_000f).coerceIn(0f, 1f)
             val x = size.width * progress
-            val y = size.height * (0.92f - (snapshot.multiplier - 1f).coerceAtMost(12f) / 14f)
+            val y = size.height * (0.92f - (snapshot.multiplier.toFloat() - 1f).coerceAtMost(12f) / 14f)
             val path = Path().apply {
                 moveTo(0f, size.height * 0.92f)
                 cubicTo(size.width * 0.25f, size.height * 0.88f, x * 0.7f, y + 35f, x, y)
