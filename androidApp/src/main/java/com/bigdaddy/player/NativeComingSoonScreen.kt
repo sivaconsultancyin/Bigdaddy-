@@ -33,6 +33,9 @@ internal fun NativeComingSoonScreen(
     status: String,
     architectureTitle: String,
     description: String,
+    poolBalance: String,
+    minBet: String,
+    maxBet: String,
     onBack: () -> Unit
 ) {
     Column(
@@ -76,7 +79,8 @@ internal fun NativeComingSoonScreen(
                     InfoTile("STATUS", status, Modifier.weight(1f))
                     InfoTile("AVAILABILITY", "Preview only", Modifier.weight(1f))
                 }
-                InfoTile("GAME POOL / CHIP LIMITS", "Shown when the authoritative game inventory is connected", Modifier.fillMaxWidth())
+                InfoTile("GAME POOL", poolBalance.ifBlank { "Unavailable" }, Modifier.weight(1f))
+                InfoTile("CHIP LIMITS", if (minBet.isNotBlank() && maxBet.isNotBlank()) "$minBet - $maxBet Tokens" else "Unavailable", Modifier.weight(1f))
                 Column(
                     Modifier.fillMaxWidth().background(Color(0x9918181B), RoundedCornerShape(12.dp))
                         .border(1.dp, Color(0xFF27272A), RoundedCornerShape(12.dp)).padding(12.dp),
