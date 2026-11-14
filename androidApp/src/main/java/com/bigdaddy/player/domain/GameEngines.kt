@@ -104,9 +104,27 @@ class DiceEngine {
     }
 }
 
+data class AndarBaharCardDeal(val side: String, val card: PlayingCard)
+
 class AndarBaharEngine {
     internal fun openingSide(jokerSuit: Char): String =
         if (jokerSuit == 'S' || jokerSuit == 'C') "ANDAR" else "BAHAR"
+
+    internal fun dealSequence(shuffledDeck: List<PlayingCard>): List<AndarBaharCardDeal> {
+        require(shuffledDeck.size >= 2) { "Andar Bahar needs a Joker and at least one remaining card." }
+        val joker = shuffledDeck.first()
+        var side = openingSide(joker.suit)
+        val sequence = mutableListOf<AndarBaharCardDeal>()
+        for (card in shuffledDeck.drop(1)) {
+            sequence += AndarBaharCardDeal(side, card)
+            if (card.rank == joker.rank) break
+            side = if (side == "ANDAR") "BAHAR" else "ANDAR"
+        }
+        require(sequence.lastOrNull()?.card?.rank == joker.rank) {
+            "Andar Bahar deck must contain a matching rank after the Joker."
+        }
+        return sequence
+    }
 
     fun play(seed: Long): DemoOutcome {
         val cards = deck().shuffled(Random(seed))
