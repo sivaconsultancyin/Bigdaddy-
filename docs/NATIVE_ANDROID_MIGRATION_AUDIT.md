@@ -171,3 +171,12 @@ CI success verifies repository automation and isolated fixtures only. It does no
 - Added tests for AKQ/A23/KQJ ordering, pure sequence vs sequence, flush vs pair, and invalid/duplicate cards.
 - Persists the round result to local Room history. This is virtual demo gameplay only; it does not place stakes, call Supabase game APIs, debit wallets, or issue payouts.
 - Android CI, physical-device layout/accessibility checks and full E2E remain required before release/cutover.
+
+
+## Native Aviator screen enhancement — 2026-11-14
+
+- Replaced the text-only Aviator demo with a native Compose flight graph, live multiplier readout, elapsed-time display, 5-second local round-start countdown, flying/crashed phases, and crash result recording.
+- The graph progress uses a clamped logarithmic multiplier mapping; added unit coverage for monotonicity and lower/upper bounds.
+- The local round uses the APK-local demo engine only. No Supabase round/state endpoint, worker, Realtime channel, bet, cashout, wallet debit, or payout is called.
+- This does not make client-generated crash outcomes trustworthy for real-money settlement. Wallet-impacting gameplay remains disabled pending a separately designed server-verifiable outcome protocol.
+- Latest Android and backend CI for the new Teen Patti and Aviator commits must pass; physical-device E2E and release validation remain open.
