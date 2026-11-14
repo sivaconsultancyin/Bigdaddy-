@@ -2,6 +2,7 @@ package com.bigdaddy.player
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -198,8 +199,15 @@ fun PremiumGameLobby(onOpen: (String) -> Unit) {
         ) {
             items(premiumGames.size) { index ->
                 val game = premiumGames[index]
+                val entrance by animateFloatAsState(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 520, delayMillis = index * 65),
+                    label = "game-card-entrance-$index"
+                )
                 Card(
-                    Modifier.fillMaxWidth().height(112.dp).clickable { onOpen(game.code) },
+                    Modifier.fillMaxWidth().height(112.dp)
+                        .graphicsLayer { alpha = entrance; translationY = (1f - entrance) * 22f }
+                        .clickable { onOpen(game.code) },
                     shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF151827))
                 ) {
@@ -231,9 +239,16 @@ fun PremiumGameLobby(onOpen: (String) -> Unit) {
 
 @Composable
 fun PremiumGameHeader(title: String, subtitle: String, accent: Color, content: @Composable () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "game-header-glow")
+    val glow by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(tween(1800), RepeatMode.Reverse),
+        label = "game-header-border"
+    )
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(
-            Modifier.fillMaxWidth().border(1.dp, accent.copy(alpha = 0.65f), RoundedCornerShape(22.dp)),
+            Modifier.fillMaxWidth().border(1.dp, accent.copy(alpha = glow), RoundedCornerShape(22.dp)),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
             shape = RoundedCornerShape(22.dp)
         ) {
