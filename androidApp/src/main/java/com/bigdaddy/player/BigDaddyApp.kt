@@ -145,7 +145,7 @@ fun BigDaddyApp() {
             Scaffold(
                 bottomBar = {
                     NavigationBar {
-                        listOf("Games", "Wallet", "History", "Profile").forEach { item ->
+                        listOf("Games").forEach { item ->
                             NavigationBarItem(
                                 selected = tab == item,
                                 onClick = { tab = item; selectedGame = null },
@@ -159,7 +159,7 @@ fun BigDaddyApp() {
                 Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("BigDaddy", style = MaterialTheme.typography.headlineSmall)
-                        Text("Virtual: $balance")
+                        TextButton(onClick = { tab = "Profile"; selectedGame = null }) { Text("Profile") }
                     }
                     Spacer(Modifier.padding(4.dp))
                     when (tab) {
