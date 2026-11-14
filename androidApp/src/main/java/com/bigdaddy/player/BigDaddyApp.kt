@@ -123,11 +123,16 @@ fun BigDaddyApp() {
                             error = null
                             runCatching {
                                 val result = api.login(loginName, password)
+                                // Do not persist or expose a bearer token until the server confirms
+                                // the session and the wallet endpoint is reachable.
+                                val verifiedAccount = api.verifySession(result.token)
+                                val verifiedBalance = result.walletBalance ?: api.walletBalance(result.token)
                                 sessions.save(result.token)
                                 token = result.token
-                                username = result.account.username
-                                role = result.account.role
-                                balance = result.walletBalance ?: api.walletBalance(result.token)
+                                username = verifiedAccount.username
+                                role = verifiedAccount.role
+                                balance = verifiedBalance
+                                password = ""
                             }.onFailure { error = it.message ?: "Login failed." }
                             busy = false
                         }
