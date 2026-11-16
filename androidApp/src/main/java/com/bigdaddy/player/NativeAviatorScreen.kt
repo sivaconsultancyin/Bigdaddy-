@@ -40,7 +40,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bigdaddy.player.data.BigDaddyApi
-import com.bigdaddy.player.data.NativeAviatorRound
 import com.bigdaddy.player.data.NativeAviatorState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -140,9 +139,18 @@ internal fun NativeAviatorScreen(
                         Text("AVIATOR LIVE", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
                         Text("Server-authoritative round feed", color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
                     }
+                    val connectionLabel = when {
+                        error != null -> "OFFLINE"
+                        state != null -> "CONNECTED"
+                        else -> "CONNECTING"
+                    }
                     Text(
-                        if (error == null) "CONNECTED" else "RETRYING",
-                        color = if (error == null) Color(0xFF86EFAC) else Color(0xFFFCA5A5),
+                        connectionLabel,
+                        color = when (connectionLabel) {
+                            "CONNECTED" -> Color(0xFF86EFAC)
+                            "CONNECTING" -> Color(0xFFFBBF24)
+                            else -> Color(0xFFFCA5A5)
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
