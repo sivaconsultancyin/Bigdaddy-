@@ -137,7 +137,7 @@ class BigDaddyApi {
     }
 
     /**
-     * Reads the authenticated, server-authoritative Aviator round bundle.
+     * Reads the server-authoritative Aviator round bundle from the configured Node API.
      * This method never creates a round, multiplier, crash result, bet or payout.
      */
     suspend fun aviatorState(token: String): NativeAviatorState {
