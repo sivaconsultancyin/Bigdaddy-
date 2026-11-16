@@ -58,10 +58,18 @@ class BigDaddyApi {
         } else builder.get().build()
     }
 
-    private suspend fun execute(request: Request): JSONObject = withContext(Dispatchers.IO) {
-        require(BuildConfig.SUPABASE_URL.startsWith("https://")) {
-            "Native app is not configured. Supply SUPABASE_URL through the build environment."
+    private fun backendRequest(path: String, token: String? = null): Request {
+        val backendUrl = BuildConfig.BIGDADDY_BACKEND_URL.trimEnd('/')
+        require(backendUrl.startsWith("https://")) {
+            "Native game server is not configured. Supply BIGDADDY_BACKEND_URL for the Node.js backend."
         }
+        val apiRoot = if (backendUrl.endsWith("/api")) backendUrl else "$backendUrl/api"
+        val builder = Request.Builder().url(apiRoot + path).header("Accept", "application/json")
+        if (!token.isNullOrBlank()) builder.header("Authorization", "Bearer $token")
+        return builder.get().build()
+    }
+
+    private suspend fun execute(request: Request): JSONObject = withContext(Dispatchers.IO) {
         client.newCall(request).execute().use { response ->
             val raw = response.body?.string().orEmpty()
             val parsed = runCatching { if (raw.isBlank()) JSONObject() else JSONObject(raw) }.getOrElse { JSONObject() }
@@ -133,7 +141,7 @@ class BigDaddyApi {
      * This method never creates a round, multiplier, crash result, bet or payout.
      */
     suspend fun aviatorState(token: String): NativeAviatorState {
-        val response = execute(request("/games/aviator/state", token))
+        val response = execute(backendRequest("/games/aviator/state", token))
         val roundJson = response.optJSONObject("round")
         val round = if (roundJson == null || roundJson.optString("id").isBlank()) {
             null
