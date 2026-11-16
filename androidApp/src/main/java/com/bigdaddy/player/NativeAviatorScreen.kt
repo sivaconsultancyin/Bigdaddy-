@@ -325,7 +325,7 @@ internal fun NativeAviatorScreen(
                     Text("Live state refresh failed: $it", color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall)
                 }
                 if (loading && round == null) {
-                    Text("Connecting to the authenticated game service…", color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
+                    Text("Connecting to the Node game service…", color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -358,7 +358,7 @@ internal fun NativeAviatorScreen(
             }
         }
         Text(
-            "Live round values and crash results are read only from the authenticated server API. Betting and cashout controls are not enabled in this native client yet.",
+            "Live round values and crash results are read only from the Node game API. Betting and cashout controls are not enabled in this native client yet.",
             color = Color(0xFF71717A),
             style = MaterialTheme.typography.bodySmall
         )
