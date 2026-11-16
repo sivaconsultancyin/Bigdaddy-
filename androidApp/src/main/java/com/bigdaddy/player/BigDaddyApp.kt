@@ -40,10 +40,8 @@ import com.bigdaddy.player.data.BigDaddyApi
 import com.bigdaddy.player.data.GameHistoryDatabase
 import com.bigdaddy.player.data.GameHistoryEntity
 import com.bigdaddy.player.data.SecureSessionStore
-import com.bigdaddy.player.domain.LocalDemoGameRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 private val BigDaddyDarkColors = darkColorScheme(
     primary = Color(0xFFF59E0B),
@@ -207,25 +205,8 @@ fun BigDaddyApp() {
                                 val name = gameNames.first { it.first == selectedGame }.second
                                 TextButton(onClick = { selectedGame = null; lastResult = null }) { Text("← All games") }
                                 if (selectedGame == "aviator") {
-                                    PremiumGameHeader("AVIATOR", "Native visual demo · not connected to live rounds", Color(0xFFFF654F)) {}
-                                    NativeAviatorScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                        playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
+                                    PremiumGameHeader("AVIATOR", "Live server-authoritative round · native visual client", Color(0xFFFF654F)) {}
+                                    NativeAviatorScreen(api = api, token = token!!)
                                 } else {
                                     val preview = when (selectedGame) {
                                         "dragon_tiger" -> arrayOf(
@@ -285,7 +266,7 @@ fun BigDaddyApp() {
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         }
                         "History" -> {
-                            Text("Local game history", style = MaterialTheme.typography.titleLarge)
+                            Text("Legacy device demo history", style = MaterialTheme.typography.titleLarge)
                             LazyColumn {
                                 items(history) { item ->
                                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -336,8 +317,8 @@ fun BigDaddyApp() {
                                     walletError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                                 }
                             }
-                            Text("Local game history", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 14.dp))
-                            Text("Stored privately on this device for this player account.", color = Color(0xFF71717A), style = MaterialTheme.typography.bodySmall)
+                            Text("Legacy device demo history", color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 14.dp))
+                            Text("Older local preview entries only; these are not authoritative server game results.", color = Color(0xFF71717A), style = MaterialTheme.typography.bodySmall)
                             LazyColumn(modifier = Modifier.weight(1f)) {
                                 items(history) { item ->
                                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp),
