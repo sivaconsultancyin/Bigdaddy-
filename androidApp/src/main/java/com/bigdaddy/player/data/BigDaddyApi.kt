@@ -13,6 +13,26 @@ import java.util.concurrent.TimeUnit
 data class NativeAccount(val id: String, val username: String, val role: String)
 data class NativeLoginResult(val token: String, val account: NativeAccount, val walletBalance: String?)
 
+data class NativeAviatorRound(
+    val id: String,
+    val roundNumber: Int,
+    val status: String,
+    val multiplier: Double,
+    val crashMultiplier: Double?,
+    val startedAt: String?
+)
+
+data class NativeAviatorHistoryItem(
+    val roundNumber: Int,
+    val crashMultiplier: Double
+)
+
+data class NativeAviatorState(
+    val round: NativeAviatorRound?,
+    val history: List<NativeAviatorHistoryItem>,
+    val serverTime: String?
+)
+
 class BigDaddyApi {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -106,5 +126,51 @@ class BigDaddyApi {
         val response = execute(request("/wallet/my-wallet", token))
         val wallet = response.optJSONObject("wallet") ?: return "0"
         return wallet.optString("balance", "0")
+    }
+
+    /**
+     * Reads the authenticated, server-authoritative Aviator round bundle.
+     * This method never creates a round, multiplier, crash result, bet or payout.
+     */
+    suspend fun aviatorState(token: String): NativeAviatorState {
+        val response = execute(request("/games/aviator/state", token))
+        val roundJson = response.optJSONObject("round")
+        val round = if (roundJson == null || roundJson.optString("id").isBlank()) {
+            null
+        } else {
+            val rawMultiplier = roundJson.optDouble("multiplier", 1.0)
+            val rawCrashMultiplier = if (roundJson.isNull("crashMultiplier")) {
+                null
+            } else {
+                roundJson.optDouble("crashMultiplier", Double.NaN).takeIf { it.isFinite() && it >= 1.0 }
+            }
+            NativeAviatorRound(
+                id = roundJson.optString("id"),
+                roundNumber = roundJson.optInt("roundNumber", 0),
+                status = roundJson.optString("status", "WAITING").uppercase(),
+                multiplier = rawMultiplier.takeIf { it.isFinite() && it >= 1.0 } ?: 1.0,
+                crashMultiplier = rawCrashMultiplier,
+                startedAt = roundJson.optString("startedAt").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }
+        val historyJson = response.optJSONArray("history")
+        val history = mutableListOf<NativeAviatorHistoryItem>()
+        if (historyJson != null) {
+            for (index in 0 until historyJson.length()) {
+                val item = historyJson.optJSONObject(index) ?: continue
+                val crash = item.optDouble("crashMultiplier", Double.NaN)
+                if (crash.isFinite() && crash >= 1.0) {
+                    history += NativeAviatorHistoryItem(
+                        roundNumber = item.optInt("roundNumber", 0),
+                        crashMultiplier = crash
+                    )
+                }
+            }
+        }
+        return NativeAviatorState(
+            round = round,
+            history = history,
+            serverTime = response.optString("serverTime").takeIf { it.isNotBlank() && it != "null" }
+        )
     }
 }
