@@ -1,5 +1,6 @@
 package com.bigdaddy.player
 
+import com.bigdaddy.player.data.NativeGameCatalogItem
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
