@@ -23,7 +23,6 @@ const probes: Probe[] = [
   { method: 'GET', path: '/games/aviator/history', label: 'Aviator round history', safe: true },
   { method: 'GET', path: '/games/roulette/state', label: 'Roulette state', safe: true },
   { method: 'GET', path: '/games/dice/state', label: 'Dice state', safe: true },
-  { method: 'GET', path: '/games/dragon-tiger/state', label: 'Dragon Tiger state', safe: true },
   { method: 'GET', path: '/games/andar-bahar/state', label: 'Andar Bahar state', safe: true },
   { method: 'POST', path: '/auth/login', label: 'Login', safe: true, validationOnly: true },
   { method: 'POST', path: '/auth/register-referral', label: 'Referral registration', safe: true, validationOnly: true },
@@ -40,7 +39,6 @@ const probes: Probe[] = [
   { method: 'POST', path: '/games/aviator/cashout', label: 'Aviator cashout', safe: false },
   { method: 'POST', path: '/games/roulette/bet', label: 'Roulette bet', safe: false },
   { method: 'POST', path: '/games/dice/bet', label: 'Dice bet', safe: false },
-  { method: 'POST', path: '/games/dragon-tiger/bet', label: 'Dragon Tiger bet', safe: false },
   { method: 'POST', path: '/games/andar-bahar/bet', label: 'Andar Bahar bet', safe: false },
 ];
 
