@@ -24,7 +24,7 @@ import {
   SUIT_SYMBOLS,
   SUIT_COLORS,
   getRankLabel,
-} from '../../../../shared/src/utils/teenPatti';
+} from '../../../../shared/src/utils/cards';
 import { andarBaharAudio } from './AndarBaharAudio';
 
 const CHIP_DENOMINATIONS = [10, 50, 100, 500, 1000, 5000];
