@@ -33,6 +33,16 @@ data class NativeAviatorState(
     val serverTime: String?
 )
 
+data class NativeGameCatalogItem(
+    val id: String,
+    val code: String,
+    val name: String,
+    val status: String,
+    val minBet: String,
+    val maxBet: String,
+    val poolBalance: String
+)
+
 class BigDaddyApi {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -134,6 +144,38 @@ class BigDaddyApi {
         val response = execute(request("/wallet/my-wallet", token))
         val wallet = response.optJSONObject("wallet") ?: return "0"
         return wallet.optString("balance", "0")
+    }
+
+    /**
+     * Reads the same authenticated game catalog used by the Website Player dashboard.
+     * Missing pool metadata is represented as zero, matching the current Edge API response.
+     */
+    suspend fun gameCatalog(token: String): List<NativeGameCatalogItem> {
+        val response = execute(request("/games/list", token))
+        val items = response.optJSONArray("games") ?: return emptyList()
+        val catalog = mutableListOf<NativeGameCatalogItem>()
+        for (index in 0 until items.length()) {
+            val item = items.optJSONObject(index) ?: continue
+            val code = item.optString("code").trim().lowercase().replace('-', '_')
+            if (code.isBlank()) continue
+            fun readValue(vararg keys: String): String {
+                for (key in keys) {
+                    val value = item.optString(key).trim()
+                    if (value.isNotBlank() && value != "null") return value
+                }
+                return ""
+            }
+            catalog += NativeGameCatalogItem(
+                id = readValue("id").ifBlank { code },
+                code = code,
+                name = readValue("name").ifBlank { code.replace('_', ' ').replaceFirstChar { it.uppercase() } },
+                status = readValue("status").ifBlank { "COMING_SOON" }.uppercase(),
+                minBet = readValue("min_bet", "minBet"),
+                maxBet = readValue("max_bet", "maxBet"),
+                poolBalance = readValue("poolBalance", "pool_balance").ifBlank { "0" }
+            )
+        }
+        return catalog
     }
 
     /**
