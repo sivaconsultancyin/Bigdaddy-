@@ -22,8 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun NativeComingSoonScreen(
@@ -39,16 +41,27 @@ internal fun NativeComingSoonScreen(
     onBack: () -> Unit
 ) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 2.dp),
+        Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TextButton(onClick = onBack) {
-            Text("‹  Back to Lobby", color = Color(0xFFD4D4D8), fontWeight = FontWeight.SemiBold)
+        TextButton(
+            onClick = onBack,
+            modifier = Modifier
+                .background(Color(0xFF27272A), RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 2.dp)
+        ) {
+            Text(
+                "‹  Back to Lobby",
+                color = Color(0xFFD4D4D8),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp
+            )
         }
         Card(
             Modifier.fillMaxWidth().border(1.dp, Color(0x66F59E0B), RoundedCornerShape(18.dp)),
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF09090B))
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF09090B)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Column(
                 Modifier.fillMaxWidth().background(
@@ -60,7 +73,9 @@ internal fun NativeComingSoonScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(
-                        Modifier.size(48.dp).background(Color(0x33F59E0B), RoundedCornerShape(12.dp)),
+                        Modifier.size(48.dp)
+                            .background(Color(0x33F59E0B), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0x66F59E0B), RoundedCornerShape(12.dp)),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -68,30 +83,49 @@ internal fun NativeComingSoonScreen(
                     }
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(title, color = Color(0xFFFCDFA0), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
-                            Text("COMING SOON", color = Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.background(Color(0x33F59E0B), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 3.dp))
+                            Text(
+                                title,
+                                color = Color(0xFFFCDFA0),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Serif
+                            )
+                            Text(
+                                "COMING SOON",
+                                color = Color(0xFFFFD27A),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                modifier = Modifier
+                                    .background(Color(0x33F59E0B), RoundedCornerShape(999.dp))
+                                    .border(1.dp, Color(0x66F59E0B), RoundedCornerShape(999.dp))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
                         }
-                        Text(subtitle, color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
+                        Text(subtitle, color = Color(0xFFA1A1AA), fontSize = 11.sp)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     InfoTile("STATUS", status, Modifier.weight(1f))
-                    InfoTile("AVAILABILITY", "Preview only", Modifier.weight(1f))
+                    InfoTile("GAME POOL", poolBalance.ifBlank { "Unavailable" }, Modifier.weight(1f))
                 }
-                InfoTile("GAME POOL", poolBalance.ifBlank { "Unavailable" }, Modifier.weight(1f))
-                InfoTile("CHIP LIMITS", if (minBet.isNotBlank() && maxBet.isNotBlank()) "$minBet - $maxBet Tokens" else "Unavailable", Modifier.weight(1f))
+                InfoTile(
+                    "CHIP LIMITS",
+                    if (minBet.isNotBlank() && maxBet.isNotBlank()) "$minBet - $maxBet Tokens" else "Unavailable",
+                    Modifier.fillMaxWidth()
+                )
                 Column(
                     Modifier.fillMaxWidth().background(Color(0x9918181B), RoundedCornerShape(12.dp))
                         .border(1.dp, Color(0xFF27272A), RoundedCornerShape(12.dp)).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(architectureTitle, color = Color(0xFFF4F4F5), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("◷", color = Color(0xFFFBBF24), style = MaterialTheme.typography.titleSmall)
+                        Text(architectureTitle, color = Color(0xFFF4F4F5), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    }
                     Text(description, color = Color(0xFFA1A1AA), style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(Modifier.height(2.dp))
-                Text("This screen is a preview, not a playable round. No local random result or wallet transaction is generated.",
-                    color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -105,6 +139,12 @@ private fun InfoTile(label: String, value: String, modifier: Modifier = Modifier
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(label, color = Color(0xFF71717A), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-        Text(value, color = Color(0xFFFCDFA0), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        Text(
+            value,
+            color = if (label == "STATUS") Color(0xFFF59E0B) else Color(0xFFE4E4E7),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            fontFamily = if (label == "STATUS") FontFamily.Default else FontFamily.Monospace
+        )
     }
 }
