@@ -71,27 +71,6 @@ private fun deck(): List<PlayingCard> = listOf('S', 'H', 'D', 'C').flatMap { sui
     (2..14).map { rank -> PlayingCard(rank, suit) }
 }
 
-class DragonTigerEngine {
-    // Legacy Dragon Tiger rules treat Ace as the lowest card.
-    internal fun cardStrength(rank: Int): Int {
-        require(rank in 2..14) { "Dragon Tiger card rank must be between 2 and 14." }
-        return if (rank == 14) 1 else rank
-    }
-    internal fun winner(dragonRank: Int, tigerRank: Int): String = when {
-        cardStrength(dragonRank) > cardStrength(tigerRank) -> "DRAGON"
-        cardStrength(dragonRank) < cardStrength(tigerRank) -> "TIGER"
-        else -> "TIE"
-    }
-
-    fun play(seed: Long): DemoOutcome {
-        val cards = deck().shuffled(Random(seed)).take(2)
-        val dragon = cards[0]
-        val tiger = cards[1]
-        val winner = winner(dragon.rank, tiger.rank)
-        return DemoOutcome("dragon_tiger", result = "Dragon ${dragon.label()} · Tiger ${tiger.label()} · $winner")
-    }
-}
-
 class DiceEngine {
     internal fun payoutMultiplier(market: String, rolled: Int): Int {
         // The legacy Lucky 10 engine can only produce 1..10. Reject out-of-domain
@@ -199,98 +178,18 @@ class RouletteEngine {
     }
 }
 
-internal data class TeenPattiHandValue(
-    val category: Int,
-    val tieBreakers: List<Int>
-) : Comparable<TeenPattiHandValue> {
-    override fun compareTo(other: TeenPattiHandValue): Int {
-        if (category != other.category) return category.compareTo(other.category)
-        for (index in 0 until minOf(tieBreakers.size, other.tieBreakers.size)) {
-            val compared = tieBreakers[index].compareTo(other.tieBreakers[index])
-            if (compared != 0) return compared
-        }
-        return tieBreakers.size.compareTo(other.tieBreakers.size)
-    }
-}
-
-class TeenPattiEngine {
-    internal fun evaluate(cards: List<PlayingCard>): TeenPattiHandValue {
-        require(cards.size == 3) { "Teen Patti hands must contain exactly three cards." }
-        require(cards.all { it.rank in 2..14 && it.suit in setOf('S', 'H', 'D', 'C') }) {
-            "Teen Patti hand contains an invalid card."
-        }
-        require(cards.map { it.rank to it.suit }.distinct().size == 3) { "Teen Patti hand cannot contain duplicate cards." }
-
-        val ranks = cards.map { it.rank }.sortedDescending()
-        val counts = ranks.groupingBy { it }.eachCount().entries
-            .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key })
-        val flush = cards.map { it.suit }.distinct().size == 1
-        val ascending = ranks.sorted()
-        val aceToKingQueen = ascending == listOf(12, 13, 14)
-        val aceTwoThree = ascending == listOf(2, 3, 14)
-        val consecutive = ascending[2] - ascending[1] == 1 && ascending[1] - ascending[0] == 1
-        val sequenceHigh = when {
-            aceToKingQueen -> 15
-            aceTwoThree -> 14
-            consecutive -> ascending[2]
-            else -> null
-        }
-
-        return when {
-            counts.first().value == 3 -> TeenPattiHandValue(6, listOf(counts.first().key))
-            flush && sequenceHigh != null -> TeenPattiHandValue(5, listOf(sequenceHigh))
-            sequenceHigh != null -> TeenPattiHandValue(4, listOf(sequenceHigh))
-            flush -> TeenPattiHandValue(3, ranks)
-            counts.first().value == 2 -> TeenPattiHandValue(2, listOf(counts.first().key, counts.last().key))
-            else -> TeenPattiHandValue(1, ranks)
-        }
-    }
-
-    fun play(seed: Long): DemoOutcome {
-        val cards = deck().shuffled(Random(seed))
-        val player = cards.take(3)
-        val dealer = cards.drop(3).take(3)
-        val playerValue = evaluate(player)
-        val dealerValue = evaluate(dealer)
-        val winner = when {
-            playerValue > dealerValue -> "PLAYER"
-            playerValue < dealerValue -> "DEALER"
-            else -> "TIE"
-        }
-        return DemoOutcome(
-            "teen_patti",
-            result = "Player ${player.joinToString(" ") { it.label() }} · Dealer ${dealer.joinToString(" ") { it.label() }} · $winner"
-        )
-    }
-}
-class AviatorGameEngine {
-    fun createDemoRound(seed: Long): AviatorRoundManager {
-        val crashAt = 1.05 + Random(seed).nextDouble() * 24.0
-        return AviatorRoundManager(GameClock(), MultiplierController(), CrashStateController(crashAt))
-    }
-
-    fun demoCrash(seed: Long): DemoOutcome {
-        val crashAt = 1.05 + Random(seed).nextDouble() * 24.0
-        val display = round(crashAt * 100.0) / 100.0
-        return DemoOutcome("aviator", result = "DEMO CRASH @ ${display}x")
-    }
-}
-
 class LocalDemoGameRegistry(
     private val aviator: AviatorGameEngine = AviatorGameEngine(),
-    private val dragonTiger: DragonTigerEngine = DragonTigerEngine(),
     private val dice: DiceEngine = DiceEngine(),
     private val andarBahar: AndarBaharEngine = AndarBaharEngine(),
     private val roulette: RouletteEngine = RouletteEngine(),
-    private val teenPatti: TeenPattiEngine = TeenPattiEngine()
+    private val roulette: RouletteEngine = RouletteEngine()
 ) {
     fun play(gameCode: String, seed: Long = System.nanoTime()): DemoOutcome = when (gameCode) {
         "aviator" -> aviator.demoCrash(seed)
-        "dragon_tiger" -> dragonTiger.play(seed)
         "dice" -> dice.play(seed)
         "andar_bahar" -> andarBahar.play(seed)
         "roulette" -> roulette.play(seed)
-        "teen_patti" -> teenPatti.play(seed)
         else -> error("Unsupported game: $gameCode")
     }
 }
