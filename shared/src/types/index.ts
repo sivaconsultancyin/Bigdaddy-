@@ -284,48 +284,6 @@ export interface AndarBaharHistoryItem {
   timestamp: string;
 }
 
-export enum DragonTigerRoundStatus {
-  BETTING = 'BETTING',
-  REVEALING = 'REVEALING',
-  RESULT = 'RESULT',
-}
-
-export interface DragonTigerRound {
-  id: string;
-  roundNumber: number;
-  status: DragonTigerRoundStatus;
-  bettingEndsAt: number;
-  dragonCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number } | null;
-  tigerCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number } | null;
-  winner: 'dragon' | 'tiger' | 'tie' | null;
-  totalBetsCount: number;
-  totalBetAmount: string;
-  dragonBetAmount: string;
-  tigerBetAmount: string;
-  tieBetAmount: string;
-}
-
-export interface DragonTigerRoundBet {
-  id: string;
-  roundId: string;
-  userId: string;
-  username: string;
-  type: 'dragon' | 'tiger' | 'tie';
-  amount: string;
-  won?: boolean;
-  payout?: string;
-  profit?: string;
-  createdAt: string;
-}
-
-export interface DragonTigerHistoryItem {
-  roundNumber: number;
-  dragonCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number };
-  tigerCard: { suit: 'S' | 'H' | 'D' | 'C'; rank: number };
-  winner: 'dragon' | 'tiger' | 'tie';
-  timestamp: string;
-}
-
 export interface DiceRollResult {
   id: string;
   userId: string;
