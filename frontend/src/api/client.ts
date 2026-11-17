@@ -350,6 +350,19 @@ export class ApiClient {
     return result;
   }
 
+  // Live Andar Bahar
+  public static getAndarBaharState() {
+    return this.request('/games/andar-bahar/state');
+  }
+
+  public static placeAndarBaharBet(payload: { bets: Array<{ type: string; amount: string }> }) {
+    return this.request('/games/andar-bahar/bet', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'andar-bahar-' + crypto.randomUUID() },
+      body: JSON.stringify(payload),
+    });
+  }
+
   // Provably Fair Dice
   public static getDiceState(userId?: string) {
     const q = userId ? `?userId=${encodeURIComponent(userId)}` : '';
