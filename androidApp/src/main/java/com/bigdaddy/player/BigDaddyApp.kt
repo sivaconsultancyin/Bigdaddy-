@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bigdaddy.player.data.BigDaddyApi
+import com.bigdaddy.player.data.NativeGameCatalogItem
 import com.bigdaddy.player.data.GameHistoryDatabase
 import com.bigdaddy.player.data.GameHistoryEntity
 import com.bigdaddy.player.data.SecureSessionStore
