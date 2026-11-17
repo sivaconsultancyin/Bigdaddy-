@@ -19,3 +19,5 @@ REVOKE ALL ON public.authoritative_game_rounds, public.authoritative_game_bets
   FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.authoritative_game_rounds, public.authoritative_game_bets
   TO service_role;
+
+NOTIFY pgrst, 'reload schema';
