@@ -104,14 +104,14 @@ async function runTestSuite() {
     assert.deepStrictEqual(missingFiles, []);
     assert.deepStrictEqual(manifest.sharedProjectFiles, declaredFiles);
     assert.strictEqual(declaredFiles.length, manifest.counts.totalSupabaseMigrationFiles);
-    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 69);
+    assert.strictEqual(manifest.counts.totalSupabaseMigrationFiles, 70);
     // Directory enumeration can be incomplete in GitHub's synthetic PR merge checkout.
     // Every manifest entry is already checked with readFileSync above; reject only unmanifested SQL files here.
     assert.ok(actualFiles.every((name: string) => declaredFiles.includes(name)));
     assert.deepStrictEqual(manifest.isolatedProjectFiles, []);
-    assert.strictEqual(manifest.counts.sharedAppliedLedger, 79);
-    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 69);
-    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 32);
+    assert.strictEqual(manifest.counts.sharedAppliedLedger, 80);
+    assert.strictEqual(manifest.counts.sharedRepositoryFiles, 70);
+    assert.strictEqual(manifest.counts.sharedExactVersionNameMatches, 33);
     assert.strictEqual(manifest.counts.sharedAppliedOnly, 47);
     assert.strictEqual(manifest.counts.sharedFileOnly, 37);
     const exactAppliedFiles = new Set(
