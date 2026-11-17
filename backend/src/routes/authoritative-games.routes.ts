@@ -42,12 +42,10 @@ export function canSettleRound(status: unknown, result: unknown): boolean {
   return status === 'RESULT' && Boolean(result);
 }
 
-const GAME_CODES: GameCode[] = ['roulette', 'dice', 'dragon_tiger', 'andar_bahar'];
+const GAME_CODES: GameCode[] = ['roulette', 'dice', 'andar_bahar'];
 const CODE_ALIASES: Record<string, GameCode> = {
   roulette: 'roulette',
   dice: 'dice',
-  'dragon-tiger': 'dragon_tiger',
-  dragon_tiger: 'dragon_tiger',
   'andar-bahar': 'andar_bahar',
   andar_bahar: 'andar_bahar',
 };
@@ -66,7 +64,6 @@ async function hasRuntimeSchema(): Promise<boolean> {
     "SELECT " +
       "to_regclass('roulette.authoritative_game_rounds') IS NOT NULL AND to_regclass('roulette.authoritative_game_bets') IS NOT NULL AND " +
       "to_regclass('dice.authoritative_game_rounds') IS NOT NULL AND to_regclass('dice.authoritative_game_bets') IS NOT NULL AND " +
-      "to_regclass('dragon_tiger.authoritative_game_rounds') IS NOT NULL AND to_regclass('dragon_tiger.authoritative_game_bets') IS NOT NULL AND " +
       "to_regclass('andar_bahar.authoritative_game_rounds') IS NOT NULL AND to_regclass('andar_bahar.authoritative_game_bets') IS NOT NULL AS ready",
   );
   return Boolean(rows[0]?.ready);
@@ -461,7 +458,6 @@ for (const [path, code] of [
   ['/games/roulette/spin','roulette'],
   ['/games/dice/bet','dice'],
   ['/games/dice/roll','dice'],
-  ['/games/dragon-tiger/bet','dragon_tiger'],
   ['/games/andar-bahar/bet','andar_bahar'],
 ] as Array<[string, GameCode]>) {
   authoritativeGamesRouter.post(path, auth, (req: AuthRequest, res: Response) => placeBets(req, res, code));
@@ -525,7 +521,7 @@ async function tick() {
       return;
     }
     const activeRows = await sql.unsafe(
-      "SELECT g.code,g.status FROM platform.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM roulette.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM dice.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM dragon_tiger.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM andar_bahar.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
+      "SELECT g.code,g.status FROM platform.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM roulette.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM dice.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM andar_bahar.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
     );
     for (const game of activeRows) {
       const code = game.code as GameCode;
