@@ -283,7 +283,7 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const crashGame = games.find((game) => game.code === 'aviator');
   const crashGameActive = crashGame?.status === 'ACTIVE';
 
-  // Keep all six games visible when the API catalog is incomplete; this does not activate them.
+  // Keep the supported game catalog visible when the API catalog is incomplete; this does not activate games.
   const playerGameCatalog: GameInfo[] = [
     { id: 'catalog-aviator', code: 'aviator', name: 'Aviator / Crash', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-aviator-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'Crash game', iconName: 'Plane', route: '/games/aviator' },
     { id: 'catalog-roulette', code: 'roulette', name: 'European Roulette', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-roulette-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'European roulette', iconName: 'Disc', route: '/games/roulette' },
