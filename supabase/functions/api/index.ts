@@ -144,7 +144,7 @@ async function handle(req: Request) {
   }
   const url = new URL(req.url);
   const path = (url.pathname.replace(/^\/functions\/v1\/api(?=\/|$)/, "").replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/")
-    .replace(/^\/games\/dragon_tiger(?=\/|$)/, "/games/dragon-tiger");
+    .replace(/^\/games\/(?:dragon_tiger|teen_patti)(?=\/|$)/, (match) => match === "/games/dragon_tiger" ? "/games/dragon-tiger" : "/games/teen-patti");
   if (/^\/games\/(?:dragon-tiger|teen-patti)(?:\/|$)/.test(path)) {
     return response({ error: "GAME_REMOVED" }, 404, origin);
   }
