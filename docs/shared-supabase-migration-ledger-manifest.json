@@ -2,9 +2,9 @@
   "snapshotDate": "2026-11-13",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 80,
-    "sharedRepositoryFiles": 70,
-    "sharedExactVersionNameMatches": 33,
+    "sharedAppliedLedger": 81,
+    "sharedRepositoryFiles": 71,
+    "sharedExactVersionNameMatches": 34,
     "sharedAppliedOnly": 47,
     "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 70,
+    "totalSupabaseMigrationFiles": 71,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -339,6 +339,10 @@
     {
       "version": "20261117141410",
       "name": "remove_dragon_tiger_and_teen_patti"
+    },
+    {
+      "version": "20261117142740",
+      "name": "restore_authoritative_game_compatibility_views"
     }
   ],
   "exactMatches": [
@@ -763,7 +767,8 @@
     "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
     "20261113181312_aviator_hide_running_crash_target.sql",
     "20261113185354_aviator_bet_lookup_scoped_to_game.sql",
-    "20261117141410_remove_dragon_tiger_and_teen_patti.sql"
+    "20261117141410_remove_dragon_tiger_and_teen_patti.sql",
+    "20261117142740_restore_authoritative_game_compatibility_views.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -879,7 +884,8 @@
     "20261112130811_dragon_tiger_replay_found_rowcount_fix.sql",
     "20261113181312_aviator_hide_running_crash_target.sql",
     "20261113185354_aviator_bet_lookup_scoped_to_game.sql",
-    "20261117141410_remove_dragon_tiger_and_teen_patti.sql"
+    "20261117141410_remove_dragon_tiger_and_teen_patti.sql",
+    "20261117142740_restore_authoritative_game_compatibility_views.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
