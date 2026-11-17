@@ -145,6 +145,9 @@ async function handle(req: Request) {
   const url = new URL(req.url);
   const path = (url.pathname.replace(/^\/functions\/v1\/api(?=\/|$)/, "").replace(/^\/api(?=\/)/, "").replace(/\/$/, "") || "/")
     .replace(/^\/games\/dragon_tiger(?=\/|$)/, "/games/dragon-tiger");
+  if (/^\/games\/(?:dragon-tiger|teen-patti)(?:\/|$)/.test(path)) {
+    return response({ error: "GAME_REMOVED" }, 404, origin);
+  }
   if (req.method === "GET" && path === "/health") {
     try {
       const healthDb = client();
