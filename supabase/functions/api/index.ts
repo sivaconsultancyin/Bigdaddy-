@@ -333,6 +333,19 @@ async function handle(req: Request) {
     };
     if (code === "roulette") { current.spinEndsAt = row.status === "RUNNING" && row.state?.spinStartedAt ? new Date(row.state.spinStartedAt).getTime() + 1500 : current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
     if (code === "dice") { current.rolledNumber = row.status === "SETTLED" ? result?.number ?? null : null; current.numberBetsAmount = {}; }
+    if (code === "andar_bahar") {
+      // Reveal only the cards that should have appeared by this point in the
+      // 4.5-second deal. The winning side/card stay private until settlement.
+      const publicDeal = getAndarBaharPublicDeal(row.result, row.status, row.state?.dealStartedAt);
+      current.jokerCard = publicDeal.jokerCard;
+      current.dealCards = publicDeal.dealCards;
+      current.winningSide = publicDeal.winningSide;
+      current.winningCard = publicDeal.winningCard;
+      current.totalCardsDealt = publicDeal.totalCardsDealt;
+      current.firstSide = row.result?.firstSide ?? (row.result?.jokerCard?.suit ? (["S", "C"].includes(String(row.result.jokerCard.suit).toUpperCase()) ? "andar" : "bahar") : null);
+      current.andarBetAmount = "0";
+      current.baharBetAmount = "0";
+    }
     const { data: bets, error: betsError } = await db.schema(code).from("authoritative_game_bets").select("id,user_id,bet_amount,selection,status,payout_amount").eq("round_id", row.id).order("created_at", { ascending: false }).limit(100);
     if (betsError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     const userIds = [...new Set((bets ?? []).map(b => b.user_id))];
