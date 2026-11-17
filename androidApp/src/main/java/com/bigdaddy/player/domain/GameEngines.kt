@@ -178,6 +178,19 @@ class RouletteEngine {
     }
 }
 
+class AviatorGameEngine {
+    fun createDemoRound(seed: Long): AviatorRoundManager {
+        val crashAt = 1.05 + Random(seed).nextDouble() * 24.0
+        return AviatorRoundManager(GameClock(), MultiplierController(), CrashStateController(crashAt))
+    }
+
+    fun demoCrash(seed: Long): DemoOutcome {
+        val crashAt = 1.05 + Random(seed).nextDouble() * 24.0
+        val display = round(crashAt * 100.0) / 100.0
+        return DemoOutcome("aviator", result = "DEMO CRASH @ ${display}x")
+    }
+}
+
 class LocalDemoGameRegistry(
     private val aviator: AviatorGameEngine = AviatorGameEngine(),
     private val dice: DiceEngine = DiceEngine(),
