@@ -112,7 +112,10 @@ fun BigDaddyApp() {
                     walletError = "Wallet balance is temporarily unavailable."
                     "Unavailable"
                 }
-                gameCatalog = runCatching { api.gameCatalog(saved) }.getOrDefault(emptyList())
+                scope.launch {
+                    val catalog = runCatching { api.gameCatalog(saved) }.getOrDefault(emptyList())
+                    if (token == saved) gameCatalog = catalog
+                }
             }.onFailure { failure ->
                 val message = failure.message.orEmpty()
                 if (listOf("AUTH_REQUIRED", "INVALID_TOKEN", "USER_NOT_FOUND_OR_DISABLED", "TOKEN_ROLE_STALE")
@@ -123,6 +126,7 @@ fun BigDaddyApp() {
                     username = ""
                     role = ""
                     balance = "Unavailable"
+                    gameCatalog = emptyList()
                     error = "Your session expired. Please sign in again."
                 } else {
                     error = "Saved session could not be verified: $message"
@@ -159,7 +163,10 @@ fun BigDaddyApp() {
                                 walletError = "Wallet balance is temporarily unavailable."
                                 "Unavailable"
                             }
-                            gameCatalog = runCatching { api.gameCatalog(result.token) }.getOrDefault(emptyList())
+                            scope.launch {
+                                val catalog = runCatching { api.gameCatalog(result.token) }.getOrDefault(emptyList())
+                                if (token == result.token) gameCatalog = catalog
+                            }
                             password = ""
                         }.onFailure { error = it.message ?: "Login failed." }
                         busy = false
@@ -178,7 +185,10 @@ fun BigDaddyApp() {
                         walletError = "Wallet balance is temporarily unavailable."
                         "Unavailable"
                     }
-                    gameCatalog = runCatching { api.gameCatalog(loginResult.token) }.getOrDefault(emptyList())
+                    scope.launch {
+                        val catalog = runCatching { api.gameCatalog(loginResult.token) }.getOrDefault(emptyList())
+                        if (token == loginResult.token) gameCatalog = catalog
+                    }
                     loginName = referralUser
                     password = ""
                 }
