@@ -1,6 +1,6 @@
 import { User, AppConfigInfo, AdminPaymentInfo } from '../../../shared/src/types';
 import { SUPABASE_API_BASE } from './supabaseConfig';
-import { buildDragonTigerBetOperation, buildRouletteBetOperation } from './idempotency';
+import { buildRouletteBetOperation } from './idempotency';
 
 // Production API is served directly by the configured canonical Supabase Edge Function.
 // The function strips the /functions/v1/api prefix and routes /auth, /games, /wallet, etc.
@@ -350,25 +350,6 @@ export class ApiClient {
     return result;
   }
 
-  // Teen Patti Royal
-  public static getTeenPattiState() {
-    return this.request('/games/teen-patti/state');
-  }
-
-  public static startTeenPattiBoot(payload: { bootAmount: number }) {
-    return this.request('/games/teen-patti/boot', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  public static performTeenPattiAction(payload: { action: 'see' | 'chaal' | 'blind' | 'pack' | 'showdown'; amount?: number }) {
-    return this.request('/games/teen-patti/action', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
   // Live Andar Bahar
   public static getAndarBaharState() {
     return this.request('/games/andar-bahar/state');
@@ -380,28 +361,6 @@ export class ApiClient {
       headers: { 'Idempotency-Key': 'andar-bahar-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
-  }
-
-  // Live Dragon Tiger
-  public static getDragonTigerState() {
-    return this.request('/games/dragon-tiger/state');
-  }
-
-  public static async placeDragonTigerBet(
-    payload: { bets: Array<{ type: string; amount: string }> },
-    userId: string,
-  ) {
-    // A timeout does not prove that the database rolled back. Reuse the same
-    // key until a confirmed response arrives, even if the round changes meanwhile.
-    const operation = buildDragonTigerBetOperation(userId, payload);
-    const idempotencyKey = await this.pendingKey(operation, 'DRAGON_TIGER_BET');
-    const result = await this.request('/games/dragon-tiger/bet', {
-      method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify(payload),
-    });
-    this.clearPendingKey(operation);
-    return result;
   }
 
   // Provably Fair Dice

@@ -5,9 +5,7 @@ import { GameInfo, LedgerEntry, TokenRequest, TokenRequestStatus } from '../../.
 import { TokenRequestModal } from '../components/common/TokenRequestModal';
 import { AviatorGame } from '../games/aviator/AviatorGame';
 import { RoulettePreview } from '../games/roulette/RoulettePreview';
-import { TeenPattiPreview } from '../games/teen-patti/TeenPattiPreview';
 import { DicePreview } from '../games/dice/DicePreview';
-import { DragonTigerPreview } from '../games/dragon-tiger/DragonTigerPreview';
 import { AndarBaharPreview } from '../games/andar-bahar/AndarBaharPreview';
 import { PlayerAdminPaymentCard } from '../components/common/PlayerAdminPaymentCard';
 import {
@@ -104,14 +102,8 @@ export const PlayerDashboard: React.FC = () => {
     if (selectedGame.code === 'roulette') {
       return <RoulettePreview game={selectedGame} onBack={() => setActiveGameCode(null)} />;
     }
-    if (selectedGame.code === 'teen-patti') {
-      return <TeenPattiPreview game={selectedGame} onBack={() => setActiveGameCode(null)} />;
-    }
     if (selectedGame.code === 'dice') {
       return <DicePreview game={selectedGame} onBack={() => setActiveGameCode(null)} />;
-    }
-    if (selectedGame.code === 'dragon-tiger') {
-      return <DragonTigerPreview game={selectedGame} onBack={() => setActiveGameCode(null)} />;
     }
     if (selectedGame.code === 'andar-bahar') {
       return <AndarBaharPreview game={selectedGame} onBack={() => setActiveGameCode(null)} />;

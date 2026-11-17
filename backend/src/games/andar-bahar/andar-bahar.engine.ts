@@ -13,7 +13,7 @@ import {
   createDeck,
   shuffleDeck,
   SUIT_COLORS,
-} from '../../../../shared/src/utils/teenPatti';
+} from '../../../../shared/src/utils/cards';
 
 export interface AndarBaharBetInput {
   type: string; // 'andar' | 'bahar' | 'joker_red' | 'joker_black' | 'cards_1_5' | 'cards_6_10' | 'cards_11_15' | 'cards_16_25' | 'cards_25_plus'

@@ -114,7 +114,7 @@ SELECT 'schema' AS object_kind, n.nspname AS object_name, r.rolname AS grantee,
        has_schema_privilege(r.oid, n.oid, 'USAGE') AS has_usage,
        has_schema_privilege(r.oid, n.oid, 'CREATE') AS has_create
 FROM pg_namespace n CROSS JOIN pg_roles r
-WHERE n.nspname IN ('public','platform','wallet','aviator','roulette','dice','dragon_tiger','andar_bahar','teen_patti')
+WHERE n.nspname IN ('public','platform','wallet','aviator','roulette','dice','andar_bahar')
   AND r.rolname IN ('anon','authenticated','service_role','postgres')
 ORDER BY object_name, grantee;
 

@@ -17,11 +17,8 @@ import { CreateUserModal } from '../components/common/CreateUserModal';
 import { AviatorGame } from '../games/aviator/AviatorGame';
 import { RouletteGame } from '../games/roulette/RouletteGame';
 import { RoulettePreview } from '../games/roulette/RoulettePreview';
-import { TeenPattiGame } from '../games/teen-patti/TeenPattiGame';
 import { DiceGame } from '../games/dice/DiceGame';
 import { DicePreview } from '../games/dice/DicePreview';
-import { DragonTigerGame } from '../games/dragon-tiger/DragonTigerGame';
-import { DragonTigerPreview } from '../games/dragon-tiger/DragonTigerPreview';
 import { AndarBaharGame } from '../games/andar-bahar/AndarBaharGame';
 import { AndarBaharPreview } from '../games/andar-bahar/AndarBaharPreview';
 import { MobileTab } from '../components/common/MobileBottomNav';
@@ -270,14 +267,8 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
     if (normalizedActiveGameCode === 'roulette') {
       return <RouletteGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
-    if (normalizedActiveGameCode === 'teen-patti') {
-      return <TeenPattiGame onBackToLobby={() => setActiveGameCode(null)} />;
-    }
     if (normalizedActiveGameCode === 'andar-bahar') {
       return <AndarBaharGame onBackToLobby={() => setActiveGameCode(null)} />;
-    }
-    if (normalizedActiveGameCode === 'dragon-tiger') {
-      return <DragonTigerGame onBackToLobby={() => setActiveGameCode(null)} />;
     }
     if (normalizedActiveGameCode === 'dice') {
       return <DiceGame onBackToLobby={() => setActiveGameCode(null)} />;
@@ -292,13 +283,11 @@ export const MobileDashboard: React.FC<MobileDashboardProps> = ({
   const crashGame = games.find((game) => game.code === 'aviator');
   const crashGameActive = crashGame?.status === 'ACTIVE';
 
-  // Keep all six games visible when the API catalog is incomplete; this does not activate them.
+  // Keep the supported game catalog visible when the API catalog is incomplete; this does not activate games.
   const playerGameCatalog: GameInfo[] = [
     { id: 'catalog-aviator', code: 'aviator', name: 'Aviator / Crash', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-aviator-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'Crash game', iconName: 'Plane', route: '/games/aviator' },
     { id: 'catalog-roulette', code: 'roulette', name: 'European Roulette', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-roulette-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'European roulette', iconName: 'Disc', route: '/games/roulette' },
-    { id: 'catalog-teen-patti', code: 'teen-patti', name: 'Teen Patti', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-teen-patti-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'Teen Patti card game', iconName: 'Club', route: '/games/teen-patti' },
     { id: 'catalog-dice', code: 'dice', name: 'Dice', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-dice-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'Dice game', iconName: 'Dice5', route: '/games/dice' },
-    { id: 'catalog-dragon-tiger', code: 'dragon-tiger', name: 'Dragon Tiger', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-dragon-tiger-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'Dragon Tiger card game', iconName: 'Flame', route: '/games/dragon-tiger' },
     { id: 'catalog-andar-bahar', code: 'andar-bahar', name: 'Andar Bahar', status: 'COMING_SOON' as GameInfo['status'], poolWalletId: 'catalog-andar-bahar-pool', poolBalance: '0', minBet: '10', maxBet: '100000', description: 'Andar Bahar card game', iconName: 'Layers', route: '/games/andar-bahar' },
   ];
   const gamesForDisplay = playerGameCatalog.map((catalogGame) => {

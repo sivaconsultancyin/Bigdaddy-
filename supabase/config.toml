@@ -1,7 +1,7 @@
 project_id = "nzvpuoeibqrpcltrszvr"
 
 [api]
-schemas = ["public", "graphql_public", "platform", "wallet", "aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"]
+schemas = ["public", "graphql_public", "platform", "wallet", "aviator", "roulette", "dice", "andar_bahar"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 

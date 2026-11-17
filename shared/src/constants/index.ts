@@ -6,9 +6,7 @@ export const SYSTEM_WALLETS = {
   BET_ESCROW: 'wallet-system-escrow',
   AVIATOR_POOL: 'wallet-pool-aviator',
   ROULETTE_POOL: 'wallet-pool-roulette',
-  TEEN_PATTI_POOL: 'wallet-pool-teen-patti',
   DICE_POOL: 'wallet-pool-dice',
-  DRAGON_TIGER_POOL: 'wallet-pool-dragon-tiger',
   ANDAR_BAHAR_POOL: 'wallet-pool-andar-bahar',
 };
 
@@ -38,18 +36,6 @@ export const GAMES_CATALOG = [
     route: '/games/roulette',
   },
   {
-    id: 'game-teen-patti',
-    code: 'teen-patti',
-    name: 'Teen Patti',
-    status: 'ACTIVE',
-    poolWalletId: SYSTEM_WALLETS.TEEN_PATTI_POOL,
-    minBet: '50',
-    maxBet: '500000',
-    description: 'Premier 3-card Indian poker with Blind, Chaal, Showdown, and real-time hand rankings.',
-    iconName: 'Club',
-    route: '/games/teen-patti',
-  },
-  {
     id: 'game-dice',
     code: 'dice',
     name: 'Provably Fair Dice',
@@ -60,18 +46,6 @@ export const GAMES_CATALOG = [
     description: 'Custom target roll over/under dice with customizable payout odds.',
     iconName: 'Dice5',
     route: '/games/dice',
-  },
-  {
-    id: 'game-dragon-tiger',
-    code: 'dragon-tiger',
-    name: 'Dragon Tiger Live',
-    status: 'ACTIVE',
-    poolWalletId: SYSTEM_WALLETS.DRAGON_TIGER_POOL,
-    minBet: '10',
-    maxBet: '300000',
-    description: 'Synchronized live two-card clash between Dragon and Tiger with Tie bonuses.',
-    iconName: 'Flame',
-    route: '/games/dragon-tiger',
   },
   {
     id: 'game-andar-bahar',

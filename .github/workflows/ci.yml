@@ -90,7 +90,7 @@ jobs:
         BEGIN
           FOREACH schema_name IN ARRAY ARRAY[
             'platform', 'wallet', 'aviator', 'roulette', 'dice',
-            'dragon_tiger', 'andar_bahar', 'teen_patti'
+            'andar_bahar'
           ] LOOP
             IF NOT EXISTS (
               SELECT 1 FROM pg_namespace WHERE nspname = schema_name

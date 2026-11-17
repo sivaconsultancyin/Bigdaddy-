@@ -237,10 +237,9 @@ async function startServer() {
       if (!isDatabaseConnected()) return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
       next();
     });
-    // Dragon Tiger is operated exclusively by the canonical Supabase Edge API.
-    // Block the legacy Node state/bet/activation routes to prevent split game engines.
-    app.use(['/api/games/dragon-tiger', '/api/games/dragon_tiger'], (_req, res) =>
-      res.status(410).json({ error: 'DRAGON_TIGER_SUPABASE_API_ONLY' })
+    // Dragon Tiger and Teen Patti have been retired. Block every legacy route alias.
+    app.use(['/api/games/dragon-tiger', '/api/games/dragon_tiger', '/api/games/teen-patti', '/api/games/teen_patti'], (_req, res) =>
+      res.status(404).json({ error: 'GAME_REMOVED' })
     );
     app.use('/api', productionRouter);
     app.use('/api', productionRequestsRouter);

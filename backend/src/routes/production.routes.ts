@@ -361,9 +361,6 @@ productionRouter.post('/wallet/game-pool', requireDatabaseUser, async (req: Auth
   const actor = req.authUser!;
   if (actor.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
   const gameCode = String(req.body?.gameCode ?? 'aviator').trim().replace(/-/g, '_');
-  if (gameCode === 'dragon_tiger') {
-    return res.status(410).json({ error: 'DRAGON_TIGER_SUPABASE_API_ONLY' });
-  }
   if (!['aviator','roulette','dice','andar_bahar'].includes(gameCode)) return res.status(400).json({ error: 'UNKNOWN_GAME' });
   const amountText = String(req.body?.amount ?? '');
   if (!/^[1-9][0-9]*$/.test(amountText) || !Number.isSafeInteger(Number(amountText))) {
@@ -420,7 +417,7 @@ productionRouter.post('/games/:gameCode/activate', requireDatabaseUser, async (r
   const actor = req.authUser!;
   if (actor.role !== UserRole.OWNER) return res.status(403).json({ error: 'OWNER_ONLY' });
   const code = String(req.params.gameCode || '').replace(/-/g, '_');
-  if (!['roulette','dice','dragon_tiger','andar_bahar'].includes(code)) return res.status(404).json({ error: 'UNKNOWN_GAME' });
+  if (!['roulette','dice','andar_bahar'].includes(code)) return res.status(404).json({ error: 'UNKNOWN_GAME' });
   try {
     const sql = getDatabaseClient();
     const rows = await sql.unsafe("SELECT g.id,w.balance::text AS balance FROM platform.games g JOIN wallet.wallets w ON w.id=g.pool_wallet_id WHERE g.code=$1 LIMIT 1", [code]);

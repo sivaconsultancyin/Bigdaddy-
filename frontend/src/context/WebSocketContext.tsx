@@ -9,10 +9,6 @@ import {
   AndarBaharHistoryItem,
   AndarBaharRoundBet,
   AndarBaharRoundStatus,
-  DragonTigerRound,
-  DragonTigerHistoryItem,
-  DragonTigerRoundBet,
-  DragonTigerRoundStatus,
   DiceRound,
   DiceHistoryItem,
   DiceRoundBet,
@@ -83,11 +79,6 @@ interface WebSocketContextType {
   andarBaharRound: AndarBaharRound;
   andarBaharHistory: AndarBaharHistoryItem[];
   andarBaharLiveBets: AndarBaharRoundBet[];
-  // Dragon Tiger shared synchronized multiplayer state
-  dragonTigerRound: DragonTigerRound;
-  dragonTigerHistory: DragonTigerHistoryItem[];
-  dragonTigerLiveBets: DragonTigerRoundBet[];
-  dragonTigerMyBets: Array<{ id: string; roundId: string; amount: string; type: string; status: string; payoutAmount: string }>;
   // Lucky 10 Dice shared synchronized multiplayer state
   diceRound: DiceRound;
   diceHistory: DiceHistoryItem[];
@@ -180,27 +171,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [andarBaharLiveBets, setAndarBaharLiveBets] = useState<AndarBaharRoundBet[]>([]);
 
-  // Dragon Tiger initial synchronized multiplayer state
-  const [dragonTigerRound, setDragonTigerRound] = useState<DragonTigerRound>({
-    id: '',
-    roundNumber: 0,
-    status: DragonTigerRoundStatus.BETTING,
-    bettingEndsAt: 0,
-    dragonCard: null,
-    tigerCard: null,
-    winner: null,
-    totalBetsCount: 0,
-    totalBetAmount: '0',
-    dragonBetAmount: '0',
-    tigerBetAmount: '0',
-    tieBetAmount: '0',
-  });
-
-  const [dragonTigerHistory, setDragonTigerHistory] = useState<DragonTigerHistoryItem[]>([]);
-
-  const [dragonTigerLiveBets, setDragonTigerLiveBets] = useState<DragonTigerRoundBet[]>([]);
-  const [dragonTigerMyBets, setDragonTigerMyBets] = useState<Array<{ id: string; roundId: string; amount: string; type: string; status: string; payoutAmount: string }>>([]);
-
   // Lucky 10 Dice initial synchronized multiplayer state
   const [diceRound, setDiceRound] = useState<DiceRound>({
     id: '',
@@ -231,7 +201,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const simIntervalRef = useRef<number | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const andarBaharRealtimeChannelRef = useRef<RealtimeChannel | null>(null);
-  const dragonTigerRealtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const productionResultIdsRef = useRef<Record<string, string>>({});
   const otherGamesPollAtRef = useRef(0);
   // Only poll secondary games that the authoritative API marks ACTIVE. This avoids
@@ -372,7 +341,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   aviator: 'aviator',
                   roulette: 'roulette',
                   dice: 'dice',
-                  dragon_tiger: 'dragonTiger',
                   andar_bahar: 'andarBahar',
                 };
                 const active = new Set<string>();
@@ -396,7 +364,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const secondaryPaths = pollOtherGames ? [
           ...(activeGameKeys.has('roulette') ? [['roulette', '/games/roulette/state'] as const] : []),
           ...(activeGameKeys.has('dice') ? [['dice', '/games/dice/state'] as const] : []),
-          ...(activeGameKeys.has('dragonTiger') ? [['dragonTiger', '/games/dragon-tiger/state'] as const] : []),
           ...(activeGameKeys.has('andarBahar') ? [['andarBahar', '/games/andar-bahar/state'] as const] : []),
         ] : [];
         const fetchGameState = async ([key, path]: readonly [string, string]) => {
@@ -601,17 +568,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               ...h, rolledNumber: h.result?.number ?? h.rolledNumber,
             })) as any);
             if (Array.isArray(data.allBets || data.bets)) setDiceLiveBets((data.allBets || data.bets) as any);
-          } else if (key === 'dragonTiger') {
-            if (data.round) {
-              setDragonTigerRound(data.round as any);
-              refreshWalletForResult('dragonTiger', data.round);
-            }
-            if (Array.isArray(data.history)) setDragonTigerHistory(data.history.map((h: any) => ({
-              ...h, dragonCard: h.result?.dragonCard, tigerCard: h.result?.tigerCard,
-              winner: h.result?.winner,
-            })) as any);
-            if (Array.isArray(data.bets)) setDragonTigerLiveBets(data.bets as any);
-            if (Array.isArray(data.myBets)) setDragonTigerMyBets(data.myBets as any);
           } else if (key === 'andarBahar') {
             if (data.round) {
               setAndarBaharRound(data.round as any);
@@ -786,22 +742,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         .subscribe();
       andarBaharRealtimeChannelRef.current = andarChannel;
 
-      // Dragon Tiger lifecycle broadcasts are wake-up signals only. The authenticated
-      // state API supplies authoritative cards, winner, and user-specific bet status.
-      const dragonTigerChannel = supabaseRealtime
-        .channel('dragon_tiger:rounds', { config: { broadcast: { self: false } } })
-        .on('broadcast', { event: 'dragon_tiger_round_changed' }, ({ payload }) => {
-          if (stopped || disposedRef.current || !activeGameKeysRef.current.has('dragonTiger')) return;
-          if (!payload || typeof payload !== 'object') return;
-          if (simIntervalRef.current !== null) {
-            window.clearTimeout(simIntervalRef.current);
-            simIntervalRef.current = null;
-          }
-          if (inFlight) rerunRequested = true;
-          else void poll();
-        })
-        .subscribe();
-      dragonTigerRealtimeChannelRef.current = dragonTigerChannel;
+
     }
     void poll();
   };
@@ -825,10 +766,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (andarBaharRealtimeChannelRef.current && supabaseRealtime) {
         void supabaseRealtime.removeChannel(andarBaharRealtimeChannelRef.current);
         andarBaharRealtimeChannelRef.current = null;
-      }
-      if (dragonTigerRealtimeChannelRef.current && supabaseRealtime) {
-        void supabaseRealtime.removeChannel(dragonTigerRealtimeChannelRef.current);
-        dragonTigerRealtimeChannelRef.current = null;
       }
     };
   }, []);
@@ -925,10 +862,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         andarBaharRound,
         andarBaharHistory,
         andarBaharLiveBets,
-        dragonTigerRound,
-        dragonTigerHistory,
-        dragonTigerLiveBets,
-        dragonTigerMyBets,
         diceRound,
         diceHistory,
         diceLiveBets,
