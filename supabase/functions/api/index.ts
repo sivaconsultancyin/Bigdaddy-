@@ -173,7 +173,7 @@ async function handle(req: Request) {
       const { data: activeGames, error } = await configDb.schema("platform").from("games")
         .select("code").eq("status", "ACTIVE").order("code");
       if (error) return response({ error: "CONFIG_UNAVAILABLE" }, 503, origin);
-      const supported = new Set(["aviator", "roulette", "dice", "dragon_tiger", "andar_bahar"]);
+      const supported = new Set(["aviator", "roulette", "dice", "andar_bahar"]);
       return response({
         mode: "production", currency: "tokens", apiBackend: "supabase",
         games: (activeGames ?? []).map((game) => game.code).filter((code) => supported.has(code)),
@@ -273,9 +273,9 @@ async function handle(req: Request) {
     return response({ token, user:data.user, wallet:data.wallet }, 201, origin);
   }
 
-  const gameStateMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/state$/);
+  const gameStateMatch = path.match(/^\/games\/(aviator|roulette|dice|andar-bahar)\/state$/);
   if (req.method === "GET" && gameStateMatch) {
-    const code = gameStateMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
+    const code = gameStateMatch[1] === "andar-bahar" ? "andar_bahar" : gameStateMatch[1];
     // Secondary-game state can include usernames and bet details. Authenticate
     // before returning either live state or the empty COMING_SOON response.
     const stateAuth = await actorFrom(req, db);
@@ -291,15 +291,6 @@ async function handle(req: Request) {
         gameCode: code, status: "COMING_SOON", gameStateUnavailable: true,
         round: null, history: [], bets: [], allBets: [],
       }, 200, origin);
-    }
-    // Dice lifecycle is advanced by the shared authoritative worker and on state reads
-    // as a recovery path, so a missed worker tick cannot strand a round.
-    if (code === "dragon_tiger") {
-      const { error: lifecycleError } = await db.schema("dragon_tiger").rpc("advance_round");
-      if (lifecycleError) {
-        console.error("Dragon Tiger lifecycle advance failed:", lifecycleError.code ?? "unknown");
-        return response({ error: "DRAGON_TIGER_RUNTIME_UNAVAILABLE" }, 503, origin);
-      }
     }
     if (code === "dice") {
       const { error: lifecycleError } = await db.schema("dice").rpc("advance_round");
@@ -332,37 +323,16 @@ async function handle(req: Request) {
     const row = rounds.find(r => ["BETTING","RUNNING","RESULT"].includes(r.status)) ?? rounds[0];
     // Never expose a pre-settlement outcome, even if the database has already
     // persisted it internally to drive the animation and atomic settlement.
-    const result = row.status === "SETTLED" || (code === "dragon_tiger" && row.status === "RUNNING") ? row.result : null;
+    const result = row.status === "SETTLED" ? row.result : null;
     const current: Record<string, any> = {
       id: row.id, roundNumber: Number(row.round_number),
-      status: row.status === "SETTLED" ? "RESULT" : row.status === "RUNNING" ? (code === "roulette" ? "SPINNING" : code === "dice" ? "ROLLING" : code === "dragon_tiger" ? "REVEALING" : "DEALING") : row.status,
+      status: row.status === "SETTLED" ? "RESULT" : row.status === "RUNNING" ? (code === "roulette" ? "SPINNING" : code === "dice" ? "ROLLING" : "DEALING") : row.status,
       bettingEndsAt: new Date(row.betting_closes_at).getTime(), openedAt: new Date(row.opened_at).getTime(),
       totalBetsCount: Number(row.state?.totalBetsCount ?? 0), totalBetAmount: String(row.state?.totalBetAmount ?? "0"),
       serverSeedHash: row.server_seed_hash, revealedServerSeed: row.status === "SETTLED" ? row.server_seed : null,
     };
     if (code === "roulette") { current.spinEndsAt = row.status === "RUNNING" && row.state?.spinStartedAt ? new Date(row.state.spinStartedAt).getTime() + 1500 : current.bettingEndsAt + 1500; current.winningNumber = result?.number ?? null; current.color = result?.color ?? null; }
     if (code === "dice") { current.rolledNumber = row.status === "SETTLED" ? result?.number ?? null : null; current.numberBetsAmount = {}; }
-    if (code === "dragon_tiger") {
-      current.dragonCard = result?.dragonCard ?? null;
-      current.tigerCard = result?.tigerCard ?? null;
-      current.winner = row.status === "SETTLED" ? result?.winner ?? null : null;
-      current.dragonBetAmount = "0";
-      current.tigerBetAmount = "0";
-      current.tieBetAmount = "0";
-    }
-    if (code === "andar_bahar") {
-      // Reveal only the cards that should have appeared by this point in the
-      // 4.5-second deal. The winning side/card stay private until settlement.
-      const publicDeal = getAndarBaharPublicDeal(row.result, row.status, row.state?.dealStartedAt);
-      current.jokerCard = publicDeal.jokerCard;
-      current.dealCards = publicDeal.dealCards;
-      current.winningSide = publicDeal.winningSide;
-      current.winningCard = publicDeal.winningCard;
-      current.totalCardsDealt = publicDeal.totalCardsDealt;
-      current.firstSide = row.result?.firstSide ?? (row.result?.jokerCard?.suit ? (["S", "C"].includes(String(row.result.jokerCard.suit).toUpperCase()) ? "andar" : "bahar") : null);
-      current.andarBetAmount = "0";
-      current.baharBetAmount = "0";
-    }
     const { data: bets, error: betsError } = await db.schema(code).from("authoritative_game_bets").select("id,user_id,bet_amount,selection,status,payout_amount").eq("round_id", row.id).order("created_at", { ascending: false }).limit(100);
     if (betsError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     const userIds = [...new Set((bets ?? []).map(b => b.user_id))];
@@ -378,7 +348,6 @@ async function handle(req: Request) {
     const totals = new Map<string,bigint>();
     for (const b of bets ?? []) { const type = String(b.selection?.type ?? ""); totals.set(type,(totals.get(type) ?? 0n)+BigInt(String(b.bet_amount))); }
     if (code === "dice") current.numberBetsAmount = Object.fromEntries([...totals].map(([k,v]) => [k,v.toString()]));
-    if (code === "dragon_tiger") { current.dragonBetAmount=String(totals.get("dragon")??0n); current.tigerBetAmount=String(totals.get("tiger")??0n); current.tieBetAmount=String(totals.get("tie")??0n); }
     if (code === "andar_bahar") { current.andarBetAmount=String(totals.get("andar")??0n); current.baharBetAmount=String(totals.get("bahar")??0n); }
     const history = rounds.filter(r => r.status === "SETTLED").map(r => ({ roundNumber:Number(r.round_number), result:r.result, timestamp:r.settled_at }));
     return response({ gameCode: code, status: gameConfig.status, round: current, history, bets: mappedBets, allBets: mappedBets, myBets }, 200, origin);
@@ -410,13 +379,6 @@ async function handle(req: Request) {
          (candidate as Record<string, unknown>).condition !== undefined)) {
       return response({ error: "DICE_SLIDER_MODE_NOT_MIGRATED", message: "Slider/target bets are disabled until atomic odds, liability reservation, and settlement are implemented." }, 503, origin);
     }
-  }
-
-  // Teen Patti's former implementation was process-memory based and is not safe
-  // for financial play. Keep these routes explicitly unavailable until persistent
-  // rounds, turn ownership, idempotency, and atomic wallet settlement exist.
-  if (/^\/games\/teen-patti\/(state|boot|action)$/.test(path)) {
-    return response({ error: "TEEN_PATTI_MIGRATION_NOT_READY" }, 503, origin);
   }
 
   // Persistent diagnostics endpoint. Only OWNER may read operational failure details.
@@ -590,11 +552,10 @@ async function handle(req: Request) {
   const activationMatch = path.match(/^\/games\/(aviator|roulette|dice|dragon-tiger|andar-bahar)\/activate$/);
   if (req.method === "POST" && activationMatch) {
     if (actor.role !== "OWNER") return response({ error: "OWNER_ONLY" }, 403, origin);
-    const code = activationMatch[1] === "dragon-tiger" ? "dragon_tiger"
-      : activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
+    const code = activationMatch[1] === "andar-bahar" ? "andar_bahar" : activationMatch[1];
     // Roulette now has a persisted PostgreSQL round lifecycle and atomic settlement.
     // Keep games without a verified production engine blocked.
-    if (code !== "aviator" && code !== "roulette" && code !== "dice" && code !== "andar_bahar" && code !== "dragon_tiger") {
+    if (code !== "aviator" && code !== "roulette" && code !== "dice" && code !== "andar_bahar") {
       return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
     }
     const { data: game, error: gameError } = await db.schema("platform").from("games")
@@ -617,7 +578,7 @@ async function handle(req: Request) {
       mappedWalletId: String(gamePool?.wallet_id ?? ""), walletType: String(pool?.wallet_type ?? ""),
       walletGameCode: String(pool?.game_code ?? ""), balance: String(pool?.balance ?? ""),
       reservedBalance: String(pool?.reserved_balance ?? ""), runtimeRoundStatus,
-      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : code === "andar_bahar" ? (BigInt(String(game.max_bet ?? "0")) * 2n).toString() : code === "dragon_tiger" ? (BigInt(String(game.max_bet ?? "0")) * 9n).toString() : undefined,
+      minimumPoolBalance: code === "dice" ? (BigInt(String(game.max_bet ?? "0")) * 10n).toString() : code === "andar_bahar" ? (BigInt(String(game.max_bet ?? "0")) * 2n).toString() : undefined,
     });
     if (!readiness.ok) return response({ error: readiness.error }, readiness.status, origin);
     const poolBalance = String(pool?.balance ?? "0");
@@ -636,18 +597,6 @@ async function handle(req: Request) {
         }).eq("code", code);
         console.error("Dice activation runtime check failed:", runtimeError?.code ?? "unavailable");
         return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
-      }
-    }
-    // Smoke-test Dragon Tiger's persisted round lifecycle before confirming activation.
-    if (code === "dragon_tiger") {
-      const { data: runtimeState, error: runtimeError } = await db.schema("dragon_tiger").rpc("advance_round");
-      if (runtimeError || !runtimeState || runtimeState.gameStateUnavailable || !runtimeState.round?.id ||
-          !["BETTING", "RUNNING"].includes(String(runtimeState.round.status))) {
-        await db.schema("platform").from("games").update({
-          status: game.status, updated_at: new Date().toISOString(),
-        }).eq("code", code);
-        console.error("Dragon Tiger activation runtime check failed:", runtimeError?.code ?? "unavailable");
-        return response({ error: "DRAGON_TIGER_RUNTIME_UNAVAILABLE" }, 503, origin);
       }
     }
     // Smoke-test Andar Bahar's durable lifecycle before confirming activation.
@@ -702,7 +651,7 @@ async function handle(req: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
     const gameCode = String(body.gameCode ?? "aviator").trim();
     const amount = positiveAmount(body.amount);
-    if (!["aviator","roulette","dice","dragon_tiger","andar_bahar"].includes(gameCode)) return response({ error: "UNKNOWN_GAME" }, 400, origin);
+    if (!["aviator","roulette","dice","andar_bahar"].includes(gameCode)) return response({ error: "UNKNOWN_GAME" }, 400, origin);
     if (!amount) return response({ error: "POSITIVE_SAFE_INTEGER_AMOUNT_REQUIRED" }, 400, origin);
     const key = req.headers.get("idempotency-key")?.trim() ?? "";
     if (key.length < 8 || key.length > 119 || !/^[A-Za-z0-9_-]+$/.test(key)) return response({ error: "IDEMPOTENCY_KEY_REQUIRED" }, 400, origin);
@@ -793,24 +742,15 @@ async function handle(req: Request) {
     return response(data, 200, origin);
   }
 
-  const gameBetMatch = path.match(/^\/games\/(roulette|dice|dragon-tiger|andar-bahar)\/(bet|spin|roll)$/);
+  const gameBetMatch = path.match(/^\/games\/(roulette|dice|andar-bahar)\/(bet|spin|roll)$/);
   if (req.method === "POST" && gameBetMatch) {
     if (actor.role !== "PLAYER") return response({ error: "PLAYER_ONLY" }, 403, origin);
-    const code = gameBetMatch[1] === "dragon-tiger" ? "dragon_tiger" : gameBetMatch[1] === "andar-bahar" ? "andar_bahar" : gameBetMatch[1];
+    const code = gameBetMatch[1] === "andar-bahar" ? "andar_bahar" : gameBetMatch[1];
     let body: Record<string, any>;
     try { body = await req.json(); } catch { return response({ error: "INVALID_JSON" }, 400, origin); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ error: "INVALID_JSON" }, 400, origin);
     const bets = Array.isArray(body.bets) ? body.bets : [body];
     if (!bets.length || bets.length > 20 || bets.some((b:any) => !positiveAmount(b?.amount))) return response({ error: "INVALID_BET" }, 400, origin);
-    if (code === "dragon_tiger") {
-      const allowedDragonTigerMarkets = new Set(["dragon", "tiger", "tie"]);
-      const invalidSelection = bets.some((b: any) => {
-        const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
-          ? b.selection : b;
-        return !allowedDragonTigerMarkets.has(String(selection?.type ?? "").toLowerCase());
-      });
-      if (invalidSelection) return response({ error: "INVALID_DRAGON_TIGER_SELECTION" }, 400, origin);
-    }
     if (code === "andar_bahar") {
       const invalidSelection = bets.some((b: any) => {
         const selection = b?.selection && typeof b.selection === "object" && !Array.isArray(b.selection)
@@ -871,7 +811,7 @@ async function handle(req: Request) {
     return response({ message:"PAYMENT_DETAILS_UPDATED",user:{id:actor.id,username:actor.username,role:actor.role} },200,origin);
   }
 
-  if (/^\/games\/(roulette|dice|dragon-tiger|andar-bahar|teen-patti)(\/|$)/.test(path)) {
+  if (/^\/games\/(roulette|dice|andar-bahar)(\/|$)/.test(path)) {
     return response({ error: "GAME_NOT_AVAILABLE_IN_PRODUCTION" }, 503, origin);
   }
   if (path === "/auth/register-referral" || path === "/auth/create-user" || path === "/auth/users" ||
