@@ -58,11 +58,9 @@ private val BigDaddyDarkColors = darkColorScheme(
 
 private val gameNames = listOf(
     "aviator" to "Aviator",
-    "dragon_tiger" to "Dragon Tiger",
     "dice" to "Lucky 10 Dice",
     "andar_bahar" to "Andar Bahar",
-    "roulette" to "Roulette",
-    "teen_patti" to "Teen Patti"
+    "roulette" to "Roulette"
 )
 
 @Composable
@@ -226,25 +224,6 @@ fun BigDaddyApp() {
                                             }
                                         }
                                     )
-                                } else if (selectedGame == "dragon_tiger") {
-                                    NativeDragonTigerScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
                                 } else if (selectedGame == "dice") {
                                     NativeLuckyTenScreen(
                                         onRoundCompleted = { outcome, started, ended ->
@@ -285,25 +264,6 @@ fun BigDaddyApp() {
                                     )
                                 } else if (selectedGame == "roulette") {
                                     NativeRouletteScreen(
-                                        onRoundCompleted = { outcome, started, ended ->
-                                            lastResult = outcome.result
-                                            scope.launch {
-                                                historyDao.insertAndPrune(
-                                                    GameHistoryEntity(
-                                                        id = UUID.randomUUID().toString(),
-                                                        gameCode = outcome.gameCode,
-                                                        roundId = outcome.roundId,
-                                                        startedAtEpochMillis = started,
-                                                        endedAtEpochMillis = ended,
-                                                        demoResult = outcome.result,
-                                                    playerAccountId = accountId
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                } else if (selectedGame == "teen_patti") {
-                                    NativeTeenPattiScreen(
                                         onRoundCompleted = { outcome, started, ended ->
                                             lastResult = outcome.result
                                             scope.launch {
