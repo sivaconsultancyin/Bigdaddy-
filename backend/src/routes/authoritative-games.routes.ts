@@ -6,7 +6,7 @@ import { AuthService } from '../services/auth.service';
 export const authoritativeGamesRouter = Router();
 type Actor = { id: string; username: string; role: string };
 type AuthRequest = Request & { actor?: Actor };
-export type GameCode = 'roulette' | 'dice' | 'dragon_tiger' | 'andar_bahar';
+export type GameCode = 'roulette' | 'dice' | 'andar_bahar';
 export function isPlayerRole(role: unknown): boolean {
   return String(role ?? '').toUpperCase() === 'PLAYER';
 }
@@ -113,13 +113,6 @@ function rouletteColor(number: number): 'red' | 'black' | 'green' {
   const red = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
   return red.has(number) ? 'red' : 'black';
 }
-export function resolveDragonTigerWinner(dragonCard: { rank: number }, tigerCard: { rank: number }): 'dragon' | 'tiger' | 'tie' {
-  const dragonValue = dragonCard.rank === 14 ? 1 : dragonCard.rank;
-  const tigerValue = tigerCard.rank === 14 ? 1 : tigerCard.rank;
-  if (dragonValue === tigerValue) return 'tie';
-  return dragonValue > tigerValue ? 'dragon' : 'tiger';
-}
-
 export function makeResult(code: GameCode, seed: string): Record<string, any> {
   if (code === 'roulette') {
     const number = stableInt(seed, 'roulette', 37);
@@ -128,13 +121,6 @@ export function makeResult(code: GameCode, seed: string): Record<string, any> {
   if (code === 'dice') {
     const number = stableInt(seed, 'dice', 10) + 1;
     return { number, rolledNumber: number };
-  }
-  if (code === 'dragon_tiger') {
-    const deck = shuffledDeck(seed, 8);
-    const dragonCard = deck[0];
-    const tigerCard = deck[1];
-    const winner = resolveDragonTigerWinner(dragonCard, tigerCard);
-    return { dragonCard, tigerCard, winner };
   }
   const deck = shuffledDeck(seed);
   const jokerCard = deck[0];
@@ -182,11 +168,6 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
     if (type === 'under') return number < Number(selection?.value) ? 2 : 0;
     return 0;
   }
-  if (code === 'dragon_tiger') {
-    if (type === 'dragon' || type === 'tiger') return type === result.winner ? 2 : 0;
-    if (type === 'tie') return result.winner === 'tie' ? 9 : 0;
-    return 0;
-  }
   if (type === 'andar' || type === 'bahar') {
     if (result.winner !== type) return 0;
     const firstSide = result.firstSide ?? (['S', 'C'].includes(String(result?.jokerCard?.suit ?? '').toUpperCase()) ? 'andar' : 'bahar');
@@ -211,7 +192,6 @@ export function maxLiabilityMultiplier(code: GameCode, selection: any): number {
     return 2;
   }
   if (code === 'dice') return (type === 'number' || /^\d+$/.test(type)) ? 10 : 2;
-  if (code === 'dragon_tiger') return type === 'tie' ? 9 : ['dragon','tiger'].includes(type) ? 2 : 0;
   return 2;
 }
 export function validateSelection(code: GameCode, selection: any): boolean {
@@ -234,7 +214,6 @@ export function validateSelection(code: GameCode, selection: any): boolean {
     if (type === 'over' || type === 'under') return Number.isInteger(Number(selection.value)) && Number(selection.value) >= 1 && Number(selection.value) <= 9;
     return false;
   }
-  if (code === 'dragon_tiger') return ['dragon','tiger','tie'].includes(type);
   return ['andar','bahar','joker_red','joker_black'].includes(type);
 }
 
@@ -244,7 +223,7 @@ function publicRound(row: any, code: GameCode) {
   return {
     id: row.id,
     roundNumber: Number(row.round_number),
-    status: row.status === 'SETTLED' ? 'RESULT' : row.status === 'RUNNING' ? (code === 'roulette' ? 'SPINNING' : code === 'dice' ? 'ROLLING' : code === 'dragon_tiger' ? 'REVEALING' : 'DEALING') : row.status,
+    status: row.status === 'SETTLED' ? 'RESULT' : row.status === 'RUNNING' ? (code === 'roulette' ? 'SPINNING' : code === 'dice' ? 'ROLLING' : 'DEALING') : row.status,
     bettingEndsAt: new Date(row.betting_closes_at).getTime(),
     ...(code === 'roulette' ? { spinEndsAt: new Date(row.betting_closes_at).getTime() + 1500 } : {}),
     openedAt: new Date(row.opened_at).getTime(),
@@ -252,9 +231,6 @@ function publicRound(row: any, code: GameCode) {
       winningNumber: result?.number ?? null, color: result?.color ?? null,
     } : {}),
     ...(code === 'dice' ? { rolledNumber: result?.number ?? null, numberBetsAmount: {} } : {}),
-    ...(code === 'dragon_tiger' ? {
-      dragonCard: result?.dragonCard ?? null, tigerCard: result?.tigerCard ?? null, winner: result?.winner ?? null,
-    } : {}),
     ...(code === 'andar_bahar' ? {
       jokerCard: result?.jokerCard ?? null, dealCards: result?.dealCards ?? [],
       winningSide: result?.winner ?? null, winningCard: result?.dealCards?.[Math.max(0, (result?.dealCards?.length || 1) - 1)]?.card ?? null,
@@ -262,7 +238,6 @@ function publicRound(row: any, code: GameCode) {
     } : {}),
     totalBetsCount: Number(state.totalBetsCount || 0),
     totalBetAmount: String(state.totalBetAmount || '0'),
-    ...(code === 'dragon_tiger' ? { dragonBetAmount: '0', tigerBetAmount: '0', tieBetAmount: '0' } : {}),
     ...(code === 'andar_bahar' ? { andarBetAmount: '0', baharBetAmount: '0' } : {}),
     serverSeedHash: row.server_seed_hash,
     revealedServerSeed: row.status === 'SETTLED' ? row.server_seed : null,
@@ -290,11 +265,6 @@ async function readGameState(code: GameCode) {
     const totals: Record<string, bigint> = {};
     for (const row of aggregateRows as any[]) {
       totals[String(row.type || '')] = BigInt(String(row.amount || 0));
-    }
-    if (code === 'dragon_tiger') {
-      current.dragonBetAmount = String(totals.dragon || 0n);
-      current.tigerBetAmount = String(totals.tiger || 0n);
-      current.tieBetAmount = String(totals.tie || 0n);
     }
     if (code === 'andar_bahar') {
       current.andarBetAmount = String(totals.andar || 0n);
