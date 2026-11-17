@@ -182,7 +182,6 @@ class LocalDemoGameRegistry(
     private val aviator: AviatorGameEngine = AviatorGameEngine(),
     private val dice: DiceEngine = DiceEngine(),
     private val andarBahar: AndarBaharEngine = AndarBaharEngine(),
-    private val roulette: RouletteEngine = RouletteEngine(),
     private val roulette: RouletteEngine = RouletteEngine()
 ) {
     fun play(gameCode: String, seed: Long = System.nanoTime()): DemoOutcome = when (gameCode) {
