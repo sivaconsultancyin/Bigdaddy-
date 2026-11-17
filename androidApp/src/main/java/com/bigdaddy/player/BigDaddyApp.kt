@@ -88,6 +88,7 @@ fun BigDaddyApp() {
     var username by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("") }
     var balance by remember { mutableStateOf("Unavailable") }
+    var gameCatalog by remember { mutableStateOf<List<NativeGameCatalogItem>>(emptyList()) }
     var walletError by remember { mutableStateOf<String?>(null) }
     var loginName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -110,6 +111,7 @@ fun BigDaddyApp() {
                     walletError = "Wallet balance is temporarily unavailable."
                     "Unavailable"
                 }
+                gameCatalog = runCatching { api.gameCatalog(saved) }.getOrDefault(emptyList())
             }.onFailure { failure ->
                 val message = failure.message.orEmpty()
                 if (listOf("AUTH_REQUIRED", "INVALID_TOKEN", "USER_NOT_FOUND_OR_DISABLED", "TOKEN_ROLE_STALE")
@@ -156,6 +158,7 @@ fun BigDaddyApp() {
                                 walletError = "Wallet balance is temporarily unavailable."
                                 "Unavailable"
                             }
+                            gameCatalog = runCatching { api.gameCatalog(result.token) }.getOrDefault(emptyList())
                             password = ""
                         }.onFailure { error = it.message ?: "Login failed." }
                         busy = false
@@ -174,6 +177,7 @@ fun BigDaddyApp() {
                         walletError = "Wallet balance is temporarily unavailable."
                         "Unavailable"
                     }
+                    gameCatalog = runCatching { api.gameCatalog(loginResult.token) }.getOrDefault(emptyList())
                     loginName = referralUser
                     password = ""
                 }
@@ -195,6 +199,7 @@ fun BigDaddyApp() {
                             if (selectedGame == null) {
                                 PremiumGameLobby(
                                     onOpen = { code -> selectedGame = code; lastResult = null },
+                                    gameCatalog = gameCatalog,
                                     showSummary = tab == "All",
                                     username = username,
                                     balance = balance,
@@ -235,16 +240,17 @@ fun BigDaddyApp() {
                                             "Three-card game preview. Chaal, Blind and Showdown mechanics require authoritative table state and server settlement before native play is enabled."
                                         )
                                     }
+                                    val catalogGame = gameCatalog.firstOrNull { it.code == selectedGame }
                                     NativeComingSoonScreen(
-                                        title = preview[0],
+                                        title = catalogGame?.name?.uppercase() ?: preview[0],
                                         subtitle = preview[1],
                                         symbol = preview[2],
                                         status = preview[3],
                                         architectureTitle = preview[4],
                                         description = preview[5],
-                                        poolBalance = "",
-                                        minBet = "",
-                                        maxBet = "",
+                                        poolBalance = catalogGame?.poolBalance.orEmpty(),
+                                        minBet = catalogGame?.minBet.orEmpty(),
+                                        maxBet = catalogGame?.maxBet.orEmpty(),
                                         onBack = { selectedGame = null; lastResult = null }
                                     )
                                 }
@@ -339,6 +345,7 @@ fun BigDaddyApp() {
                                     username = ""
                                     role = ""
                                     balance = "Unavailable"
+                                    gameCatalog = emptyList()
                                     walletError = null
                                     password = ""
                                 }
