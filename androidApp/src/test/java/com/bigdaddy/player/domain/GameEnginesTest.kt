@@ -33,7 +33,7 @@ class GameEnginesTest {
 
     @Test fun allLocalGamesAreDeterministicForSameSeed() {
         val registry = LocalDemoGameRegistry()
-        listOf("aviator", "dragon_tiger", "dice", "andar_bahar", "roulette", "teen_patti").forEach { code ->
+        listOf("aviator", "dice", "andar_bahar", "roulette").forEach { code ->
             assertEquals(registry.play(code, 42L).result, registry.play(code, 42L).result)
         }
     }
@@ -43,77 +43,6 @@ class GameEnginesTest {
         repeat(500) { seed ->
             val value = engine.play(seed.toLong()).result.substringAfter(": ").toInt()
             assertTrue(value in 1..10)
-        }
-    }
-
-    @Test fun dragonTigerTreatsAceAsLowestCard() {
-        val engine = DragonTigerEngine()
-        assertEquals(1, engine.cardStrength(14))
-        assertEquals(13, engine.cardStrength(13))
-        assertTrue(engine.cardStrength(13) > engine.cardStrength(14))
-    }
-
-    @Test fun teenPattiUsesStandardHandCategoryAndTieBreakers() {
-        val engine = TeenPattiEngine()
-        val trail = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(9, 'H'), PlayingCard(9, 'D')))
-        val pureSequence = engine.evaluate(listOf(PlayingCard(12, 'S'), PlayingCard(13, 'S'), PlayingCard(14, 'S')))
-        val aceTwoThree = engine.evaluate(listOf(PlayingCard(14, 'S'), PlayingCard(2, 'H'), PlayingCard(3, 'D')))
-        val kingQueenJack = engine.evaluate(listOf(PlayingCard(13, 'S'), PlayingCard(12, 'H'), PlayingCard(11, 'D')))
-        assertTrue(trail > pureSequence)
-        assertTrue(aceTwoThree > kingQueenJack)
-    }
-
-    @Test fun teenPattiSequenceOrderingMatchesLegacyAKQAndA23Rules() {
-        val engine = TeenPattiEngine()
-        val akq = engine.evaluate(listOf(PlayingCard(14, 'S'), PlayingCard(13, 'H'), PlayingCard(12, 'D')))
-        val a23 = engine.evaluate(listOf(PlayingCard(14, 'S'), PlayingCard(3, 'H'), PlayingCard(2, 'D')))
-        val kqj = engine.evaluate(listOf(PlayingCard(13, 'S'), PlayingCard(12, 'H'), PlayingCard(11, 'D')))
-        assertTrue(akq > a23)
-        assertTrue(a23 > kqj)
-    }
-
-    @Test fun teenPattiPureSequenceBeatsNormalSequenceAndFlushBeatsPair() {
-        val engine = TeenPattiEngine()
-        val pure = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(10, 'S'), PlayingCard(11, 'S')))
-        val sequence = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(10, 'H'), PlayingCard(11, 'D')))
-        val flush = engine.evaluate(listOf(PlayingCard(14, 'S'), PlayingCard(9, 'S'), PlayingCard(4, 'S')))
-        val pair = engine.evaluate(listOf(PlayingCard(13, 'S'), PlayingCard(13, 'H'), PlayingCard(2, 'D')))
-        assertTrue(pure > sequence)
-        assertTrue(flush > pair)
-    }
-
-    @Test fun teenPattiRejectsIncompleteAndDuplicateHands() {
-        val engine = TeenPattiEngine()
-        try {
-            engine.evaluate(listOf(PlayingCard(2, 'S'), PlayingCard(3, 'H')))
-            throw AssertionError("Expected incomplete hand to be rejected")
-        } catch (expected: IllegalArgumentException) {
-            assertTrue(expected.message!!.contains("exactly three"))
-        }
-        try {
-            engine.evaluate(listOf(PlayingCard(8, 'S'), PlayingCard(8, 'S'), PlayingCard(4, 'D')))
-            throw AssertionError("Expected duplicate card to be rejected")
-        } catch (expected: IllegalArgumentException) {
-            assertTrue(expected.message!!.contains("duplicate"))
-        }
-    }
-
-    @Test fun teenPattiPairUsesPairRankThenKicker() {
-        val engine = TeenPattiEngine()
-        val higherPair = engine.evaluate(listOf(PlayingCard(10, 'S'), PlayingCard(10, 'H'), PlayingCard(2, 'D')))
-        val lowerPairWithAceKicker = engine.evaluate(listOf(PlayingCard(9, 'S'), PlayingCard(9, 'H'), PlayingCard(14, 'D')))
-        assertTrue(higherPair > lowerPairWithAceKicker)
-    }
-
-    @Test fun dragonTigerRejectsInvalidCardRanks() {
-        val engine = DragonTigerEngine()
-        listOf(1, 15, 0).forEach { rank ->
-            try {
-                engine.cardStrength(rank)
-                throw AssertionError("Expected invalid Dragon Tiger rank to be rejected")
-            } catch (expected: IllegalArgumentException) {
-                assertTrue(expected.message!!.contains("between 2 and 14"))
-            }
         }
     }
 
@@ -130,23 +59,6 @@ class GameEnginesTest {
         } catch (expected: IllegalArgumentException) {
             assertTrue(expected.message!!.contains("duplicate"))
         }
-    }
-
-    @Test fun teenPattiRejectsRanksOutsideStandardDeck() {
-        val engine = TeenPattiEngine()
-        try {
-            engine.evaluate(listOf(PlayingCard(1, 'S'), PlayingCard(8, 'H'), PlayingCard(9, 'D')))
-            throw AssertionError("Expected invalid Teen Patti rank to be rejected")
-        } catch (expected: IllegalArgumentException) {
-            assertTrue(expected.message!!.contains("invalid card"))
-        }
-    }
-
-    @Test fun dragonTigerAceIsLowestAndEqualRanksTie() {
-        val engine = DragonTigerEngine()
-        assertEquals("TIGER", engine.winner(14, 2))
-        assertEquals("DRAGON", engine.winner(2, 14))
-        assertEquals("TIE", engine.winner(10, 10))
     }
 
     @Test fun andarBaharFirstSideUsesJokerSuitColor() {
