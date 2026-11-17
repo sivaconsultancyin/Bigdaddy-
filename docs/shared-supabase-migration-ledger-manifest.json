@@ -2,9 +2,9 @@
   "snapshotDate": "2026-11-13",
   "projectRef": "nzvpuoeibqrpcltrszvr",
   "counts": {
-    "sharedAppliedLedger": 81,
-    "sharedRepositoryFiles": 71,
-    "sharedExactVersionNameMatches": 34,
+    "sharedAppliedLedger": 82,
+    "sharedRepositoryFiles": 72,
+    "sharedExactVersionNameMatches": 35,
     "sharedAppliedOnly": 47,
     "sharedFileOnly": 37,
     "sharedDuplicateVersionPrefixes": 2,
@@ -14,7 +14,7 @@
     "isolatedSameNameDifferentVersion": 0,
     "isolatedFileOnly": 0,
     "isolatedNewMigrationFiles": 0,
-    "totalSupabaseMigrationFiles": 71,
+    "totalSupabaseMigrationFiles": 72,
     "legacyIsolatedAppliedLedgerSnapshot": 7,
     "legacyArchivedMigrationFiles": 13,
     "legacyArchivedFunctionDirectories": 4
@@ -343,6 +343,10 @@
     {
       "version": "20261117142740",
       "name": "restore_authoritative_game_compatibility_views"
+    },
+    {
+      "version": "20261117144200",
+      "name": "aviator_stale_round_overflow_guard"
     }
   ],
   "exactMatches": [
@@ -768,7 +772,8 @@
     "20261113181312_aviator_hide_running_crash_target.sql",
     "20261113185354_aviator_bet_lookup_scoped_to_game.sql",
     "20261117141410_remove_dragon_tiger_and_teen_patti.sql",
-    "20261117142740_restore_authoritative_game_compatibility_views.sql"
+    "20261117142740_restore_authoritative_game_compatibility_views.sql",
+    "20261117144200_aviator_stale_round_overflow_guard.sql"
   ],
   "fileOnly": [
     "20261018000000_initial_schema.sql",
@@ -885,7 +890,8 @@
     "20261113181312_aviator_hide_running_crash_target.sql",
     "20261113185354_aviator_bet_lookup_scoped_to_game.sql",
     "20261117141410_remove_dragon_tiger_and_teen_patti.sql",
-    "20261117142740_restore_authoritative_game_compatibility_views.sql"
+    "20261117142740_restore_authoritative_game_compatibility_views.sql",
+    "20261117144200_aviator_stale_round_overflow_guard.sql"
   ],
   "isolatedProjectFiles": [],
   "sharedExactMatches": [
