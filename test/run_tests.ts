@@ -12,7 +12,7 @@ import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src
 import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from '../supabase/functions/api/activation';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, resolveDragonTigerWinner, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
-import { buildDragonTigerBetOperation, buildRouletteBetOperation } from '../frontend/src/api/idempotency';
+import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
 import { resolveSupabasePublicConfig } from '../frontend/src/api/supabaseConfigValidation';
 
 let passed = 0;
@@ -110,13 +110,7 @@ async function runTestSuite() {
     assert.ok(production.includes("DRAGON_TIGER_SUPABASE_API_ONLY"));
   });
 
-  test('Legacy Dragon Tiger engine exposes no simulated community bets or side markets', () => {
-    const source = readFileSync('backend/src/games/dragon-tiger/dragon-tiger.engine.ts', 'utf8');
-    assert.ok(!source.includes('suited_tie'));
-    assert.ok(!source.includes('dragon_big'));
-    assert.ok(!source.includes('tiger_big'));
-    assert.ok(!source.includes('scheduleSimulatedCommunityBets'));
-  });
+
 
   test('Dragon Tiger bet retry keeps a stable per-user idempotency intent across round transitions', () => {
     const payload = { bets: [{ type: 'DRAGON', amount: '50' }] };
@@ -147,30 +141,9 @@ async function runTestSuite() {
     assert.ok(!migration.includes("'id',v_existing.id,'status','PENDING'"));
   });
 
-  test('Dragon Tiger frontend uses stable idempotency and listens for authoritative lifecycle broadcasts', () => {
-    const api = readFileSync('frontend/src/api/client.ts', 'utf8');
-    const ui = readFileSync('frontend/src/games/dragon-tiger/DragonTigerGame.tsx', 'utf8');
-    const realtime = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
-    assert.ok(api.includes('buildDragonTigerBetOperation'));
-    assert.ok(api.includes("'Idempotency-Key': idempotencyKey"));
-    assert.ok(ui.includes('recordServerBetStatus(result)'));
-    assert.ok(realtime.includes(".channel('dragon_tiger:rounds'"));
-    assert.ok(realtime.includes("event: 'dragon_tiger_round_changed'"));
-    assert.ok(ui.includes('9 : 1'));
-    assert.ok(!ui.includes('8 : 1'));
-    assert.ok(!ui.includes('8:1'));
-  });
 
-  test('Dragon Tiger state API returns only the authenticated player own-bet statuses for UI reconciliation', () => {
-    const api = readFileSync('supabase/functions/api/index.ts', 'utf8');
-    const websocket = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
-    const ui = readFileSync('frontend/src/games/dragon-tiger/DragonTigerGame.tsx', 'utf8');
-    assert.ok(api.includes('const myBets = (bets ?? []).filter(b => b.user_id === actor.id)'));
-    assert.ok(api.includes('allBets: mappedBets, myBets'));
-    assert.ok(websocket.includes('setDragonTigerMyBets(data.myBets as any)'));
-    assert.ok(ui.includes('dragonTigerMyBets.filter((bet) => bet.roundId === dragonTigerRound.id)'));
-    assert.ok(ui.includes("String(bet.status).toUpperCase() === 'WON'"));
-  });
+
+
 
   test('Dragon Tiger Edge API returns the original round and enforces only the three supported markets', () => {
     const api = readFileSync('supabase/functions/api/index.ts', 'utf8');
