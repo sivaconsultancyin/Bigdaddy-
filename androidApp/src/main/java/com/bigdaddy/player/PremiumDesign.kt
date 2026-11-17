@@ -262,12 +262,14 @@ fun PremiumLoginPanel(
 @Composable
 fun PremiumGameLobby(
     onOpen: (String) -> Unit,
+    gameCatalog: List<NativeGameCatalogItem> = emptyList(),
     showSummary: Boolean = false,
     username: String = "",
     balance: String = "Unavailable",
     onWalletClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
+    val catalogByCode = remember(gameCatalog) { gameCatalog.associateBy { it.code } }
     Column(Modifier.fillMaxSize()) {
         Text(
             "GAMES",
@@ -289,6 +291,12 @@ fun PremiumGameLobby(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(premiumGames) { game ->
+                val catalog = catalogByCode[game.code]
+                val isLive = catalog?.status == "ACTIVE" || game.code == "aviator"
+                val displayName = catalog?.name?.ifBlank { game.title } ?: game.title
+                val poolBalance = catalog?.poolBalance?.toLongOrNull()?.let {
+                    java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(it)
+                } ?: "0"
                 val entrance by animateFloatAsState(
                     targetValue = 1f,
                     animationSpec = tween(durationMillis = 420),
@@ -351,15 +359,15 @@ fun PremiumGameLobby(
                                 )
                             }
                             Text(
-                                if (game.code == "aviator") "DEMO" else "PREVIEW",
-                                color = if (game.code == "aviator") Color(0xFFFBBF24) else Color(0xFFA1A1AA),
+                                if (isLive) "● LIVE" else "PREVIEW",
+                                color = if (isLive) Color(0xFF34D399) else Color(0xFFA1A1AA),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(
-                                game.title,
+                                displayName,
                                 color = Color(0xFFE4E4E7),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
@@ -374,7 +382,7 @@ fun PremiumGameLobby(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "Pool: —",
+                                    "Pool: ₹$poolBalance",
                                     color = Color(0xFF71717A),
                                     style = MaterialTheme.typography.labelSmall
                                 )
