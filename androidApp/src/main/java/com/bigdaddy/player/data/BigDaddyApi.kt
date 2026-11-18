@@ -7,6 +7,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -203,6 +204,17 @@ private fun JSONObject.toNativeGameMap(): Map<String, Any?> {
     }
     return values
 }
+
+data class NativeGameCatalogItem(
+    val id: String,
+    val code: String,
+    val name: String,
+    val status: String,
+    val minBet: String,
+    val maxBet: String,
+    val poolBalance: String,
+    val description: String
+)
 
 class BigDaddyApi {
     private val client = OkHttpClient.Builder()
