@@ -13,6 +13,36 @@ import java.util.concurrent.TimeUnit
 data class NativeAccount(val id: String, val username: String, val role: String)
 data class NativeLoginResult(val token: String, val account: NativeAccount, val walletBalance: String?)
 
+data class NativeAviatorRound(
+    val id: String,
+    val roundNumber: Int,
+    val status: String,
+    val multiplier: Double,
+    val crashMultiplier: Double?,
+    val startedAt: String?
+)
+
+data class NativeAviatorHistoryItem(
+    val roundNumber: Int,
+    val crashMultiplier: Double
+)
+
+data class NativeAviatorState(
+    val round: NativeAviatorRound?,
+    val history: List<NativeAviatorHistoryItem>,
+    val serverTime: String?
+)
+
+data class NativeGameCatalogItem(
+    val id: String,
+    val code: String,
+    val name: String,
+    val status: String,
+    val minBet: String,
+    val maxBet: String,
+    val poolBalance: String
+)
+
 class BigDaddyApi {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -38,10 +68,18 @@ class BigDaddyApi {
         } else builder.get().build()
     }
 
-    private suspend fun execute(request: Request): JSONObject = withContext(Dispatchers.IO) {
-        require(BuildConfig.SUPABASE_URL.startsWith("https://")) {
-            "Native app is not configured. Supply SUPABASE_URL through the build environment."
+    private fun backendRequest(path: String, token: String? = null): Request {
+        val backendUrl = BuildConfig.BIGDADDY_BACKEND_URL.trimEnd('/')
+        require(backendUrl.startsWith("https://")) {
+            "Native game server is not configured. Supply BIGDADDY_BACKEND_URL for the Node.js backend."
         }
+        val apiRoot = if (backendUrl.endsWith("/api")) backendUrl else "$backendUrl/api"
+        val builder = Request.Builder().url(apiRoot + path).header("Accept", "application/json")
+        if (!token.isNullOrBlank()) builder.header("Authorization", "Bearer $token")
+        return builder.get().build()
+    }
+
+    private suspend fun execute(request: Request): JSONObject = withContext(Dispatchers.IO) {
         client.newCall(request).execute().use { response ->
             val raw = response.body?.string().orEmpty()
             val parsed = runCatching { if (raw.isBlank()) JSONObject() else JSONObject(raw) }.getOrElse { JSONObject() }
@@ -93,9 +131,96 @@ class BigDaddyApi {
     }
 
 
+    suspend fun registerReferral(username: String, email: String, password: String, referralCode: String) {
+        val payload = JSONObject()
+            .put("username", username.trim())
+            .put("email", email.trim())
+            .put("password", password)
+            .put("referralCode", referralCode.trim().uppercase())
+        execute(request("/auth/register-referral", body = payload))
+    }
+
     suspend fun walletBalance(token: String): String {
         val response = execute(request("/wallet/my-wallet", token))
         val wallet = response.optJSONObject("wallet") ?: return "0"
         return wallet.optString("balance", "0")
+    }
+
+    /**
+     * Reads the same authenticated game catalog used by the Website Player dashboard.
+     * Missing pool metadata is represented as zero, matching the current Edge API response.
+     */
+    suspend fun gameCatalog(token: String): List<NativeGameCatalogItem> {
+        val response = execute(request("/games/list", token))
+        val items = response.optJSONArray("games") ?: return emptyList()
+        val catalog = mutableListOf<NativeGameCatalogItem>()
+        for (index in 0 until items.length()) {
+            val item = items.optJSONObject(index) ?: continue
+            val code = item.optString("code").trim().lowercase().replace('-', '_')
+            if (code.isBlank()) continue
+            fun readValue(vararg keys: String): String {
+                for (key in keys) {
+                    val value = item.optString(key).trim()
+                    if (value.isNotBlank() && value != "null") return value
+                }
+                return ""
+            }
+            catalog += NativeGameCatalogItem(
+                id = readValue("id").ifBlank { code },
+                code = code,
+                name = readValue("name").ifBlank { code.replace('_', ' ').replaceFirstChar { it.uppercase() } },
+                status = readValue("status").ifBlank { "COMING_SOON" }.uppercase(),
+                minBet = readValue("min_bet", "minBet"),
+                maxBet = readValue("max_bet", "maxBet"),
+                poolBalance = readValue("poolBalance", "pool_balance").ifBlank { "0" }
+            )
+        }
+        return catalog
+    }
+
+    /**
+     * Reads the server-authoritative Aviator round bundle from the configured Node API.
+     * This method never creates a round, multiplier, crash result, bet or payout.
+     */
+    suspend fun aviatorState(token: String): NativeAviatorState {
+        val response = execute(backendRequest("/games/aviator/state", token))
+        val roundJson = response.optJSONObject("round")
+        val round = if (roundJson == null || roundJson.optString("id").isBlank()) {
+            null
+        } else {
+            val rawMultiplier = roundJson.optDouble("multiplier", 1.0)
+            val rawCrashMultiplier = if (roundJson.isNull("crashMultiplier")) {
+                null
+            } else {
+                roundJson.optDouble("crashMultiplier", Double.NaN).takeIf { it.isFinite() && it >= 1.0 }
+            }
+            NativeAviatorRound(
+                id = roundJson.optString("id"),
+                roundNumber = roundJson.optInt("roundNumber", 0),
+                status = roundJson.optString("status", "WAITING").uppercase(),
+                multiplier = rawMultiplier.takeIf { it.isFinite() && it >= 1.0 } ?: 1.0,
+                crashMultiplier = rawCrashMultiplier,
+                startedAt = roundJson.optString("startedAt").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }
+        val historyJson = response.optJSONArray("history")
+        val history = mutableListOf<NativeAviatorHistoryItem>()
+        if (historyJson != null) {
+            for (index in 0 until historyJson.length()) {
+                val item = historyJson.optJSONObject(index) ?: continue
+                val crash = item.optDouble("crashMultiplier", Double.NaN)
+                if (crash.isFinite() && crash >= 1.0) {
+                    history += NativeAviatorHistoryItem(
+                        roundNumber = item.optInt("roundNumber", 0),
+                        crashMultiplier = crash
+                    )
+                }
+            }
+        }
+        return NativeAviatorState(
+            round = round,
+            history = history,
+            serverTime = response.optString("serverTime").takeIf { it.isNotBlank() && it != "null" }
+        )
     }
 }
