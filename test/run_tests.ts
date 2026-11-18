@@ -85,12 +85,13 @@ async function runTestSuite() {
   });
 
 
-  test('Aviator worker does not advance secondary game engines', () => {
+  test('Aviator worker is isolated from Dice lifecycle and ticks only Aviator', () => {
     const engineSource = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
-    assert.ok(!engineSource.includes('schema("dice").rpc("advance_round")'));
+    assert.ok(engineSource.includes('db.schema("aviator").rpc("tick_crash_engine_with_broadcast")'));
+    assert.ok(!engineSource.includes('schema("dice")'));
     assert.ok(!engineSource.includes('DICE_CONFIG_CACHE_TTL_MS'));
+    assert.ok(!engineSource.includes('DICE_CONFIG_RETRY_MS'));
     assert.ok(!engineSource.includes('diceTickFailures'));
-    // Dice has its own dedicated one-second cron worker; Aviator must only tick Aviator.
   });
 
   test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
@@ -296,13 +297,7 @@ async function runTestSuite() {
     assert.ok(source.includes("now - lastEventAt > 1000"));
   });
 
-  test('Aviator worker caches Dice catalog status instead of querying every engine tick', () => {
-    const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
-    assert.ok(source.includes('DICE_CONFIG_CACHE_TTL_MS = 15_000'));
-    assert.ok(source.includes('DICE_CONFIG_RETRY_MS = 5_000'));
-    assert.ok(source.includes('if (Date.now() >= nextDiceStatusRefreshAt)'));
-    assert.ok(source.includes('if (diceStatusCache === "ACTIVE")'));
-  });
+
 
   test('Aviator state polling uses the canonical shared Supabase API only', () => {
     const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
