@@ -54,7 +54,7 @@ async function runTestSuite() {
 
   test('Owner API health panel automatically probes only lightweight health endpoints', () => {
     const source = readFileSync('frontend/src/components/owner/ApiHealthPanel.tsx', 'utf8');
-    const inventory = [...source.matchAll(/\\{ method: '([A-Z]+)', path: '([^']+)'/g)]
+    const inventory = [...source.matchAll(/\{ method: '([A-Z]+)', path: '([^']+)'/g)]
       .map((match) => ({ method: match[1], path: match[2] }));
     assert.deepStrictEqual(inventory, [
       { method: 'GET', path: '/health' },
