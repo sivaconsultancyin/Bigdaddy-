@@ -777,7 +777,6 @@ async function runTestSuite() {
     const stateEnd = edgeSource.indexOf('const auth = await actorFrom(req, db);', stateStart);
     assert.ok(stateStart >= 0 && stateEnd > stateStart, 'Edge state route must be present');
     const edgeStateRoute = edgeSource.slice(stateStart, stateEnd);
-    assert.ok(!edgeStateRoute.includes('.rpc("advance_round")'), 'Edge state reads must not invoke lifecycle RPCs');
     assert.ok(!edgeStateRoute.includes('.rpc("advance_round"'), 'Edge state reads must not invoke lifecycle RPCs');
 
     const nodeSource = readFileSync('backend/src/routes/authoritative-games.routes.ts', 'utf8');
