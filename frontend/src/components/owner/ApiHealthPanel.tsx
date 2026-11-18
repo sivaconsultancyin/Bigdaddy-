@@ -8,38 +8,12 @@ type FailureEvent = { id: string; occurredAt: string; requestId: string; method:
 type FailureResponse = { events: FailureEvent[]; persistence: 'database' | 'memory-fallback'; note: string };
 
 const probes: Probe[] = [
-  // Keep this inventory aligned with server.ts and the three mounted production routers.
+  // Keep automatic Owner health checks lightweight. Game state, history, wallet,
+  // and user endpoints are business reads, not health probes; polling them here
+  // creates avoidable production traffic and can mask real player traffic.
   { method: 'GET', path: '/health', label: 'API liveness', safe: true },
   { method: 'GET', path: '/ready', label: 'API readiness / dependencies', safe: true },
   { method: 'GET', path: '/config', label: 'Public configuration', safe: true },
-  { method: 'GET', path: '/auth/me', label: 'Current user', safe: true },
-  { method: 'GET', path: '/auth/users', label: 'Descendant users', safe: true },
-  { method: 'GET', path: '/wallet/my-wallet', label: 'Wallet balance', safe: true },
-  { method: 'GET', path: '/wallet/summary', label: 'Treasury / wallet summary', safe: true },
-  { method: 'GET', path: '/wallet/ledger', label: 'Wallet ledger', safe: true },
-  { method: 'GET', path: '/requests/list', label: 'Token requests', safe: true },
-  { method: 'GET', path: '/games/list', label: 'Games / pools list', safe: true },
-  { method: 'GET', path: '/games/aviator/state', label: 'Aviator round state', safe: true },
-  { method: 'GET', path: '/games/aviator/history', label: 'Aviator round history', safe: true },
-  { method: 'GET', path: '/games/roulette/state', label: 'Roulette state', safe: true },
-  { method: 'GET', path: '/games/dice/state', label: 'Dice state', safe: true },
-  { method: 'GET', path: '/games/andar-bahar/state', label: 'Andar Bahar state', safe: true },
-  { method: 'POST', path: '/auth/login', label: 'Login', safe: true, validationOnly: true },
-  { method: 'POST', path: '/auth/register-referral', label: 'Referral registration', safe: true, validationOnly: true },
-  { method: 'POST', path: '/auth/create-user', label: 'Create user', safe: true, validationOnly: true },
-  { method: 'POST', path: '/auth/bootstrap-owner', label: 'Owner bootstrap', safe: false },
-  { method: 'POST', path: '/wallet/transfer', label: 'Wallet transfer', safe: false },
-  { method: 'POST', path: '/wallet/game-pool', label: 'Game pool allocation', safe: false },
-  { method: 'POST', path: '/requests/create', label: 'Create token request', safe: false },
-  { method: 'POST', path: '/requests/:id/approve', label: 'Approve token request', safe: false },
-  { method: 'POST', path: '/requests/:id/reject', label: 'Reject token request', safe: false },
-  { method: 'POST', path: '/games/aviator/activate', label: 'Activate Aviator pool', safe: false },
-  { method: 'POST', path: '/games/:gameCode/activate', label: 'Activate game pool', safe: false },
-  { method: 'POST', path: '/games/aviator/bet', label: 'Aviator bet', safe: false },
-  { method: 'POST', path: '/games/aviator/cashout', label: 'Aviator cashout', safe: false },
-  { method: 'POST', path: '/games/roulette/bet', label: 'Roulette bet', safe: false },
-  { method: 'POST', path: '/games/dice/bet', label: 'Dice bet', safe: false },
-  { method: 'POST', path: '/games/andar-bahar/bet', label: 'Andar Bahar bet', safe: false },
 ];
 
 export const ApiHealthPanel: React.FC = () => {
@@ -124,8 +98,12 @@ export const ApiHealthPanel: React.FC = () => {
   useEffect(() => {
     void checkEndpoints();
     void loadFailures();
-    const timer = window.setInterval(() => { void checkEndpoints(); void loadFailures(); }, 10000);
-    return () => window.clearInterval(timer);
+    const healthTimer = window.setInterval(() => { void checkEndpoints(); }, 30000);
+    const failuresTimer = window.setInterval(() => { void loadFailures(); }, 60000);
+    return () => {
+      window.clearInterval(healthTimer);
+      window.clearInterval(failuresTimer);
+    };
   }, [checkEndpoints, loadFailures]);
 
   const online = results.filter(r => r.status === 'online').length;
@@ -175,7 +153,7 @@ export const ApiHealthPanel: React.FC = () => {
           <Activity className="w-4 h-4 text-cyan-400" />
           <div>
             <h2 className="text-xs font-bold text-zinc-100 uppercase font-mono">API & System Health</h2>
-            <p className="text-[10px] text-zinc-500">Endpoint reachability · auto-refresh 10s</p>
+            <p className="text-[10px] text-zinc-500">Lightweight health probes · auto-refresh 30s</p>
           </div>
         </div>
         <button onClick={() => { void checkEndpoints(); }} disabled={running} className="p-2 rounded-lg border border-zinc-700 text-zinc-300 disabled:opacity-50" aria-label="Refresh API health">
