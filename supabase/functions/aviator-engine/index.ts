@@ -120,7 +120,8 @@ Deno.serve(async (req: Request) => {
 
   const started = Date.now();
   const runForMs = 42_000;
-  const heartbeatEveryMs = 5_000;
+  // The lease TTL is 45s; a 15s heartbeat keeps a 30s safety margin while reducing DB writes by 66%.
+  const heartbeatEveryMs = 15_000;
   let nextHeartbeatAt = started + heartbeatEveryMs;
   const tickLatenciesMs: number[] = [];
   const actionCounts: Record<string, number> = {};
