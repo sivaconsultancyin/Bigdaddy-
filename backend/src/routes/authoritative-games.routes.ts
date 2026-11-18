@@ -293,12 +293,9 @@ authoritativeGamesRouter.get('/games/:gameCode/state', auth, async (req: AuthReq
         round: null, history: [], bets: [], allBets: [],
       });
     }
-    if (code === 'dice') {
-      const runtimeRows = await sql.unsafe('SELECT dice.advance_round() AS state');
-      if (!runtimeRows[0]?.state || runtimeRows[0].state.gameStateUnavailable || !runtimeRows[0].state.round?.id) {
-        return res.status(503).json({ error: 'DICE_RUNTIME_UNAVAILABLE' });
-      }
-    }
+    // State endpoints only read the authoritative snapshot. The dedicated
+    // Supabase cron worker owns Dice round transitions and settlement; running
+    // advance_round() on every client poll duplicates that scheduler work.
     const data = await readGameState(code);
     if (!data.round) return res.status(503).json({ error: 'GAME_NOT_CONFIGURED', gameCode: code });
     return res.json(data);
