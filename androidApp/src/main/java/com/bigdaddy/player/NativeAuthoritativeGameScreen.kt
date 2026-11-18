@@ -1,10 +1,7 @@
 package com.bigdaddy.player
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -58,6 +55,13 @@ private val rouletteWheelOrder = listOf(
 )
 private val rouletteRedNumbers = setOf(1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36)
 
+internal fun shouldAnimateNativeGame(gameCode: String, status: String): Boolean = when (gameCode) {
+    "roulette" -> status == "SPINNING"
+    "dice" -> status == "ROLLING"
+    "andar_bahar" -> status == "DEALING"
+    else -> false
+}
+
 @Composable
 internal fun NativeAuthoritativeGameScreen(
     api: BigDaddyApi,
@@ -89,27 +93,40 @@ internal fun NativeAuthoritativeGameScreen(
     }
 
     val status = state?.roundStatus ?: if (loading) "CONNECTING" else "OFFLINE"
-    val isAnimating = status in setOf("SPINNING", "ROLLING", "DEALING")
+    val animationActive = shouldAnimateNativeGame(gameCode, status)
     val isResult = status == "RESULT" || status == "SETTLED"
-    val transition = rememberInfiniteTransition(label = "authoritative-game-motion")
-    val wheelRotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(2_400, easing = LinearEasing)),
-        label = "roulette-wheel"
-    )
-    val diceRotation by transition.animateFloat(
-        initialValue = -9f,
-        targetValue = 9f,
-        animationSpec = infiniteRepeatable(tween(360), RepeatMode.Reverse),
-        label = "dice-roll"
-    )
-    val cardPulse by transition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(tween(620), RepeatMode.Reverse),
-        label = "card-deal"
-    )
+    val wheelMotion = remember { Animatable(0f) }
+    val diceMotion = remember { Animatable(-9f) }
+    val cardMotion = remember { Animatable(0.96f) }
+
+    // Run only the animation that corresponds to the server's active lifecycle.
+    // LaunchedEffect cancellation stops the loop immediately on RESULT/OFFLINE or navigation.
+    LaunchedEffect(gameCode, animationActive) {
+        if (!animationActive) {
+            wheelMotion.snapTo(0f)
+            diceMotion.snapTo(0f)
+            cardMotion.snapTo(1f)
+            return@LaunchedEffect
+        }
+        when (gameCode) {
+            "roulette" -> while (true) {
+                wheelMotion.animateTo(360f, animationSpec = tween(2_400, easing = LinearEasing))
+                wheelMotion.snapTo(0f)
+            }
+            "dice" -> while (true) {
+                diceMotion.animateTo(9f, animationSpec = tween(180))
+                diceMotion.animateTo(-9f, animationSpec = tween(180))
+            }
+            "andar_bahar" -> while (true) {
+                cardMotion.animateTo(1.04f, animationSpec = tween(620))
+                cardMotion.animateTo(0.96f, animationSpec = tween(620))
+            }
+        }
+    }
+
+    val wheelRotation = wheelMotion.value
+    val diceRotation = diceMotion.value
+    val cardPulse = cardMotion.value
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -152,9 +169,9 @@ internal fun NativeAuthoritativeGameScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 when (gameCode) {
-                    "roulette" -> RouletteRoundVisual(state, isAnimating, wheelRotation)
-                    "dice" -> DiceRoundVisual(state, isAnimating, diceRotation)
-                    "andar_bahar" -> AndarBaharRoundVisual(state, isAnimating, cardPulse)
+                    "roulette" -> RouletteRoundVisual(state, animationActive, wheelRotation)
+                    "dice" -> DiceRoundVisual(state, animationActive, diceRotation)
+                    "andar_bahar" -> AndarBaharRoundVisual(state, animationActive, cardPulse)
                 }
                 if (state?.roundId == null && status == "COMING_SOON") {
                     Text(
