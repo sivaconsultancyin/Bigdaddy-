@@ -249,10 +249,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         lastFallbackCountAtRef.current = now;
         setPollingFallbackCount((count) => count + 1);
       }
-      // Realtime is primary while healthy. Keep a 1s safety poll in RUNNING,
-      // and tighten to 200ms only when the subscription is disconnected or stale.
-      // Outside RUNNING, poll every second to detect WAITING -> RUNNING transitions.
-      const intervalMs = running && realtimeStale ? 200 : 1000;
+      // Realtime carries live multipliers and lifecycle transitions while healthy.
+      // Use a 5s state safety poll during healthy RUNNING rounds; keep the 200ms
+      // recovery poll when Realtime is stale/disconnected and 1s outside RUNNING.
+      // Terminal lifecycle broadcasts trigger an immediate poll for settled bets/wallet.
+      const intervalMs = running ? (realtimeStale ? 200 : 5000) : 1000;
       // Measure from request start, not request completion, while never overlapping
       // requests. If the API is slower than the target cadence, poll again immediately.
       const delay = Math.max(0, intervalMs - (Date.now() - pollStartedAt));
