@@ -17,6 +17,10 @@ val publishableKey = providers.gradleProperty("SUPABASE_PUBLISHABLE_KEY")
     .orElse(providers.environmentVariable("SUPABASE_PUBLISHABLE_KEY"))
     .orElse("sb_publishable_3StQxumtXcMHvM9i3bTldw_e1toL-FR").get()
 
+val bigDaddyBackendUrl = providers.gradleProperty("BIGDADDY_BACKEND_URL")
+    .orElse(providers.environmentVariable("BIGDADDY_BACKEND_URL"))
+    .orElse("").get().trimEnd('/')
+
 android {
     namespace = "com.bigdaddy.player"
     compileSdk = 36
@@ -29,6 +33,7 @@ android {
         versionName = "1.0.0-native-preview"
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"$publishableKey\"")
+        buildConfigField("String", "BIGDADDY_BACKEND_URL", "\"$bigDaddyBackendUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
