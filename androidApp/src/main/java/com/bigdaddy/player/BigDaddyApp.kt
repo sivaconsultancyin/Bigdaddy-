@@ -222,41 +222,23 @@ fun BigDaddyApp() {
                                     PremiumGameHeader("AVIATOR", "Server-authoritative round · read-only native client", Color(0xFFFF654F)) {}
                                     NativeAviatorScreen(api = api, token = token!!)
                                 } else {
-                                    val preview = when (selectedGame) {
-                                        "dice" -> arrayOf(
-                                            "LUCKY 10 DICE", "Pick a number from 1 to 10", "🎲", "Engine Under Audit",
-                                            "Provably Fair Architecture",
-                                            "Lucky 10 number picks plus Small, Big, Even and Odd markets. Results must come from the authoritative server round."
-                                        )
-                                        "andar_bahar" -> arrayOf(
-                                            "ANDAR BAHAR", "Traditional joker card matching", "🃏", "Under Development",
-                                            "Classic Traditional Game",
-                                            "Joker card matching with Andar (Inside) and Bahar (Outside) selections. Authoritative card sequence and settlement are not available in this native preview."
-                                        )
-                                        "roulette" -> arrayOf(
-                                            "ROULETTE", "European single-zero wheel", "🎡", "Engine Under Audit",
-                                            "European Roulette Architecture",
-                                            "European Roulette will feature a single-zero wheel, inside and outside selections, and server-authoritative round settlement."
-                                        )
-                                        else -> arrayOf(
-                                            "GAME UNAVAILABLE", "This game is not in the current player catalog", "—", "Not Available",
-                                            "Game Catalog",
-                                            "This game is not currently offered. No local game results or wallet actions are generated."
-                                        )
-                                    }
                                     val catalogGame = gameCatalog.firstOrNull { it.code == selectedGame }
-                                    NativeComingSoonScreen(
-                                        title = catalogGame?.name?.uppercase() ?: preview[0],
-                                        subtitle = catalogGame?.description?.ifBlank { preview[1] } ?: preview[1],
-                                        symbol = preview[2],
-                                        status = preview[3],
-                                        architectureTitle = preview[4],
-                                        description = preview[5],
-                                        poolBalance = catalogGame?.poolBalance.orEmpty(),
-                                        minBet = catalogGame?.minBet.orEmpty(),
-                                        maxBet = catalogGame?.maxBet.orEmpty(),
-                                        onBack = { selectedGame = null; lastResult = null }
+                                    val accent = when (selectedGame) {
+                                        "dice" -> Color(0xFF7C8CFF)
+                                        "andar_bahar" -> Color(0xFF2EBB83)
+                                        else -> Color(0xFFFBBF24)
+                                    }
+                                    PremiumGameHeader(
+                                        (catalogGame?.name ?: name).uppercase(),
+                                        "Server-authoritative round \u00b7 native read-only client",
+                                        accent
+                                    ) {}
+                                    NativeAuthoritativeGameScreen(
+                                        api = api,
+                                        token = token!!,
+                                        gameCode = selectedGame!!
                                     )
+
                                 }
                             }
                         }

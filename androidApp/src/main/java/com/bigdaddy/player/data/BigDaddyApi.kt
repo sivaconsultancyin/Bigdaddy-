@@ -33,6 +33,133 @@ data class NativeAviatorState(
     val serverTime: String?
 )
 
+data class NativeGameCard(
+    val code: String,
+    val rank: Int,
+    val suit: String,
+    val side: String?
+)
+
+data class NativeGameHistoryItem(
+    val roundNumber: Int,
+    val summary: String
+)
+
+data class NativeAuthoritativeGameState(
+    val gameCode: String,
+    val roundId: String?,
+    val roundNumber: Int,
+    val roundStatus: String,
+    val bettingEndsAt: Long?,
+    val totalBetsCount: Int,
+    val totalBetAmount: String,
+    val winningNumber: Int?,
+    val rouletteColor: String?,
+    val diceNumber: Int?,
+    val jokerCard: NativeGameCard?,
+    val winningCard: NativeGameCard?,
+    val winningSide: String?,
+    val dealCards: List<NativeGameCard>,
+    val history: List<NativeGameHistoryItem>
+)
+
+private fun readGameCard(card: JSONObject?, side: String? = null): NativeGameCard? {
+    if (card == null) return null
+    val code = card.optString("code").trim()
+    if (code.isBlank() || code == "null") return null
+    return NativeGameCard(
+        code = code,
+        rank = card.optInt("rank", 0),
+        suit = card.optString("suit").uppercase(),
+        side = side
+    )
+}
+
+private fun summarizeNativeGameHistory(gameCode: String, result: JSONObject?): String? {
+    if (result == null) return null
+    return when (gameCode) {
+        "roulette" -> {
+            val number = result.optInt("number", Int.MIN_VALUE)
+            if (number == Int.MIN_VALUE) null else "$number · ${result.optString("color").uppercase()}"
+        }
+        "dice" -> {
+            val number = result.optInt("number", Int.MIN_VALUE)
+            if (number == Int.MIN_VALUE) null else "Lucky 10: $number"
+        }
+        "andar_bahar" -> {
+            val winner = result.optString("winner").takeIf { it.isNotBlank() && it != "null" }
+            val count = result.optInt("totalCardsDealt", 0)
+            winner?.let { "${it.uppercase()} · $count cards" }
+        }
+        else -> null
+    }
+}
+
+/**
+ * Defensive client parser for the Node authoritative-games route.
+ * Result-bearing fields are ignored until the server publishes RESULT/SETTLED.
+ */
+internal fun parseNativeAuthoritativeGameState(
+    requestedGameCode: String,
+    response: JSONObject
+): NativeAuthoritativeGameState {
+    val code = requestedGameCode.trim().lowercase().replace('-', '_')
+    require(code in setOf("roulette", "dice", "andar_bahar")) { "Unsupported authoritative game: $code" }
+    val round = response.optJSONObject("round")
+    val status = (round?.optString("status") ?: response.optString("status", "UNKNOWN")).uppercase()
+    val resultReady = status == "RESULT" || status == "SETTLED"
+
+    val dealCards = mutableListOf<NativeGameCard>()
+    if (resultReady) {
+        val cards = round?.optJSONArray("dealCards")
+        if (cards != null) {
+            for (index in 0 until cards.length()) {
+                val entry = cards.optJSONObject(index) ?: continue
+                readGameCard(entry.optJSONObject("card"), entry.optString("side"))?.let(dealCards::add)
+            }
+        }
+    }
+
+    val history = mutableListOf<NativeGameHistoryItem>()
+    val historyJson = response.optJSONArray("history")
+    if (historyJson != null) {
+        for (index in 0 until historyJson.length()) {
+            val item = historyJson.optJSONObject(index) ?: continue
+            val summary = summarizeNativeGameHistory(code, item.optJSONObject("result")) ?: continue
+            history += NativeGameHistoryItem(
+                roundNumber = item.optInt("roundNumber", 0),
+                summary = summary
+            )
+        }
+    }
+
+    return NativeAuthoritativeGameState(
+        gameCode = code,
+        roundId = round?.optString("id")?.takeIf { it.isNotBlank() && it != "null" },
+        roundNumber = round?.optInt("roundNumber", 0) ?: 0,
+        roundStatus = status,
+        bettingEndsAt = round?.optLong("bettingEndsAt")?.takeIf { it > 0L },
+        totalBetsCount = round?.optInt("totalBetsCount", 0) ?: 0,
+        totalBetAmount = round?.optString("totalBetAmount", "0") ?: "0",
+        winningNumber = if (resultReady && code == "roulette" && round?.has("winningNumber") == true && !round.isNull("winningNumber")) {
+            round.optInt("winningNumber")
+        } else null,
+        rouletteColor = if (resultReady && code == "roulette") {
+            round?.optString("color")?.takeIf { it.isNotBlank() && it != "null" }?.lowercase()
+        } else null,
+        diceNumber = if (resultReady && code == "dice" && round?.has("rolledNumber") == true && !round.isNull("rolledNumber")) {
+            round.optInt("rolledNumber")
+        } else null,
+        jokerCard = if (resultReady && code == "andar_bahar") readGameCard(round?.optJSONObject("jokerCard")) else null,
+        winningCard = if (resultReady && code == "andar_bahar") readGameCard(round?.optJSONObject("winningCard")) else null,
+        winningSide = if (resultReady && code == "andar_bahar") {
+            round?.optString("winningSide")?.takeIf { it.isNotBlank() && it != "null" }
+        } else null,
+        dealCards = dealCards,
+        history = history
+    )
+}
+
 data class NativeGameCatalogItem(
     val id: String,
     val code: String,
@@ -179,6 +306,19 @@ class BigDaddyApi {
         }
         return catalog
     }
+
+
+    /**
+     * Reads a persistent Node-authoritative round for Roulette, Dice or Andar Bahar.
+     * This call is GET-only: it never places bets or creates/settles a result.
+     */
+    suspend fun authoritativeGameState(token: String, gameCode: String): NativeAuthoritativeGameState {
+        val code = gameCode.trim().lowercase().replace('-', '_')
+        require(code in setOf("roulette", "dice", "andar_bahar")) { "Unsupported authoritative game: $code" }
+        val response = execute(backendRequest("/games/$code/state", token))
+        return parseNativeAuthoritativeGameState(code, response)
+    }
+
 
     /**
      * Reads the server-authoritative Aviator round bundle from the configured Node API.
