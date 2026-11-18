@@ -85,6 +85,14 @@ async function runTestSuite() {
   });
 
 
+  test('Aviator worker does not advance secondary game engines', () => {
+    const engineSource = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
+    assert.ok(!engineSource.includes('schema("dice").rpc("advance_round")'));
+    assert.ok(!engineSource.includes('DICE_CONFIG_CACHE_TTL_MS'));
+    assert.ok(!engineSource.includes('diceTickFailures'));
+    // Dice has its own dedicated one-second cron worker; Aviator must only tick Aviator.
+  });
+
   test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', multiplier: 1.27, crashMultiplier: 25 }), 1.27);
