@@ -150,6 +150,20 @@ async function runTestSuite() {
     assert.deepStrictEqual(duplicates, manifest.duplicateVersionPrefixes);
   });
 
+  test('Node Aviator state requires a verified player and scopes bets to that player', () => {
+    const production = readFileSync('backend/src/routes/production.routes.ts', 'utf8');
+    const start = production.indexOf("productionRouter.get('/games/aviator/state'");
+    const end = production.indexOf("productionRouter.get('/games/aviator/history'", start);
+    assert.ok(start >= 0 && end > start, 'Node Aviator state route must be present');
+    const route = production.slice(start, end);
+    assert.ok(route.includes('requireDatabaseUser'), 'Aviator state must authenticate the caller');
+    assert.ok(route.includes('const actor = req.authUser!'), 'Aviator state must use the verified account');
+    assert.ok(route.includes("actor.role !== UserRole.PLAYER"), 'Aviator state must reject non-player roles');
+    assert.ok(route.includes('b.user_id=$2'), 'Aviator bet rows must be scoped to the authenticated player');
+    assert.ok(route.includes('[round.id, actor.id]'), 'Aviator bet query must bind both round and player IDs');
+    assert.ok(!route.includes('u.username'), 'Aviator state must not expose other players\' usernames');
+  });
+
   test('Aviator state snapshots cannot roll the UI back across rounds or lifecycle phases', () => {
     const roundOneRunning = { id: 'round-1', roundNumber: 1, status: 'RUNNING' };
     const roundOneCrashed = { id: 'round-1', roundNumber: 1, status: 'CRASHED' };

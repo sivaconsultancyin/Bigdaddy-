@@ -39,7 +39,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
-      - name: Enforce APK-local game and wallet API boundary
+      - name: Enforce Node-authoritative native game boundary
         run: bash scripts/check-native-android-boundary.sh
       - name: Assemble debug APK
         run: gradle --no-daemon :androidApp:assembleDebug
