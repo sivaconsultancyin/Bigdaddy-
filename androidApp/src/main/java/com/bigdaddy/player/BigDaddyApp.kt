@@ -247,7 +247,7 @@ fun BigDaddyApp() {
                                     val catalogGame = gameCatalog.firstOrNull { it.code == selectedGame }
                                     NativeComingSoonScreen(
                                         title = catalogGame?.name?.uppercase() ?: preview[0],
-                                        subtitle = preview[1],
+                                        subtitle = catalogGame?.description?.ifBlank { preview[1] } ?: preview[1],
                                         symbol = preview[2],
                                         status = preview[3],
                                         architectureTitle = preview[4],
