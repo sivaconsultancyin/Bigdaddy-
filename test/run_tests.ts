@@ -771,6 +771,24 @@ async function runTestSuite() {
     assert.ok(!fallback.includes('.update({ status: "ACTIVE"'));
   });
 
+  test('Secondary game state routes are read-only and leave lifecycle transitions to cron workers', () => {
+    const edgeSource = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const stateStart = edgeSource.indexOf('const gameStateMatch = path.match');
+    const stateEnd = edgeSource.indexOf('const auth = await actorFrom(req, db);', stateStart);
+    assert.ok(stateStart >= 0 && stateEnd > stateStart, 'Edge state route must be present');
+    const edgeStateRoute = edgeSource.slice(stateStart, stateEnd);
+    assert.ok(!edgeStateRoute.includes('.rpc("advance_round")'), 'Edge state reads must not invoke lifecycle RPCs');
+    assert.ok(!edgeStateRoute.includes('.rpc("advance_round"'), 'Edge state reads must not invoke lifecycle RPCs');
+
+    const nodeSource = readFileSync('backend/src/routes/authoritative-games.routes.ts', 'utf8');
+    const nodeStart = nodeSource.indexOf("authoritativeGamesRouter.get('/games/:gameCode/state'");
+    const nodeEnd = nodeSource.indexOf('async function placeBets', nodeStart);
+    assert.ok(nodeStart >= 0 && nodeEnd > nodeStart, 'Node state route must be present');
+    const nodeStateRoute = nodeSource.slice(nodeStart, nodeEnd);
+    assert.ok(!nodeStateRoute.includes('advance_round'), 'Node state reads must not advance rounds');
+    assert.ok(nodeStateRoute.includes('readGameState(code)'), 'Node state route must return the authoritative database snapshot');
+  });
+
   console.log(`Results: ${passed} Passed, ${failed} Failed`);
   console.log('======================================================\n');
 
