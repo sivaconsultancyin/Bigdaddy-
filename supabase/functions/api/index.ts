@@ -292,31 +292,10 @@ async function handle(req: Request) {
         round: null, history: [], bets: [], allBets: [],
       }, 200, origin);
     }
-    if (code === "dice") {
-      const { error: lifecycleError } = await db.schema("dice").rpc("advance_round");
-      if (lifecycleError) {
-        console.error("Dice lifecycle advance failed:", lifecycleError.code ?? "unknown");
-        return response({ error: "DICE_RUNTIME_UNAVAILABLE" }, 503, origin);
-      }
-    }
-    // Andar Bahar rounds are advanced by a serialized database lifecycle RPC;
-    // the state endpoint is the recovery path if a client missed a tick.
-    if (code === "andar_bahar") {
-      const { error: lifecycleError } = await db.schema("andar_bahar").rpc("advance_round");
-      if (lifecycleError) {
-        console.error("Andar Bahar lifecycle advance failed:", lifecycleError.code ?? "unknown");
-        return response({ error: "ANDAR_BAHAR_RUNTIME_UNAVAILABLE" }, 503, origin);
-      }
-    }
-    // Roulette's durable lifecycle is advanced only by this server-side RPC.
-    // It creates persisted rounds and settles expired rounds in one database transaction.
-    if (code === "roulette") {
-      const { error: lifecycleError } = await db.schema("roulette").rpc("advance_round");
-      if (lifecycleError) {
-        console.error("Roulette lifecycle advance failed:", lifecycleError.code ?? "unknown");
-        return response({ error: "ROULETTE_RUNTIME_UNAVAILABLE" }, 503, origin);
-      }
-    }
+    // State reads are deliberately read-only. The dedicated one-second Supabase
+    // cron workers own round transitions and settlement for these games. Calling
+    // advance_round() here made every connected player's poll execute the same
+    // lifecycle RPC again, multiplying database work without improving timing.
     const { data: rounds, error: roundError } = await db.schema(code).from("authoritative_game_rounds").select("*").eq("game_code", code).order("round_number", { ascending: false }).limit(25);
     if (roundError) return response({ error: "GAME_STATE_UNAVAILABLE" }, 503, origin);
     if (!rounds?.length) return response({ error: "GAME_NOT_CONFIGURED", gameCode: code }, 503, origin);
