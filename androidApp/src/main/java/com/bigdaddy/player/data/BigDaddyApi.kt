@@ -40,7 +40,8 @@ data class NativeGameCatalogItem(
     val status: String,
     val minBet: String,
     val maxBet: String,
-    val poolBalance: String
+    val poolBalance: String,
+    val description: String
 )
 
 class BigDaddyApi {
@@ -172,7 +173,8 @@ class BigDaddyApi {
                 status = readValue("status").ifBlank { "COMING_SOON" }.uppercase(),
                 minBet = readValue("min_bet", "minBet"),
                 maxBet = readValue("max_bet", "maxBet"),
-                poolBalance = readValue("poolBalance", "pool_balance").ifBlank { "0" }
+                poolBalance = readValue("poolBalance", "pool_balance").ifBlank { "0" },
+                description = readValue("description")
             )
         }
         return catalog
