@@ -1,6 +1,5 @@
 package com.bigdaddy.player.data
 
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -8,8 +7,14 @@ import org.junit.Test
 class NativeAuthoritativeGameStateTest {
     @Test
     fun runningRouletteRoundDoesNotExposeAResult() {
-        val payload = JSONObject(
-            """{"round":{"id":"r-1","roundNumber":4,"status":"SPINNING","winningNumber":17,"color":"red"}}"""
+        val payload = mapOf(
+            "round" to mapOf(
+                "id" to "r-1",
+                "roundNumber" to 4,
+                "status" to "SPINNING",
+                "winningNumber" to 17,
+                "color" to "red"
+            )
         )
 
         val state = parseNativeAuthoritativeGameState("roulette", payload)
@@ -20,9 +25,15 @@ class NativeAuthoritativeGameStateTest {
     }
 
     @Test
-    fun rouletteResultIsReadOnlyAndUsesServerNumberAndColor() {
-        val payload = JSONObject(
-            """{"round":{"id":"r-2","roundNumber":5,"status":"RESULT","winningNumber":0,"color":"green"}}"""
+    fun rouletteResultUsesServerNumberAndColor() {
+        val payload = mapOf(
+            "round" to mapOf(
+                "id" to "r-2",
+                "roundNumber" to 5,
+                "status" to "RESULT",
+                "winningNumber" to 0,
+                "color" to "green"
+            )
         )
 
         val state = parseNativeAuthoritativeGameState("roulette", payload)
@@ -33,11 +44,11 @@ class NativeAuthoritativeGameStateTest {
 
     @Test
     fun diceResultIsHiddenUntilTheServerPublishesResult() {
-        val running = JSONObject(
-            """{"round":{"id":"d-1","roundNumber":8,"status":"ROLLING","rolledNumber":9}}"""
+        val running = mapOf(
+            "round" to mapOf("id" to "d-1", "roundNumber" to 8, "status" to "ROLLING", "rolledNumber" to 9)
         )
-        val settled = JSONObject(
-            """{"round":{"id":"d-2","roundNumber":9,"status":"RESULT","rolledNumber":7}}"""
+        val settled = mapOf(
+            "round" to mapOf("id" to "d-2", "roundNumber" to 9, "status" to "RESULT", "rolledNumber" to 7)
         )
 
         assertNull(parseNativeAuthoritativeGameState("dice", running).diceNumber)
@@ -45,12 +56,28 @@ class NativeAuthoritativeGameStateTest {
     }
 
     @Test
-    fun andarBaharCardsAreReadOnlyAndAppearOnlyAfterResult() {
-        val running = JSONObject(
-            """{"round":{"id":"a-1","status":"DEALING","jokerCard":{"code":"AH","rank":14,"suit":"H"},"dealCards":[]}}"""
+    fun andarBaharCardsAppearOnlyAfterResult() {
+        val running = mapOf(
+            "round" to mapOf(
+                "id" to "a-1",
+                "status" to "DEALING",
+                "jokerCard" to mapOf("code" to "AH", "rank" to 14, "suit" to "H"),
+                "dealCards" to emptyList<Any>()
+            )
         )
-        val settled = JSONObject(
-            """{"round":{"id":"a-2","roundNumber":3,"status":"RESULT","jokerCard":{"code":"AH","rank":14,"suit":"H"},"dealCards":[{"side":"andar","card":{"code":"2S","rank":2,"suit":"S"}},{"side":"bahar","card":{"code":"AD","rank":14,"suit":"D"}}],"winningCard":{"code":"AD","rank":14,"suit":"D"},"winningSide":"bahar"}}"""
+        val settled = mapOf(
+            "round" to mapOf(
+                "id" to "a-2",
+                "roundNumber" to 3,
+                "status" to "RESULT",
+                "jokerCard" to mapOf("code" to "AH", "rank" to 14, "suit" to "H"),
+                "dealCards" to listOf(
+                    mapOf("side" to "andar", "card" to mapOf("code" to "2S", "rank" to 2, "suit" to "S")),
+                    mapOf("side" to "bahar", "card" to mapOf("code" to "AD", "rank" to 14, "suit" to "D"))
+                ),
+                "winningCard" to mapOf("code" to "AD", "rank" to 14, "suit" to "D"),
+                "winningSide" to "bahar"
+            )
         )
 
         val hidden = parseNativeAuthoritativeGameState("andar_bahar", running)
@@ -66,8 +93,12 @@ class NativeAuthoritativeGameStateTest {
 
     @Test
     fun unavailableGameDoesNotInventARound() {
-        val payload = JSONObject(
-            """{"gameCode":"dice","status":"COMING_SOON","gameStateUnavailable":true,"round":null,"history":[]}"""
+        val payload = mapOf(
+            "gameCode" to "dice",
+            "status" to "COMING_SOON",
+            "gameStateUnavailable" to true,
+            "round" to null,
+            "history" to emptyList<Any>()
         )
 
         val state = parseNativeAuthoritativeGameState("dice", payload)

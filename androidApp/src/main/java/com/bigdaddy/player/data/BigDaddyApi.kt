@@ -63,32 +63,51 @@ data class NativeAuthoritativeGameState(
     val history: List<NativeGameHistoryItem>
 )
 
-private fun readGameCard(card: JSONObject?, side: String? = null): NativeGameCard? {
+private fun Any?.asGameMap(): Map<String, Any?>? = this as? Map<String, Any?>
+
+private fun Map<String, Any?>.gameString(key: String, fallback: String = ""): String =
+    this[key]?.toString()?.takeIf { it.isNotBlank() && it != "null" } ?: fallback
+
+private fun Map<String, Any?>.gameInt(key: String, fallback: Int = 0): Int =
+    when (val value = this[key]) {
+        is Number -> value.toInt()
+        is String -> value.toIntOrNull() ?: fallback
+        else -> fallback
+    }
+
+private fun Map<String, Any?>.gameLong(key: String): Long? =
+    when (val value = this[key]) {
+        is Number -> value.toLong()
+        is String -> value.toLongOrNull()
+        else -> null
+    }
+
+private fun readGameCard(card: Map<String, Any?>?, side: String? = null): NativeGameCard? {
     if (card == null) return null
-    val code = card.optString("code").trim()
-    if (code.isBlank() || code == "null") return null
+    val code = card.gameString("code")
+    if (code.isBlank()) return null
     return NativeGameCard(
         code = code,
-        rank = card.optInt("rank", 0),
-        suit = card.optString("suit").uppercase(),
+        rank = card.gameInt("rank"),
+        suit = card.gameString("suit").uppercase(),
         side = side
     )
 }
 
-private fun summarizeNativeGameHistory(gameCode: String, result: JSONObject?): String? {
+private fun summarizeNativeGameHistory(gameCode: String, result: Map<String, Any?>?): String? {
     if (result == null) return null
     return when (gameCode) {
         "roulette" -> {
-            val number = result.optInt("number", Int.MIN_VALUE)
-            if (number == Int.MIN_VALUE) null else "$number · ${result.optString("color").uppercase()}"
+            val number = result.gameInt("number", Int.MIN_VALUE)
+            if (number == Int.MIN_VALUE) null else "$number · ${result.gameString("color").uppercase()}"
         }
         "dice" -> {
-            val number = result.optInt("number", Int.MIN_VALUE)
+            val number = result.gameInt("number", Int.MIN_VALUE)
             if (number == Int.MIN_VALUE) null else "Lucky 10: $number"
         }
         "andar_bahar" -> {
-            val winner = result.optString("winner").takeIf { it.isNotBlank() && it != "null" }
-            val count = result.optInt("totalCardsDealt", 0)
+            val winner = result.gameString("winner").takeIf { it.isNotBlank() }
+            val count = result.gameInt("totalCardsDealt")
             winner?.let { "${it.uppercase()} · $count cards" }
         }
         else -> null
@@ -96,80 +115,94 @@ private fun summarizeNativeGameHistory(gameCode: String, result: JSONObject?): S
 }
 
 /**
- * Defensive client parser for the Node authoritative-games route.
+ * Pure parser for the Node authoritative-games JSON contract.
  * Result-bearing fields are ignored until the server publishes RESULT/SETTLED.
  */
 internal fun parseNativeAuthoritativeGameState(
     requestedGameCode: String,
-    response: JSONObject
+    response: Map<String, Any?>
 ): NativeAuthoritativeGameState {
     val code = requestedGameCode.trim().lowercase().replace('-', '_')
     require(code in setOf("roulette", "dice", "andar_bahar")) { "Unsupported authoritative game: $code" }
-    val round = response.optJSONObject("round")
-    val status = (round?.optString("status") ?: response.optString("status", "UNKNOWN")).uppercase()
+    val round = response["round"].asGameMap()
+    val status = (round?.gameString("status") ?: response.gameString("status", "UNKNOWN")).uppercase()
     val resultReady = status == "RESULT" || status == "SETTLED"
 
-    val dealCards = mutableListOf<NativeGameCard>()
-    if (resultReady) {
-        val cards = round?.optJSONArray("dealCards")
-        if (cards != null) {
-            for (index in 0 until cards.length()) {
-                val entry = cards.optJSONObject(index) ?: continue
-                readGameCard(entry.optJSONObject("card"), entry.optString("side"))?.let(dealCards::add)
+    val dealCards = if (resultReady && code == "andar_bahar") {
+        (round?.get("dealCards") as? List<*>)?.mapNotNull { raw ->
+            val entry = raw.asGameMap() ?: return@mapNotNull null
+            readGameCard(entry["card"].asGameMap(), entry.gameString("side"))
+        }.orEmpty()
+    } else emptyList()
+
+    val history = (response["history"] as? List<*>)?.mapNotNull { raw ->
+        val item = raw.asGameMap() ?: return@mapNotNull null
+        val summary = summarizeNativeGameHistory(code, item["result"].asGameMap()) ?: return@mapNotNull null
+        NativeGameHistoryItem(
+            roundNumber = item.gameInt("roundNumber"),
+            summary = summary
+        )
+    }.orEmpty()
+
+    val winningNumber = if (resultReady && code == "roulette") {
+        round?.get("winningNumber")?.let { raw ->
+            when (raw) {
+                is Number -> raw.toInt()
+                is String -> raw.toIntOrNull()
+                else -> null
             }
         }
-    }
-
-    val history = mutableListOf<NativeGameHistoryItem>()
-    val historyJson = response.optJSONArray("history")
-    if (historyJson != null) {
-        for (index in 0 until historyJson.length()) {
-            val item = historyJson.optJSONObject(index) ?: continue
-            val summary = summarizeNativeGameHistory(code, item.optJSONObject("result")) ?: continue
-            history += NativeGameHistoryItem(
-                roundNumber = item.optInt("roundNumber", 0),
-                summary = summary
-            )
+    } else null
+    val diceNumber = if (resultReady && code == "dice") {
+        round?.get("rolledNumber")?.let { raw ->
+            when (raw) {
+                is Number -> raw.toInt()
+                is String -> raw.toIntOrNull()
+                else -> null
+            }
         }
-    }
+    } else null
 
     return NativeAuthoritativeGameState(
         gameCode = code,
-        roundId = round?.optString("id")?.takeIf { it.isNotBlank() && it != "null" },
-        roundNumber = round?.optInt("roundNumber", 0) ?: 0,
+        roundId = round?.gameString("id")?.takeIf { it.isNotBlank() },
+        roundNumber = round?.gameInt("roundNumber") ?: 0,
         roundStatus = status,
-        bettingEndsAt = round?.optLong("bettingEndsAt")?.takeIf { it > 0L },
-        totalBetsCount = round?.optInt("totalBetsCount", 0) ?: 0,
-        totalBetAmount = round?.optString("totalBetAmount", "0") ?: "0",
-        winningNumber = if (resultReady && code == "roulette" && round?.has("winningNumber") == true && !round.isNull("winningNumber")) {
-            round.optInt("winningNumber")
-        } else null,
+        bettingEndsAt = round?.gameLong("bettingEndsAt")?.takeIf { it > 0L },
+        totalBetsCount = round?.gameInt("totalBetsCount") ?: 0,
+        totalBetAmount = round?.gameString("totalBetAmount", "0") ?: "0",
+        winningNumber = winningNumber,
         rouletteColor = if (resultReady && code == "roulette") {
-            round?.optString("color")?.takeIf { it.isNotBlank() && it != "null" }?.lowercase()
+            round?.gameString("color")?.takeIf { it.isNotBlank() }?.lowercase()
         } else null,
-        diceNumber = if (resultReady && code == "dice" && round?.has("rolledNumber") == true && !round.isNull("rolledNumber")) {
-            round.optInt("rolledNumber")
-        } else null,
-        jokerCard = if (resultReady && code == "andar_bahar") readGameCard(round?.optJSONObject("jokerCard")) else null,
-        winningCard = if (resultReady && code == "andar_bahar") readGameCard(round?.optJSONObject("winningCard")) else null,
+        diceNumber = diceNumber,
+        jokerCard = if (resultReady && code == "andar_bahar") readGameCard(round?.get("jokerCard").asGameMap()) else null,
+        winningCard = if (resultReady && code == "andar_bahar") readGameCard(round?.get("winningCard").asGameMap()) else null,
         winningSide = if (resultReady && code == "andar_bahar") {
-            round?.optString("winningSide")?.takeIf { it.isNotBlank() && it != "null" }
+            round?.gameString("winningSide")?.takeIf { it.isNotBlank() }
         } else null,
         dealCards = dealCards,
         history = history
     )
 }
 
-data class NativeGameCatalogItem(
-    val id: String,
-    val code: String,
-    val name: String,
-    val status: String,
-    val minBet: String,
-    val maxBet: String,
-    val poolBalance: String,
-    val description: String
-)
+/** Convert org.json objects at the HTTP boundary; the parser itself stays JVM-testable. */
+private fun Any?.toNativeGameValue(): Any? = when {
+    this === JSONObject.NULL -> null
+    this is JSONObject -> this.toNativeGameMap()
+    this is JSONArray -> (0 until length()).map { opt(it).toNativeGameValue() }
+    else -> this
+}
+
+private fun JSONObject.toNativeGameMap(): Map<String, Any?> {
+    val values = linkedMapOf<String, Any?>()
+    val names = keys()
+    while (names.hasNext()) {
+        val key = names.next()
+        values[key] = opt(key).toNativeGameValue()
+    }
+    return values
+}
 
 class BigDaddyApi {
     private val client = OkHttpClient.Builder()
@@ -316,7 +349,7 @@ class BigDaddyApi {
         val code = gameCode.trim().lowercase().replace('-', '_')
         require(code in setOf("roulette", "dice", "andar_bahar")) { "Unsupported authoritative game: $code" }
         val response = execute(backendRequest("/games/$code/state", token))
-        return parseNativeAuthoritativeGameState(code, response)
+        return parseNativeAuthoritativeGameState(code, response.toNativeGameMap())
     }
 
 
