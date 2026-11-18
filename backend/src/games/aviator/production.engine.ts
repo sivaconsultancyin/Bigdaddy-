@@ -10,7 +10,8 @@ type EngineTickResult = {
 };
 
 const LEASE_TTL_SECONDS = 45;
-const HEARTBEAT_INTERVAL_MS = 5_000;
+// Lease TTL is 45s; a 15s heartbeat preserves a 30s safety margin with fewer DB writes.
+const HEARTBEAT_INTERVAL_MS = 15_000;
 let workerRunning = false;
 let workerPromise: Promise<void> | null = null;
 let lastErrorAt = 0;
