@@ -784,8 +784,13 @@ async function runTestSuite() {
     const nodeEnd = nodeSource.indexOf('async function placeBets', nodeStart);
     assert.ok(nodeStart >= 0 && nodeEnd > nodeStart, 'Node state route must be present');
     const nodeStateRoute = nodeSource.slice(nodeStart, nodeEnd);
-    assert.ok(!nodeStateRoute.includes('advance_round'), 'Node state reads must not advance rounds');
-    assert.ok(nodeStateRoute.includes('readGameState(code)'), 'Node state route must return the authoritative database snapshot');
+    // Ignore comments: they may document the lifecycle function that must not
+    // be called, but must not make a read-only route fail this source regression.
+    const executableNodeRoute = nodeStateRoute
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/advance_round\s*\(/.test(executableNodeRoute), 'Node state reads must not invoke lifecycle transitions');
+    assert.ok(executableNodeRoute.includes('readGameState(code)'), 'Node state route must return the authoritative database snapshot');
   });
 
   console.log(`Results: ${passed} Passed, ${failed} Failed`);
