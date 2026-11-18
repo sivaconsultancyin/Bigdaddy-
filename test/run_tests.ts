@@ -291,7 +291,8 @@ async function runTestSuite() {
 
   test('Aviator polling prefers healthy Realtime and tightens fallback when stale', () => {
     const source = readFileSync('frontend/src/context/WebSocketContext.tsx', 'utf8');
-    assert.ok(source.includes("const intervalMs = running && realtimeStale ? 200 : 1000"));
+    assert.ok(source.includes("const intervalMs = running ? (realtimeStale ? 200 : 5000) : 1000"));
+    assert.ok(source.includes("Terminal lifecycle broadcasts trigger an immediate poll"));
     assert.ok(source.includes("if (inFlight) {\n        rerunRequested = true;\n        return;"));
     assert.ok(source.includes("scheduleNextPoll(pollStartedAt)"));
     assert.ok(source.includes("now - lastEventAt > 1000"));
