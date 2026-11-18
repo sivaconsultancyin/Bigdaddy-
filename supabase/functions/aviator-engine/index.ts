@@ -11,8 +11,6 @@ const json = (body: Record<string, unknown>, status = 200) =>
   });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DICE_CONFIG_CACHE_TTL_MS = 15_000;
-const DICE_CONFIG_RETRY_MS = 5_000;
 
 function secretMatches(expected: string, supplied: string | null): boolean {
   if (!/^[A-Za-z0-9_-]{32,}$/.test(expected) || !supplied) return false;
@@ -128,10 +126,6 @@ Deno.serve(async (req: Request) => {
   const actionCounts: Record<string, number> = {};
   let totalTickRetries = 0;
   let lastAction: unknown = null;
-  let diceTickFailures = 0;
-  let lastDiceAction: unknown = null;
-  let diceStatusCache: string | null = null;
-  let nextDiceStatusRefreshAt = 0;
 
   while (Date.now() - started < runForMs) {
     const tickStarted = Date.now();
@@ -159,8 +153,6 @@ Deno.serve(async (req: Request) => {
         ticksCompleted: tickLatenciesMs.length - 1,
         tickLatencyMs: summarizeLatencies(tickLatenciesMs.slice(0, -1)),
         tickRetries: totalTickRetries,
-        diceTickFailures,
-        lastDiceAction,
       }, 503);
     }
 
@@ -170,32 +162,6 @@ Deno.serve(async (req: Request) => {
         ? String((lastAction as { action: unknown }).action)
         : "unknown";
     actionCounts[action] = (actionCounts[action] ?? 0) + 1;
-
-    // Cache the Dice catalog flag so the Aviator 250ms loop does not issue
-    // an extra platform.games SELECT on every tick. Refresh periodically so
-    // admin activation/deactivation is observed promptly; retry read failures sooner.
-    if (Date.now() >= nextDiceStatusRefreshAt) {
-      const diceConfig = await db.schema("platform").from("games")
-        .select("status").eq("code", "dice").maybeSingle();
-      if (diceConfig.error) {
-        diceTickFailures += 1;
-        diceStatusCache = null;
-        nextDiceStatusRefreshAt = Date.now() + DICE_CONFIG_RETRY_MS;
-        console.error("Dice game config read failed:", diceConfig.error.code ?? "unknown");
-      } else {
-        diceStatusCache = diceConfig.data?.status ?? null;
-        nextDiceStatusRefreshAt = Date.now() + DICE_CONFIG_CACHE_TTL_MS;
-      }
-    }
-    if (diceStatusCache === "ACTIVE") {
-      const diceTick = await db.schema("dice").rpc("advance_round");
-      if (diceTick.error) {
-        diceTickFailures += 1;
-        console.error("Dice engine RPC failed:", diceTick.error.code ?? "unknown");
-      } else {
-        lastDiceAction = diceTick.data ?? null;
-      }
-    }
 
     if (Date.now() >= nextHeartbeatAt) {
       const heartbeat = await db.schema("aviator").rpc(
@@ -256,8 +222,6 @@ Deno.serve(async (req: Request) => {
       ticksCompleted: tickLatenciesMs.length,
       tickLatencyMs: summarizeLatencies(tickLatenciesMs),
       actionCounts,
-      diceTickFailures,
-      lastDiceAction,
     }, 200);
   }
 
@@ -271,7 +235,5 @@ Deno.serve(async (req: Request) => {
     actionCounts,
     tickRetries: totalTickRetries,
     lastAction,
-    diceTickFailures,
-    lastDiceAction,
   });
 });
