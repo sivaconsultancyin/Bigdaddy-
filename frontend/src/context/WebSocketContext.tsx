@@ -323,7 +323,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           otherGamesPollAtRef.current = now;
           // Refresh the active-game inventory in the background; never block Aviator
           // state polling while the inventory endpoint is slow or unavailable.
-          if (now - lastGameListRefreshAtRef.current >= 30000 && !gameListRefreshInFlightRef.current) {
+          if (now - lastGameListRefreshAtRef.current >= 120000 && !gameListRefreshInFlightRef.current) {
             lastGameListRefreshAtRef.current = now;
             const token = window.localStorage.getItem('bigdaddy_auth_token');
             if (token) {
