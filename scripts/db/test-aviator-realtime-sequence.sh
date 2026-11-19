@@ -139,14 +139,41 @@ BEGIN
 END
 $verify$;
 
+-- A new tick after the one-second window must publish the next sequence.
+SELECT pg_sleep(1.05);
+SELECT aviator.tick_crash_engine_with_broadcast();
+
+DO $verify$
+DECLARE
+  v_seq bigint;
+  v_events integer;
+  v_first bigint;
+  v_second bigint;
+BEGIN
+  SELECT multiplier_tick_seq INTO v_seq
+  FROM aviator.game_rounds
+  WHERE id = '00000000-0000-0000-0000-000000000111';
+  SELECT count(*) INTO v_events FROM realtime.test_events;
+  SELECT min((payload->>'tickSequence')::bigint),
+         max((payload->>'tickSequence')::bigint)
+  INTO v_first, v_second
+  FROM realtime.test_events;
+
+  IF v_seq <> 2 OR v_events <> 2 OR v_first <> 1 OR v_second <> 2 THEN
+    RAISE EXCEPTION 'Expected two time-separated events with sequences 1,2; got seq %, events %, first %, second %',
+      v_seq, v_events, v_first, v_second;
+  END IF;
+END
+$verify$;
+
 UPDATE aviator.tick_test_control SET action = 'round_waiting';
 SELECT aviator.tick_crash_engine_with_broadcast();
 
 DO $verify$
 BEGIN
   IF (SELECT multiplier_tick_seq FROM aviator.game_rounds
-      WHERE id = '00000000-0000-0000-0000-000000000111') <> 1
-     OR (SELECT count(*) FROM realtime.test_events) <> 1 THEN
+      WHERE id = '00000000-0000-0000-0000-000000000111') <> 2
+     OR (SELECT count(*) FROM realtime.test_events) <> 2 THEN
     RAISE EXCEPTION 'Non-running tick unexpectedly incremented sequence or broadcast';
   END IF;
 END
