@@ -95,7 +95,13 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110120000_aviator_realtime_e
 psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119170000_aviator_realtime_broadcast_throttle.sql
 
 psql -v ON_ERROR_STOP=1 <<'SQL'
+-- The first RUNNING tick publishes immediately.
 SELECT aviator.tick_crash_engine_with_broadcast();
+
+-- Simulate a broadcast just sent, then prove rapid engine ticks do not fan out.
+UPDATE aviator.game_rounds
+SET last_multiplier_broadcast_at = clock_timestamp()
+WHERE id = '00000000-0000-0000-0000-000000000111';
 SELECT aviator.tick_crash_engine_with_broadcast();
 SELECT aviator.tick_crash_engine_with_broadcast();
 SELECT aviator.tick_crash_engine_with_broadcast();
@@ -139,8 +145,10 @@ BEGIN
 END
 $verify$;
 
--- A new tick after the one-second window must publish the next sequence.
-SELECT pg_sleep(1.05);
+-- A tick after the one-second window must publish the next sequence.
+UPDATE aviator.game_rounds
+SET last_multiplier_broadcast_at = clock_timestamp() - interval '1 second'
+WHERE id = '00000000-0000-0000-0000-000000000111';
 SELECT aviator.tick_crash_engine_with_broadcast();
 
 DO $verify$
