@@ -92,8 +92,15 @@ $function$;
 SQL
 
 psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110120000_aviator_realtime_event_sequence.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119170000_aviator_realtime_broadcast_throttle.sql
 
 psql -v ON_ERROR_STOP=1 <<'SQL'
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
 SELECT aviator.tick_crash_engine_with_broadcast();
 SELECT aviator.tick_crash_engine_with_broadcast();
 
@@ -114,8 +121,8 @@ BEGIN
   SELECT (payload->>'tickSequence')::bigint INTO v_second
   FROM realtime.test_events ORDER BY (payload->>'tickSequence')::bigint DESC LIMIT 1;
 
-  IF v_seq <> 2 OR v_events <> 2 OR v_first <> 1 OR v_second <> 2 THEN
-    RAISE EXCEPTION 'Expected sequence 1,2 and two events; got seq %, events %, first %, second %',
+  IF v_seq <> 1 OR v_events <> 1 OR v_first <> 1 OR v_second <> 1 THEN
+    RAISE EXCEPTION 'Expected the first burst to emit one event with sequence 1; got seq %, events %, first %, second %',
       v_seq, v_events, v_first, v_second;
   END IF;
 
@@ -138,8 +145,8 @@ SELECT aviator.tick_crash_engine_with_broadcast();
 DO $verify$
 BEGIN
   IF (SELECT multiplier_tick_seq FROM aviator.game_rounds
-      WHERE id = '00000000-0000-0000-0000-000000000111') <> 2
-     OR (SELECT count(*) FROM realtime.test_events) <> 2 THEN
+      WHERE id = '00000000-0000-0000-0000-000000000111') <> 1
+     OR (SELECT count(*) FROM realtime.test_events) <> 1 THEN
     RAISE EXCEPTION 'Non-running tick unexpectedly incremented sequence or broadcast';
   END IF;
 END
