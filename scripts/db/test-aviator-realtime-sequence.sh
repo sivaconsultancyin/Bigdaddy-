@@ -92,7 +92,7 @@ $function$;
 SQL
 
 psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110120000_aviator_realtime_event_sequence.sql
-psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119170000_aviator_realtime_broadcast_throttle.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119164528_aviator_realtime_broadcast_throttle.sql
 
 psql -v ON_ERROR_STOP=1 <<'SQL'
 -- The first RUNNING tick publishes immediately.
