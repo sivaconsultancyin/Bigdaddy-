@@ -52,36 +52,17 @@ async function runTestSuite() {
     assert.ok(middlewareSource.includes("await import('../db/storage')"));
   });
 
-  test('API health inventory covers every registered backend API route', () => {
-    const routeFiles = [
-      'server.ts',
-      'backend/src/routes/production.routes.ts',
-      'backend/src/routes/production.requests.routes.ts',
-      'backend/src/routes/authoritative-games.routes.ts',
-    ];
-    const inventorySource = readFileSync('frontend/src/components/owner/ApiHealthPanel.tsx', 'utf8');
-    const inventory = [...inventorySource.matchAll(/\{ method: '([A-Z]+)', path: '([^']+)'/g)]
+  test('Owner API health panel automatically probes only lightweight health endpoints', () => {
+    const source = readFileSync('frontend/src/components/owner/ApiHealthPanel.tsx', 'utf8');
+    const inventory = [...source.matchAll(/\{ method: '([A-Z]+)', path: '([^']+)'/g)]
       .map((match) => ({ method: match[1], path: match[2] }));
-    const definitions = routeFiles.flatMap((file) => {
-      const source = readFileSync(file, 'utf8');
-      return [...source.matchAll(/(?:productionRouter|productionRequestsRouter|authoritativeGamesRouter|app)\.(get|post|put|patch|delete|options|head)\s*\(\s*'([^']+)'/g)]
-        .map((match) => ({
-          method: match[1].toUpperCase(),
-          path: match[2].replace(/^\/api(?=\/)/, ''),
-        }))
-        .filter((route) => route.path !== '*');
-    });
-    const matchesRoute = (pattern: string, actual: string) => {
-      const expectedParts = pattern.split('/');
-      const actualParts = actual.split('/');
-      return expectedParts.length === actualParts.length && expectedParts.every((part, index) =>
-        part.startsWith(':') ? actualParts[index].length > 0 : part === actualParts[index]
-      );
-    };
-    const missing = definitions.filter((route) =>
-      !inventory.some((probe) => probe.method === route.method && matchesRoute(route.path, probe.path))
-    );
-    assert.deepStrictEqual(missing, [], 'Health inventory is missing registered backend routes');
+    assert.deepStrictEqual(inventory, [
+      { method: 'GET', path: '/health' },
+      { method: 'GET', path: '/ready' },
+      { method: 'GET', path: '/config' },
+    ]);
+    assert.ok(source.includes('window.setInterval(() => { void checkEndpoints(); }, 30000)'));
+    assert.ok(source.includes('window.setInterval(() => { void loadFailures(); }, 60000)'));
   });
 
 
