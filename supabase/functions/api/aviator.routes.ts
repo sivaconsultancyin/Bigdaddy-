@@ -3,7 +3,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 type ResponseFactory = (body: Record<string, unknown>, status?: number, origin?: string | null) => Response;
 type TokenVerifier = (token: string) => Promise<any>;
 type AmountValidator = (value: unknown) => string | null;
-type ActorResolver = (req: Request, db: SupabaseClient) => Promise<{ actor?: any; error?: string; status?: number }>;
+type ActorResolver = (req: Request, db: SupabaseClient) => Promise<{ actor?: any; error?: string; status?: number; timings?: { jwtMs: number; dbMs: number } }>;
 type AuditWriter = (db: SupabaseClient, actorId: string, action: string, targetType: string, targetId: string, details: Record<string, unknown>) => Promise<void>;
 let aviatorStateRequestCount = 0;
 
@@ -131,10 +131,20 @@ export async function handleAviatorApi(
     const auth = await actorFrom(req, db);
     if (!auth.actor) {
       if (path === "/games/aviator/state") {
-        console.error(JSON.stringify({ event: "aviator_state_api_timing", httpStatus: auth.status ?? 401, totalMs: Math.round(performance.now() - requestStartedAt), errorCode: auth.error ?? "AUTH_REQUIRED" }));
+        console.error(JSON.stringify({
+          event: "aviator_state_api_timing",
+          httpStatus: auth.status ?? 401,
+          totalMs: Math.round(performance.now() - requestStartedAt),
+          jwtMs: auth.timings?.jwtMs ?? null,
+          authDbMs: auth.timings?.dbMs ?? null,
+          rpcMs: null, responseMs: null,
+          errorCode: auth.error ?? "AUTH_REQUIRED",
+        }));
       }
       return response({ error: auth.error ?? "AUTH_REQUIRED" }, auth.status ?? 401, origin);
     }
+    // Keep per-request stage timings local; never emit tokens or user identifiers.
+    (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings = auth.timings;
   }
 
     if (req.method === "GET" && path === "/games/aviator/state") {
@@ -146,14 +156,19 @@ export async function handleAviatorApi(
       const { data, error } = await db.schema("aviator").rpc("get_aviator_state_bundle");
       const rpcDurationMs = Math.round(performance.now() - rpcStartedAt);
       if (error || !data || typeof data !== "object") {
+        const responseStartedAt = performance.now();
+        const result = response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
         console.error(JSON.stringify({
           event: "aviator_state_api_timing",
           httpStatus: 503,
           totalMs: Math.round(performance.now() - requestStartedAt),
+          jwtMs: (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings?.jwtMs ?? null,
+          authDbMs: (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings?.dbMs ?? null,
           rpcMs: rpcDurationMs,
+          responseMs: Math.round(performance.now() - responseStartedAt),
           errorCode: error?.code ?? "INVALID_STATE_BUNDLE",
         }));
-        return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
+        return result;
       }
       const rounds = Array.isArray(data.rounds) ? data.rounds : [];
       const row = data.round ?? null;
@@ -162,19 +177,29 @@ export async function handleAviatorApi(
         serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
       }));
       if (!row) {
+        const responseStartedAt = performance.now();
+        const result = response({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
+        const responseMs = Math.round(performance.now() - responseStartedAt);
         const totalMs = Math.round(performance.now() - requestStartedAt);
         if (totalMs >= 250 || aviatorStateRequestCount % 20 === 0) {
+          const authTimings = (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings;
           console.log(JSON.stringify({
-            event: "aviator_state_api_timing", httpStatus: 200, totalMs, rpcMs: rpcDurationMs,
+            event: "aviator_state_api_timing", httpStatus: 200, totalMs,
+            jwtMs: authTimings?.jwtMs ?? null, authDbMs: authTimings?.dbMs ?? null,
+            rpcMs: rpcDurationMs, responseMs,
             roundId: null, status: null, multiplier: null,
           }));
         }
-        return response({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
+        return result;
       }
-      const elapsedSeconds = Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000);
-      const liveMultiplier = Math.floor(Math.exp(0.06 * Math.pow(elapsedSeconds, 1.15)) * 100) / 100;
       const crashed = ["CRASHED","SETTLED"].includes(row.status);
-      const multiplier = row.status === "RUNNING" ? Math.min(liveMultiplier, Number(row.crash_multiplier ?? liveMultiplier)) : crashed ? Number(row.crash_multiplier ?? 1) : 1;
+      // The state-bundle RPC now computes this with the same Postgres expression
+      // used by tick_crash_engine(); retain a bounded fallback for older DB versions.
+      const elapsedSeconds = Math.min(60, Math.max(0, (Date.now() - new Date(row.started_at).getTime()) / 1000));
+      const fallbackMultiplier = Math.floor(Math.exp(Math.min(Math.log(100000), 0.06 * Math.pow(elapsedSeconds, 1.15))) * 100) / 100;
+      const multiplier = Number.isFinite(Number(row.multiplier))
+        ? Number(row.multiplier)
+        : row.status === "RUNNING" ? Math.min(fallbackMultiplier, Number(row.crash_multiplier ?? fallbackMultiplier)) : crashed ? Number(row.crash_multiplier ?? 1) : 1;
       const bets = (Array.isArray(data.bets) ? data.bets : []).map((b: any) => ({
         id:b.id, roundId:b.round_id, betAmount:String(b.bet_amount), autoCashout:b.auto_cashout,
         status:b.status, payoutAmount:String(b.payout_amount ?? 0), cashedOutAt:b.cashed_out_at,
@@ -185,19 +210,29 @@ export async function handleAviatorApi(
         endedAt:row.ended_at, multiplier, crashMultiplier:crashed ? row.crash_multiplier : null,
         serverSeedHash:row.server_seed_hash, revealedServerSeed:row.revealed_server_seed,
       };
+      const responseStartedAt = performance.now();
+      const payload = { round: current, bets, history, serverTime: new Date().toISOString() };
+      const result = response(payload, 200, origin);
+      const responseMs = Math.round(performance.now() - responseStartedAt);
       const totalMs = Math.round(performance.now() - requestStartedAt);
       if (totalMs >= 250 || aviatorStateRequestCount % 20 === 0) {
+        const authTimings = (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings;
         console.log(JSON.stringify({
           event: "aviator_state_api_timing",
           httpStatus: 200,
           totalMs,
+          jwtMs: authTimings?.jwtMs ?? null,
+          authDbMs: authTimings?.dbMs ?? null,
           rpcMs: rpcDurationMs,
+          responseMs,
           roundId: current.id,
           status: current.status,
           multiplier: current.multiplier,
+          multiplierSource: Number.isFinite(Number(row.multiplier)) ? "postgres_state_bundle" : "edge_fallback",
+          multiplierTickSeq: Number(row.multiplier_tick_seq ?? 0),
         }));
       }
-      return response({ round: current, bets, history, serverTime: new Date().toISOString() }, 200, origin);
+      return result;
     }
   
     if (req.method === "GET" && path === "/games/aviator/history") {
