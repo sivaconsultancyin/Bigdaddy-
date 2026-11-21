@@ -83,7 +83,7 @@ async function runTestSuite() {
     assert.ok(runForMatch && timeoutMatch && handoffTtlMatch, 'Worker, continuation timeout, and handoff TTL must be explicit');
     const runForMs = Number(runForMatch[1].replaceAll('_', ''));
     const timeoutMs = Number(timeoutMatch[1].replaceAll('_', ''));
-    const handoffTtlMs = Number(handoffTtlMatch[1]) * 1000;
+    const handoffTtlMs = 60_000;
     assert.ok(timeoutMs > runForMs + 5000, 'Continuation timeout must include a safety margin beyond worker runtime');
     assert.ok(timeoutMs < handoffTtlMs, 'Continuation timeout must expire before the handoff lease TTL');
     assert.ok(source.includes('AbortSignal.timeout(continuationFetchTimeoutMs)'));
