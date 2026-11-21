@@ -243,6 +243,28 @@ Deno.serve(async (req: Request) => {
         : "unknown";
     actionCounts[action] = (actionCounts[action] ?? 0) + 1;
 
+    // Sample only every fifth actual Realtime broadcast to keep log/egress volume low.
+    if (typeof lastAction === "object" && lastAction !== null) {
+      const sample = lastAction as Record<string, unknown>;
+      const sequence = Number(sample.broadcastTickSequence);
+      const engineMultiplier = Number(sample.multiplier);
+      const broadcastMultiplier = Number(sample.broadcastMultiplier);
+      if (Number.isInteger(sequence) && sequence > 0 && sequence % 5 === 0 &&
+          Number.isFinite(engineMultiplier) && Number.isFinite(broadcastMultiplier)) {
+        console.info(JSON.stringify({
+          event: "aviator_multiplier_parity",
+          workerId, generation,
+          roundId: sample.roundId ?? null,
+          tickSequence: sequence,
+          engineMultiplier,
+          broadcastMultiplier,
+          delta: Math.round((engineMultiplier - broadcastMultiplier) * 100) / 100,
+          matches: engineMultiplier === broadcastMultiplier,
+          at: new Date().toISOString(),
+        }));
+      }
+    }
+
     if (Date.now() >= nextHeartbeatAt) {
       const heartbeat = await db.schema("aviator").rpc(
         "heartbeat_crash_engine_lease",
