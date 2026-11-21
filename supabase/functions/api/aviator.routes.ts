@@ -156,14 +156,19 @@ export async function handleAviatorApi(
       const { data, error } = await db.schema("aviator").rpc("get_aviator_state_bundle");
       const rpcDurationMs = Math.round(performance.now() - rpcStartedAt);
       if (error || !data || typeof data !== "object") {
+        const responseStartedAt = performance.now();
+        const result = response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
         console.error(JSON.stringify({
           event: "aviator_state_api_timing",
           httpStatus: 503,
           totalMs: Math.round(performance.now() - requestStartedAt),
+          jwtMs: (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings?.jwtMs ?? null,
+          authDbMs: (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings?.dbMs ?? null,
           rpcMs: rpcDurationMs,
+          responseMs: Math.round(performance.now() - responseStartedAt),
           errorCode: error?.code ?? "INVALID_STATE_BUNDLE",
         }));
-        return response({ error: "GAME_SERVICE_UNAVAILABLE" }, 503, origin);
+        return result;
       }
       const rounds = Array.isArray(data.rounds) ? data.rounds : [];
       const row = data.round ?? null;
@@ -172,14 +177,20 @@ export async function handleAviatorApi(
         serverSeedHash: r.server_seed_hash, revealedServerSeed: r.revealed_server_seed,
       }));
       if (!row) {
+        const responseStartedAt = performance.now();
+        const result = response({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
+        const responseMs = Math.round(performance.now() - responseStartedAt);
         const totalMs = Math.round(performance.now() - requestStartedAt);
         if (totalMs >= 250 || aviatorStateRequestCount % 20 === 0) {
+          const authTimings = (req as Request & { __aviatorAuthTimings?: { jwtMs: number; dbMs: number } }).__aviatorAuthTimings;
           console.log(JSON.stringify({
-            event: "aviator_state_api_timing", httpStatus: 200, totalMs, rpcMs: rpcDurationMs,
+            event: "aviator_state_api_timing", httpStatus: 200, totalMs,
+            jwtMs: authTimings?.jwtMs ?? null, authDbMs: authTimings?.dbMs ?? null,
+            rpcMs: rpcDurationMs, responseMs,
             roundId: null, status: null, multiplier: null,
           }));
         }
-        return response({ round: null, bets: [], history, serverTime: new Date().toISOString() }, 200, origin);
+        return result;
       }
       const crashed = ["CRASHED","SETTLED"].includes(row.status);
       // The state-bundle RPC now computes this with the same Postgres expression
