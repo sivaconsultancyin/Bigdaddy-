@@ -12,6 +12,10 @@ const json = (body: Record<string, unknown>, status = 200) =>
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The handler runs its worker for 42s before responding. Keep this request alive
+// long enough for the normal worker cycle, while remaining below the 60s handoff TTL.
+const continuationFetchTimeoutMs = 55_000;
+
 function secretMatches(expected: string, supplied: string | null): boolean {
   if (!/^[A-Za-z0-9_-]{32,}$/.test(expected) || !supplied) return false;
   const encoder = new TextEncoder();
@@ -57,7 +61,7 @@ function scheduleContinuation(
             "x-aviator-continuation-attempt-id": attemptId,
           },
           body: "{}",
-          signal: AbortSignal.timeout(12_000),
+          signal: AbortSignal.timeout(continuationFetchTimeoutMs),
         });
         await response.body?.cancel();
         if (response.ok) {
