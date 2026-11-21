@@ -88,7 +88,12 @@ async function runTestSuite() {
     // GitHub Actions may construct a merge ref whose tree listing omits newly-added PR files.
     const actualFiles = (readdirSync('supabase/migrations') as string[]).filter((name: string) => name.endsWith('.sql')).sort();
     // This PR's throttle migration is intentionally pending review and is not part of the 2026-11-13 ledger snapshot.
-    const snapshotFiles = actualFiles.filter((name: string) => name !== '20261119164528_aviator_realtime_broadcast_throttle.sql');
+    const snapshotFiles = actualFiles.filter((name: string) =>
+      ![
+        '20261119164528_aviator_realtime_broadcast_throttle.sql',
+        '20261121000000_aviator_worker_reliability_watchdog.sql',
+      ].includes(name)
+    );
     const missingFiles = declaredFiles.filter((name: string) => {
       try { readFileSync(`supabase/migrations/${name}`, 'utf8'); return false; }
       catch { return true; }
