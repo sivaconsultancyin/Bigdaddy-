@@ -112,11 +112,19 @@ async function runWorker(): Promise<void> {
 export function startProductionCrashEngine() {
   if (workerRunning) return;
   workerRunning = true;
-  workerPromise = runWorker().finally(() => {
+  workerPromise = (async () => {
+    while (workerRunning) {
+      await runWorker();
+      if (workerRunning) {
+        console.warn('Aviator worker loop exited; supervisor will retry lease acquisition in 5 seconds.');
+        await sleep(5_000);
+      }
+    }
+  })().finally(() => {
     workerRunning = false;
     workerPromise = null;
   });
-  console.log('Aviator scheduler started with a shared distributed lease; engine ticks and multiplier broadcasts use Supabase RPC.');
+  console.log('Aviator scheduler started with a supervised distributed-lease loop; engine ticks and multiplier broadcasts use Supabase RPC.');
 }
 
 export function stopProductionCrashEngine() {
