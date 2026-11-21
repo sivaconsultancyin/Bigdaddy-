@@ -77,8 +77,8 @@ async function runTestSuite() {
 
   test('Aviator continuation timeout covers worker runtime and stays within handoff lease TTL', () => {
     const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
-    const runForMatch = source.match(/const runForMs = ([\\d_]+);/);
-    const timeoutMatch = source.match(/const continuationFetchTimeoutMs = ([\\d_]+);/);
+    const runForMatch = source.match(/const runForMs = ([0-9_]+);/);
+    const timeoutMatch = source.match(/const continuationFetchTimeoutMs = ([0-9_]+);/);
     const handoffTtlMatch = source.match(/p_ttl_seconds: (\\d+)/);
     assert.ok(runForMatch && timeoutMatch && handoffTtlMatch, 'Worker, continuation timeout, and handoff TTL must be explicit');
     const runForMs = Number(runForMatch[1].replaceAll('_', ''));
