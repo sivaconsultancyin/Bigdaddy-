@@ -244,14 +244,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const running = roundStateRef.current.status === 'RUNNING';
       const now = Date.now();
       const lastEventAt = lastRealtimeEventAtRef.current;
-      const realtimeStale = !isRealtimeConnectedRef.current || lastEventAt === null || now - lastEventAt > 1000;
+      const realtimeStale = !isRealtimeConnectedRef.current || lastEventAt === null || now - lastEventAt > 3000;
       if (running && realtimeStale && now - lastFallbackCountAtRef.current >= 1000) {
         lastFallbackCountAtRef.current = now;
         setPollingFallbackCount((count) => count + 1);
       }
-      // Realtime carries live multipliers and lifecycle transitions while healthy.
-      // Use a 5s state safety poll during healthy RUNNING rounds; keep the 200ms
-      // recovery poll when Realtime is stale/disconnected and 1s outside RUNNING.
+      // Realtime carries live multipliers at a throttled ~1s cadence and lifecycle transitions.
+      // Allow a 3s event-age grace window so normal throttling does not trigger fallback.
+      // Use a 5s state safety poll while healthy; keep the 200ms recovery poll only
+      // when Realtime is genuinely stale/disconnected and 1s outside RUNNING.
       // Terminal lifecycle broadcasts trigger an immediate poll for settled bets/wallet.
       const intervalMs = running ? (realtimeStale ? 200 : 5000) : 1000;
       // Measure from request start, not request completion, while never overlapping

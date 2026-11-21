@@ -92,8 +92,21 @@ $function$;
 SQL
 
 psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261110120000_aviator_realtime_event_sequence.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119164528_aviator_realtime_broadcast_throttle.sql
 
 psql -v ON_ERROR_STOP=1 <<'SQL'
+-- The first RUNNING tick publishes immediately.
+SELECT aviator.tick_crash_engine_with_broadcast();
+
+-- Simulate a broadcast just sent, then prove rapid engine ticks do not fan out.
+UPDATE aviator.game_rounds
+SET last_multiplier_broadcast_at = clock_timestamp()
+WHERE id = '00000000-0000-0000-0000-000000000111';
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
+SELECT aviator.tick_crash_engine_with_broadcast();
 SELECT aviator.tick_crash_engine_with_broadcast();
 SELECT aviator.tick_crash_engine_with_broadcast();
 
@@ -114,8 +127,8 @@ BEGIN
   SELECT (payload->>'tickSequence')::bigint INTO v_second
   FROM realtime.test_events ORDER BY (payload->>'tickSequence')::bigint DESC LIMIT 1;
 
-  IF v_seq <> 2 OR v_events <> 2 OR v_first <> 1 OR v_second <> 2 THEN
-    RAISE EXCEPTION 'Expected sequence 1,2 and two events; got seq %, events %, first %, second %',
+  IF v_seq <> 1 OR v_events <> 1 OR v_first <> 1 OR v_second <> 1 THEN
+    RAISE EXCEPTION 'Expected the first burst to emit one event with sequence 1; got seq %, events %, first %, second %',
       v_seq, v_events, v_first, v_second;
   END IF;
 
@@ -128,6 +141,35 @@ BEGIN
        OR payload->>'roundNumber' <> '42'
   ) THEN
     RAISE EXCEPTION 'Broadcast payload did not preserve the expected public round fields';
+  END IF;
+END
+$verify$;
+
+-- A tick after the one-second window must publish the next sequence.
+UPDATE aviator.game_rounds
+SET last_multiplier_broadcast_at = clock_timestamp() - interval '1 second'
+WHERE id = '00000000-0000-0000-0000-000000000111';
+SELECT aviator.tick_crash_engine_with_broadcast();
+
+DO $verify$
+DECLARE
+  v_seq bigint;
+  v_events integer;
+  v_first bigint;
+  v_second bigint;
+BEGIN
+  SELECT multiplier_tick_seq INTO v_seq
+  FROM aviator.game_rounds
+  WHERE id = '00000000-0000-0000-0000-000000000111';
+  SELECT count(*) INTO v_events FROM realtime.test_events;
+  SELECT min((payload->>'tickSequence')::bigint),
+         max((payload->>'tickSequence')::bigint)
+  INTO v_first, v_second
+  FROM realtime.test_events;
+
+  IF v_seq <> 2 OR v_events <> 2 OR v_first <> 1 OR v_second <> 2 THEN
+    RAISE EXCEPTION 'Expected two time-separated events with sequences 1,2; got seq %, events %, first %, second %',
+      v_seq, v_events, v_first, v_second;
   END IF;
 END
 $verify$;
