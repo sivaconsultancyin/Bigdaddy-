@@ -75,7 +75,7 @@ DECLARE
   v_recovery integer;
   v_http integer;
 BEGIN
-  SELECT schedule, command INTO STRICT v_command, v_command FROM cron.job
+  SELECT command INTO STRICT v_command FROM cron.job
   WHERE jobname = 'bigdaddy-aviator-engine';
   IF (SELECT schedule FROM cron.job WHERE jobname = 'bigdaddy-aviator-engine') <> '15 seconds' THEN
     RAISE EXCEPTION 'Watchdog schedule was not changed to 15 seconds';
