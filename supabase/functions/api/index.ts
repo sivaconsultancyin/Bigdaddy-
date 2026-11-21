@@ -70,7 +70,7 @@ function client(): SupabaseClient {
   if (!url || !key) throw new Error("SERVER_CONFIGURATION_ERROR");
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
-async function actorFrom(req: Request, db: SupabaseClient): Promise<{ actor?: Actor; error?: string; status?: number }> {
+async function actorFrom(req: Request, db: SupabaseClient): Promise<{ actor?: Actor; error?: string; status?: number; timings?: { jwtMs: number; dbMs: number } }> {
   const header = req.headers.get("authorization") ?? "";
   if (!header.startsWith("Bearer ")) return { error: "AUTH_REQUIRED", status: 401 };
   const jwtStartedAt = performance.now();
