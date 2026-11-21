@@ -79,8 +79,8 @@ async function runTestSuite() {
     const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
     const runForMatch = source.match(/const runForMs = ([0-9_]+);/);
     const timeoutMatch = source.match(/const continuationFetchTimeoutMs = ([0-9_]+);/);
-    const handoffTtlMatch = source.match(/p_ttl_seconds: (\\d+)/);
-    assert.ok(runForMatch && timeoutMatch && handoffTtlMatch, 'Worker, continuation timeout, and handoff TTL must be explicit');
+    assert.ok(source.includes('p_ttl_seconds: 60'), 'The 60s handoff TTL must remain explicit');
+    assert.ok(runForMatch && timeoutMatch, 'Worker runtime and continuation timeout must be explicit');
     const runForMs = Number(runForMatch[1].replaceAll('_', ''));
     const timeoutMs = Number(timeoutMatch[1].replaceAll('_', ''));
     const handoffTtlMs = 60_000;
