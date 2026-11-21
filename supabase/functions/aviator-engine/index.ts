@@ -27,7 +27,7 @@ function scheduleContinuation(
   url: string,
   secret: string,
   handoffToken: string,
-  db: ReturnType<typeof createClient>,
+  releaseHandoff: () => PromiseLike<{ data: boolean | null; error: { message: string } | null }>,
   workerId: string,
   generation: number | null,
 ) {
@@ -74,9 +74,7 @@ function scheduleContinuation(
 
     // Release only if the handoff token is still the lease owner. If the
     // continuation was accepted but its response was lost, this is a safe no-op.
-    const released = await db.schema("aviator").rpc("release_crash_engine_lease", {
-      p_owner_token: handoffToken,
-    });
+    const released = await releaseHandoff();
     console.error(JSON.stringify({
       event: "aviator_continuation_exhausted",
       workerId, generation, reason: lastFailure,
@@ -262,7 +260,11 @@ Deno.serve(async (req: Request) => {
     actionCounts, at: new Date().toISOString(),
   }));
   const continuationScheduled = scheduleContinuation(
-    url, expected, nextHandoffToken, db, workerId, generation,
+    url, expected, nextHandoffToken,
+    () => db.schema("aviator").rpc("release_crash_engine_lease", {
+      p_owner_token: nextHandoffToken,
+    }),
+    workerId, generation,
   );
   if (!continuationScheduled) {
     // The lease expires automatically if the EdgeRuntime continuation facility is unavailable.
