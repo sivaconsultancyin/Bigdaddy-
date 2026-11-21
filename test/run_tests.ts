@@ -82,6 +82,40 @@ async function runTestSuite() {
     assert.ok(source.includes('tickIntervalMs: { allStates: 1_000 }'));
   });
 
+  test('Aviator state API uses one restricted actor-validation RPC and records stage timings', () => {
+    const apiSource = readFileSync('supabase/functions/api/index.ts', 'utf8');
+    const routeSource = readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8');
+    const migration = readFileSync('supabase/migrations/20261121130000_aviator_state_auth_multiplier_telemetry.sql', 'utf8');
+    assert.ok(apiSource.includes('rpc(\n    "resolve_big_daddy_actor"'));
+    assert.ok(!apiSource.includes('db.schema("platform").from("role_assignments")'));
+    assert.ok(routeSource.includes('jwtMs: auth.timings?.jwtMs'));
+    assert.ok(routeSource.includes('authDbMs: auth.timings?.dbMs'));
+    assert.ok(routeSource.includes('rpcMs: rpcDurationMs'));
+    assert.ok(routeSource.includes('responseMs'));
+    assert.ok(migration.includes('SECURITY DEFINER'));
+    assert.ok(migration.includes('REVOKE ALL ON FUNCTION platform.resolve_big_daddy_actor(uuid, text) FROM PUBLIC, anon, authenticated'));
+    assert.ok(migration.includes('GRANT EXECUTE ON FUNCTION platform.resolve_big_daddy_actor(uuid, text) TO service_role'));
+  });
+
+  test('Aviator engine and Realtime broadcast expose the same authoritative multiplier', () => {
+    const engineSource = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
+    const routeSource = readFileSync('supabase/functions/api/aviator.routes.ts', 'utf8');
+    const migration = readFileSync('supabase/migrations/20261121130000_aviator_state_auth_multiplier_telemetry.sql', 'utf8');
+    assert.ok(migration.includes("'broadcastMultiplier', v_payload->'multiplier'"));
+    assert.ok(migration.includes("'multiplier', (v_result->>'multiplier')::numeric"));
+    assert.ok(engineSource.includes('event: "aviator_multiplier_parity"'));
+    assert.ok(engineSource.includes('matches: engineMultiplier === broadcastMultiplier'));
+    assert.ok(routeSource.includes('multiplierSource: Number.isFinite(Number(row.multiplier)) ? "postgres_state_bundle" : "edge_fallback"'));
+    assert.ok(migration.includes('floor(exp(0.06 * power(greatest(0::numeric, extract(epoch FROM (now() - cr.started_at))::numeric), 1.15)) * 100) / 100'));
+  });
+
+  test('Aviator state bundle carries the latest broadcast sequence and does not add redundant hot-path indexes', () => {
+    const migration = readFileSync('supabase/migrations/20261121130000_aviator_state_auth_multiplier_telemetry.sql', 'utf8');
+    assert.ok(migration.includes('multiplier_tick_seq'));
+    assert.ok(migration.includes("'multiplier',"));
+    assert.ok(!migration.includes('CREATE INDEX'), 'Existing round_id and game_code/round_number indexes already cover the bundle access paths');
+  });
+
   test('Aviator continuation timeout covers worker runtime and stays within handoff lease TTL', () => {
     const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
     const runForMatch = source.match(/const runForMs = ([0-9_]+);/);
