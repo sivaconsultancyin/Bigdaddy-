@@ -55,7 +55,8 @@ BEGIN
             timeout_milliseconds := 15000
           );
         END IF;
-      END
+      END;
+      $watchdog$;
     $command$
   );
 END
