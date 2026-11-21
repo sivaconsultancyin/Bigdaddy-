@@ -41,6 +41,12 @@ function scheduleContinuation(
     let lastFailure = "unknown";
     for (let attempt = 1; attempt <= 3; attempt++) {
       const attemptStartedAt = Date.now();
+      const attemptId = crypto.randomUUID();
+      console.info(JSON.stringify({
+        event: "aviator_continuation_attempt_started",
+        workerId, generation, attempt, attemptId,
+        at: new Date().toISOString(),
+      }));
       try {
         const response = await fetch(endpoint, {
           method: "POST",
@@ -48,6 +54,7 @@ function scheduleContinuation(
             "content-type": "application/json",
             "x-aviator-engine-secret": secret,
             "x-aviator-engine-handoff-token": handoffToken,
+            "x-aviator-continuation-attempt-id": attemptId,
           },
           body: "{}",
           signal: AbortSignal.timeout(12_000),
@@ -65,10 +72,24 @@ function scheduleContinuation(
         lastFailure = `http_${response.status}`;
       } catch (error) {
         lastFailure = error instanceof Error ? error.message : "unknown";
+        const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+        const causeRecord = typeof cause === "object" && cause !== null
+          ? cause as { name?: unknown; code?: unknown }
+          : null;
+        console.error(JSON.stringify({
+          event: "aviator_continuation_fetch_error",
+          workerId, generation, attempt, attemptId,
+          errorName: error instanceof Error ? error.name : "unknown",
+          reason: lastFailure,
+          causeName: typeof causeRecord?.name === "string" ? causeRecord.name : null,
+          causeCode: typeof causeRecord?.code === "string" ? causeRecord.code : null,
+          elapsedMs: Date.now() - attemptStartedAt,
+          at: new Date().toISOString(),
+        }));
       }
       console.error(JSON.stringify({
         event: "aviator_continuation_retry",
-        workerId, generation, attempt, reason: lastFailure,
+        workerId, generation, attempt, attemptId, reason: lastFailure,
         elapsedMs: Date.now() - attemptStartedAt,
         at: new Date().toISOString(),
       }));
@@ -108,6 +129,15 @@ function summarizeLatencies(samples: number[]) {
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  const continuationAttemptId = req.headers.get("x-aviator-continuation-attempt-id");
+  if (continuationAttemptId && /^[0-9a-f-]{36}$/i.test(continuationAttemptId)) {
+    console.info(JSON.stringify({
+      event: "aviator_continuation_received",
+      attemptId: continuationAttemptId,
+      at: new Date().toISOString(),
+    }));
+  }
 
   const expected = Deno.env.get("AVIATOR_ENGINE_SECRET");
   const supplied = req.headers.get("x-aviator-engine-secret");
