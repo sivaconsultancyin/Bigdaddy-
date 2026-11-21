@@ -262,15 +262,9 @@ Deno.serve(async (req: Request) => {
       nextHeartbeatAt = Date.now() + heartbeatEveryMs;
     }
 
-    const delayMs =
-      action === "round_running" ? 250 :
-      action === "round_started" ? 150 :
-      action === "waiting" || action === "round_created" ? 500 :
-      action === "settled_recovery" ? 250 :
-      action === "cooldown" || action === "busy" ? 1_000 :
-      750;
-
-    await sleep(delayMs);
+    // Uniform 1-second cadence across every Aviator lifecycle state.
+    // This reduces RPC volume but may add up to ~1s to crash/auto-cashout processing.
+    await sleep(1_000);
   }
 
   const nextHandoffToken = crypto.randomUUID();
@@ -328,7 +322,7 @@ Deno.serve(async (req: Request) => {
     ok: true,
     ticksCompleted: tickLatenciesMs.length,
     elapsedMs: Date.now() - started,
-    tickIntervalMs: { running: 250, waiting: 500, idle: 1000 },
+    tickIntervalMs: { allStates: 1_000 },
     continuationScheduled: true,
     tickLatencyMs: summarizeLatencies(tickLatenciesMs),
     actionCounts,

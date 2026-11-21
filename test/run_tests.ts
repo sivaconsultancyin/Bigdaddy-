@@ -75,6 +75,13 @@ async function runTestSuite() {
     assert.ok(!engineSource.includes('diceTickFailures'));
   });
 
+  test('Aviator worker uses a uniform 1000ms tick cadence in every lifecycle state', () => {
+    const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
+    assert.ok(source.includes('await sleep(1_000);'), 'Every tick must wait 1000ms');
+    assert.ok(!/round_running.*250|round_started.*150|round_created.*500|settled_recovery.*250/.test(source));
+    assert.ok(source.includes('tickIntervalMs: { allStates: 1_000 }'));
+  });
+
   test('Aviator continuation timeout covers worker runtime and stays within handoff lease TTL', () => {
     const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
     const runForMatch = source.match(/const runForMs = ([0-9_]+);/);
