@@ -73,39 +73,35 @@ function client(): SupabaseClient {
 async function actorFrom(req: Request, db: SupabaseClient): Promise<{ actor?: Actor; error?: string; status?: number }> {
   const header = req.headers.get("authorization") ?? "";
   if (!header.startsWith("Bearer ")) return { error: "AUTH_REQUIRED", status: 401 };
+  const jwtStartedAt = performance.now();
   const claims = await verifyBigDaddyToken(header.slice(7).trim());
-  if (!claims) return { error: "INVALID_TOKEN", status: 401 };
-  // Keep account and role reads separate here. The embedded PostgREST relationship
-  // has caused AUTH_SERVICE_UNAVAILABLE on every authenticated route in production.
-  // Both queries remain server-side and we still require exactly one current role.
-  // These reads are independent after JWT signature verification; run them in
-  // parallel to remove one full PostgREST round-trip from the live state hot path.
-  const [userResult, roleResult] = await Promise.all([
-    db.schema("platform").from("users")
-      .select("id,username,parent_id,is_active")
-      .eq("id", claims.id).maybeSingle(),
-    db.schema("platform").from("role_assignments")
-      .select("role")
-      .eq("user_id", claims.id)
-      .limit(2),
-  ]);
-  const { data: user, error: userError } = userResult;
-  const { data: roleRows, error: roleError } = roleResult;
-  if (userError) {
-    console.error("Auth actor user lookup failed:", userError.code ?? "unknown");
-    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  const jwtMs = Math.round(performance.now() - jwtStartedAt);
+  if (!claims) return { error: "INVALID_TOKEN", status: 401, timings: { jwtMs, dbMs: 0 } };
+
+  // One SECURITY DEFINER RPC performs the same active-user and current-role
+  // checks in a single PostgREST round-trip. It does not trust JWT role claims.
+  const authDbStartedAt = performance.now();
+  const { data: actorRow, error: actorError } = await db.schema("platform").rpc(
+    "resolve_big_daddy_actor",
+    { p_user_id: claims.id, p_claimed_role: claims.role },
+  );
+  const dbMs = Math.round(performance.now() - authDbStartedAt);
+  const timings = { jwtMs, dbMs };
+  if (actorError) {
+    console.error("Auth actor RPC failed:", actorError.code ?? "unknown");
+    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503, timings };
   }
-  if (!user || !user.is_active) return { error: "USER_NOT_FOUND_OR_DISABLED", status: 401 };
-  if (roleError) {
-    console.error("Auth actor role lookup failed:", roleError.code ?? "unknown");
-    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
+  const actorErrorCode = actorRow && typeof actorRow === "object" ? actorRow.error : null;
+  if (actorErrorCode === "USER_NOT_FOUND_OR_DISABLED") return { error: actorErrorCode, status: 401, timings };
+  if (actorErrorCode === "TOKEN_ROLE_STALE") return { error: actorErrorCode, status: 401, timings };
+  if (actorErrorCode || !actorRow?.id || !actorRow?.username) {
+    console.error("Auth actor RPC invariant failed.");
+    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503, timings };
   }
-  if (!roleRows || roleRows.length !== 1) {
-    console.error("Auth actor role invariant failed: expected exactly one role assignment.");
-    return { error: "AUTH_SERVICE_UNAVAILABLE", status: 503 };
-  }
-  if (roleRows[0]?.role !== claims.role) return { error: "TOKEN_ROLE_STALE", status: 401 };
-  return { actor: { ...claims, username: user.username, parentId: user.parent_id ?? null } };
+  return {
+    actor: { ...claims, username: actorRow.username, parentId: actorRow.parent_id ?? null },
+    timings,
+  };
 }
 async function getWallet(db: SupabaseClient, actor: Actor) {
   let query = db.schema("wallet").from("wallets")
