@@ -92,6 +92,7 @@ async function runTestSuite() {
       ![
         '20261119164528_aviator_realtime_broadcast_throttle.sql',
         '20261121000000_aviator_worker_reliability_watchdog.sql',
+        '20261121010000_aviator_lease_observability.sql',
       ].includes(name)
     );
     const missingFiles = declaredFiles.filter((name: string) => {

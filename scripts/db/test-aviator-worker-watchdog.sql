@@ -1,3 +1,11 @@
+DO $roles$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role;
+  END IF;
+END
+$roles$;
+
 CREATE SCHEMA cron;
 CREATE TABLE cron.job (
   jobid bigint PRIMARY KEY,
@@ -68,6 +76,15 @@ CREATE TABLE vault.decrypted_secrets(name text, decrypted_secret text);
 INSERT INTO vault.decrypted_secrets VALUES ('aviator_engine_secret', 'ci-secret');
 
 \i supabase/migrations/20261121000000_aviator_worker_reliability_watchdog.sql
+\i supabase/migrations/20261121010000_aviator_lease_observability.sql
+
+DO $verify_grant$
+BEGIN
+  IF NOT has_table_privilege('service_role', 'aviator.engine_worker_lease', 'SELECT') THEN
+    RAISE EXCEPTION 'service_role must be able to read Aviator lease telemetry';
+  END IF;
+END
+$verify_grant$;
 
 DO $verify$
 DECLARE

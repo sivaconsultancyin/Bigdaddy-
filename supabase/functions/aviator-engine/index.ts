@@ -40,6 +40,7 @@ function scheduleContinuation(
     const endpoint = `${url.replace(/\/$/, "")}/functions/v1/aviator-engine`;
     let lastFailure = "unknown";
     for (let attempt = 1; attempt <= 3; attempt++) {
+      const attemptStartedAt = Date.now();
       try {
         const response = await fetch(endpoint, {
           method: "POST",
@@ -56,6 +57,7 @@ function scheduleContinuation(
           console.info(JSON.stringify({
             event: "aviator_continuation_accepted",
             workerId, generation, attempt, status: response.status,
+            elapsedMs: Date.now() - attemptStartedAt,
             at: new Date().toISOString(),
           }));
           return;
@@ -67,6 +69,7 @@ function scheduleContinuation(
       console.error(JSON.stringify({
         event: "aviator_continuation_retry",
         workerId, generation, attempt, reason: lastFailure,
+        elapsedMs: Date.now() - attemptStartedAt,
         at: new Date().toISOString(),
       }));
       if (attempt < 3) await sleep(1_000 * attempt);
@@ -149,6 +152,11 @@ Deno.serve(async (req: Request) => {
   const leaseSnapshot = await db.schema("aviator").from("engine_worker_lease")
     .select("generation,lease_expires_at,heartbeat_at")
     .eq("lease_key", "aviator").maybeSingle();
+  if (leaseSnapshot.error) {
+    console.error("Aviator lease snapshot read failed:", leaseSnapshot.error.code ?? "unknown");
+  } else if (!leaseSnapshot.data) {
+    console.warn("Aviator lease snapshot returned no row after successful acquisition");
+  }
   const generation = leaseSnapshot.data?.generation ?? null;
   const started = Date.now();
   const runForMs = 42_000;
