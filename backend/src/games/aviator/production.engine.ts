@@ -63,7 +63,17 @@ async function runWorker(): Promise<void> {
           continue;
         }
         nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL_MS;
-        console.info('Aviator backend worker acquired the distributed engine lease.');
+        const leaseSnapshot = await db.schema('aviator').from('engine_worker_lease')
+          .select('generation, lease_expires_at')
+          .eq('lease_key', 'aviator')
+          .maybeSingle();
+        console.info(JSON.stringify({
+          event: 'aviator_worker_acquired',
+          workerId: ownerToken,
+          generation: leaseSnapshot.data?.generation ?? null,
+          leaseExpiresAt: leaseSnapshot.data?.lease_expires_at ?? null,
+          at: new Date().toISOString(),
+        }));
       }
 
       const { data, error } = await db.schema('aviator').rpc('tick_crash_engine_with_broadcast');
@@ -71,7 +81,14 @@ async function runWorker(): Promise<void> {
       if (error) {
         logWorkerError('Aviator backend worker tick failed.', error);
       } else if (result && ['round_created', 'round_started', 'round_crashed', 'settled_recovery'].includes(result.action ?? '')) {
-        console.info('Aviator Supabase engine state transition.', result);
+        console.info(JSON.stringify({
+          event: 'aviator_engine_state_transition',
+          workerId: ownerToken,
+          action: result.action,
+          roundId: result.roundId ?? null,
+          roundNumber: result.roundNumber ?? null,
+          at: new Date().toISOString(),
+        }));
       }
 
       if (Date.now() >= nextHeartbeatAt) {
