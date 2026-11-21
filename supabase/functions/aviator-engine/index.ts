@@ -23,17 +23,25 @@ function secretMatches(expected: string, supplied: string | null): boolean {
   return difference === 0;
 }
 
-function scheduleContinuation(url: string, secret: string, handoffToken: string) {
+function scheduleContinuation(
+  url: string,
+  secret: string,
+  handoffToken: string,
+  releaseHandoff: () => PromiseLike<{ data: boolean | null; error: { message: string } | null }>,
+  workerId: string,
+  generation: number | null,
+) {
   const runtime = (globalThis as unknown as {
     EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void };
   }).EdgeRuntime;
   if (!runtime?.waitUntil) return false;
 
   runtime.waitUntil((async () => {
-    try {
-      const response = await fetch(
-        `${url.replace(/\/$/, "")}/functions/v1/aviator-engine`,
-        {
+    const endpoint = `${url.replace(/\/$/, "")}/functions/v1/aviator-engine`;
+    let lastFailure = "unknown";
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -41,18 +49,38 @@ function scheduleContinuation(url: string, secret: string, handoffToken: string)
             "x-aviator-engine-handoff-token": handoffToken,
           },
           body: "{}",
-        },
-      );
-      if (!response.ok) {
-        console.error("Aviator continuation rejected:", response.status);
+          signal: AbortSignal.timeout(12_000),
+        });
+        await response.body?.cancel();
+        if (response.ok) {
+          console.info(JSON.stringify({
+            event: "aviator_continuation_accepted",
+            workerId, generation, attempt, status: response.status,
+            at: new Date().toISOString(),
+          }));
+          return;
+        }
+        lastFailure = `http_${response.status}`;
+      } catch (error) {
+        lastFailure = error instanceof Error ? error.message : "unknown";
       }
-      await response.body?.cancel();
-    } catch (error) {
-      console.error(
-        "Aviator continuation request failed:",
-        error instanceof Error ? error.message : "unknown",
-      );
+      console.error(JSON.stringify({
+        event: "aviator_continuation_retry",
+        workerId, generation, attempt, reason: lastFailure,
+        at: new Date().toISOString(),
+      }));
+      if (attempt < 3) await sleep(1_000 * attempt);
     }
+
+    // Release only if the handoff token is still the lease owner. If the
+    // continuation was accepted but its response was lost, this is a safe no-op.
+    const released = await releaseHandoff();
+    console.error(JSON.stringify({
+      event: "aviator_continuation_exhausted",
+      workerId, generation, reason: lastFailure,
+      leaseReleased: released.data === true && !released.error,
+      at: new Date().toISOString(),
+    }));
   })());
   return true;
 }
@@ -118,8 +146,17 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, action: "worker_already_active" }, 202);
   }
 
+  const leaseSnapshot = await db.schema("aviator").from("engine_worker_lease")
+    .select("generation,lease_expires_at,heartbeat_at")
+    .eq("lease_key", "aviator").maybeSingle();
+  const generation = leaseSnapshot.data?.generation ?? null;
   const started = Date.now();
   const runForMs = 42_000;
+  console.info(JSON.stringify({
+    event: "aviator_worker_acquired",
+    workerId, generation, leaseExpiresAt: leaseSnapshot.data?.lease_expires_at ?? null,
+    at: new Date(started).toISOString(),
+  }));
   // The lease TTL is 45s; a 15s heartbeat keeps a 30s safety margin while reducing DB writes by 66%.
   const heartbeatEveryMs = 15_000;
   let nextHeartbeatAt = started + heartbeatEveryMs;
@@ -170,7 +207,10 @@ Deno.serve(async (req: Request) => {
         { p_owner_token: workerId, ...leaseArgs },
       );
       if (heartbeat.error || heartbeat.data !== true) {
-        console.error("Aviator engine lease lost; stopping worker");
+        console.error(JSON.stringify({
+          event: "aviator_worker_lease_lost", workerId, generation,
+          at: new Date().toISOString(),
+        }));
         return json({
           error: "ENGINE_LEASE_LOST",
           ticksCompleted: tickLatenciesMs.length,
@@ -214,18 +254,34 @@ Deno.serve(async (req: Request) => {
     }, 503);
   }
 
-  const continuationScheduled = scheduleContinuation(url, expected, nextHandoffToken);
+  console.info(JSON.stringify({
+    event: "aviator_worker_handoff",
+    workerId, generation, ticks: tickLatenciesMs.length,
+    actionCounts, at: new Date().toISOString(),
+  }));
+  const continuationScheduled = scheduleContinuation(
+    url, expected, nextHandoffToken,
+    () => db.schema("aviator").rpc("release_crash_engine_lease", {
+      p_owner_token: nextHandoffToken,
+    }),
+    workerId, generation,
+  );
   if (!continuationScheduled) {
     // The lease expires automatically if the EdgeRuntime continuation facility is unavailable.
     return json({
       ok: true,
-      warning: "CONTINUATION_UNAVAILABLE_LEASE_WILL_EXPIRE",
+      warning: "CONTINUATION_UNAVAILABLE_RECOVERY_WATCHDOG_WILL_RECLAIM_AFTER_EXPIRY",
       ticksCompleted: tickLatenciesMs.length,
       tickLatencyMs: summarizeLatencies(tickLatenciesMs),
       actionCounts,
     }, 200);
   }
 
+  console.info(JSON.stringify({
+    event: "aviator_worker_handoff_scheduled",
+    workerId, generation, ticks: tickLatenciesMs.length,
+    continuationScheduled, at: new Date().toISOString(),
+  }));
   return json({
     ok: true,
     ticksCompleted: tickLatenciesMs.length,

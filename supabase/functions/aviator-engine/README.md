@@ -53,3 +53,25 @@ schedulers is wasteful and should be avoided after cutover.
    database logs before switching off the existing worker.
 5. Test bet placement, cashout, crash settlement, retries and recovery in a
    non-production environment before enabling this path for real users.
+
+
+## Worker reliability and single-owner telemetry
+
+- The Cron watchdog runs every 15 seconds but calls the Edge Function only when
+  the database lease is expired. A healthy owner or valid handoff therefore
+  suppresses launcher HTTP requests.
+- If an Edge continuation fails, it retries three times with bounded delays.
+  After the retries, it releases the handoff lease only if that token still
+  owns it; if the request was accepted but its response was lost, the release
+  safely does nothing.
+- If the Edge continuation facility is unavailable, the watchdog reclaims the
+  lease after its 60-second handoff expiry.
+- Structured logs include `workerId`, lease `generation`, acquisition,
+  handoff, continuation retries/failure, and state transitions. Compare worker
+  IDs and generations with `aviator.engine_worker_lease` to diagnose owner
+  changes. PostgreSQL's existing advisory transaction lock remains the final
+  serialization guard around each engine tick.
+- The Node worker now supervises unexpected loop exits and retries lease
+  acquisition after a short delay.
+- Do not run the production migration until the Edge Function and Node worker
+  build/tests pass and the deployment path is confirmed.
