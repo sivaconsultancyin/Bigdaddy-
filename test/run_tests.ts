@@ -75,6 +75,20 @@ async function runTestSuite() {
     assert.ok(!engineSource.includes('diceTickFailures'));
   });
 
+  test('Aviator continuation timeout covers worker runtime and stays within handoff lease TTL', () => {
+    const source = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
+    const runForMatch = source.match(/const runForMs = ([0-9_]+);/);
+    const timeoutMatch = source.match(/const continuationFetchTimeoutMs = ([0-9_]+);/);
+    assert.ok(source.includes('p_ttl_seconds: 60'), 'The 60s handoff TTL must remain explicit');
+    assert.ok(runForMatch && timeoutMatch, 'Worker runtime and continuation timeout must be explicit');
+    const runForMs = Number(runForMatch[1].replaceAll('_', ''));
+    const timeoutMs = Number(timeoutMatch[1].replaceAll('_', ''));
+    const handoffTtlMs = 60_000;
+    assert.ok(timeoutMs > runForMs + 5000, 'Continuation timeout must include a safety margin beyond worker runtime');
+    assert.ok(timeoutMs < handoffTtlMs, 'Continuation timeout must expire before the handoff lease TTL');
+    assert.ok(source.includes('AbortSignal.timeout(continuationFetchTimeoutMs)'));
+  });
+
   test('Public Aviator Realtime never supplies crash target as a RUNNING multiplier', () => {
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', crashMultiplier: 25 }), null);
     assert.strictEqual(readRunningRealtimeMultiplier({ status: 'RUNNING', multiplier: 1.27, crashMultiplier: 25 }), 1.27);
