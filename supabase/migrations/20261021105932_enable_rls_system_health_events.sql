@@ -1,0 +1,1 @@
+ALTER TABLE platform.system_health_events ENABLE ROW LEVEL SECURITY;
