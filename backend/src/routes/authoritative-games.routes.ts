@@ -168,7 +168,7 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
   }
   if (code === 'dice') {
     const number = Number(result.number);
-    if (type === 'number' || /^\\d+$/.test(type)) return Number(selection?.value ?? type) === number ? 9 : 0;
+    if (type === 'number' || /^\d+$/.test(type)) return Number(selection?.value ?? type) === number ? 9 : 0;
     if (type === 'odd' || type === 'even') return (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
     if (type === 'small') return number <= 5 ? 2 : 0;
     if (type === 'big') return number >= 6 ? 2 : 0;
@@ -197,7 +197,7 @@ export function maxLiabilityMultiplier(code: GameCode, selection: any): number {
     if (['dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return 3;
     return 2;
   }
-  if (code === 'dice') return (type === 'number' || /^\\d+$/.test(type)) ? 10 : 2;
+  if (code === 'dice') return (type === 'number' || /^\d+$/.test(type)) ? 10 : 2;
   return 2;
 }
 export function validateSelection(code: GameCode, selection: any): boolean {
@@ -213,7 +213,7 @@ export function validateSelection(code: GameCode, selection: any): boolean {
     return false;
   }
   if (code === 'dice') {
-    if (type === 'number' || /^\\d+$/.test(type)) return Number.isInteger(Number(selection.value ?? type)) && Number(selection.value ?? type) >= 1 && Number(selection.value ?? type) <= 10;
+    if (type === 'number' || /^\d+$/.test(type)) return Number.isInteger(Number(selection.value ?? type)) && Number(selection.value ?? type) >= 1 && Number(selection.value ?? type) <= 10;
     return ['odd','even','small','big'].includes(type);
   }
   return ['andar','bahar','joker_red','joker_black'].includes(type);
