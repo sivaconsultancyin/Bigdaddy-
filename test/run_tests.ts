@@ -882,7 +882,7 @@ async function runTestSuite() {
     const executableNodeRoute = nodeStateRoute
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '');
-    assert.ok(!source.includes('.rpc("advance_round"') && !source.includes(".rpc('advance_round'"));
+    assert.ok(!executableNodeRoute.includes('.rpc("advance_round"') && !executableNodeRoute.includes(".rpc('advance_round'"), 'Node state reads must not invoke lifecycle transitions');
     assert.ok(executableNodeRoute.includes('readGameState(code)'), 'Node state route must return the authoritative database snapshot');
   });
 
