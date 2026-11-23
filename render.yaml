@@ -1,32 +1,5 @@
 services:
   - type: web
-    runtime: static
-    name: bigdaddy-frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
-    autoDeployTrigger: checksPass
-    envVars:
-      - key: VITE_GAME_API_BASE_URL
-        value: https://bigdaddy-backend.onrender.com/api
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    headers:
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: Referrer-Policy
-        value: no-referrer
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-
-  - type: web
     runtime: node
     name: bigdaddy-backend
     region: singapore
