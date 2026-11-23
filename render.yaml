@@ -31,7 +31,7 @@ services:
     name: bigdaddy-backend
     region: singapore
     plan: starter
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:backend
     autoDeployTrigger: checksPass
     healthCheckPath: /api/health
@@ -41,8 +41,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
-      - key: DATABASE_POOLER_URL
         sync: false
       - key: CORS_ORIGINS
         value: https://bigdaddy-frontend.onrender.com
