@@ -282,7 +282,8 @@ export function startProductionCrashEngine() {
   console.log('Aviator authoritative game engine started in the Node.js backend; Supabase is used for persistence, atomic wallet RPCs and Realtime delivery.');
 }
 
-export function stopProductionCrashEngine() {
+export async function stopProductionCrashEngine(): Promise<void> {
   workerRunning = false;
-  void workerPromise;
+  const stopping = workerPromise;
+  if (stopping) await stopping.catch((error) => logWorkerError('Aviator Node.js worker shutdown failed.', error));
 }
