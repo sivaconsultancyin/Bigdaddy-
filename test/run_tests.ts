@@ -101,7 +101,7 @@ async function runTestSuite() {
     assert.ok(client.includes("return this.request('/wallet/my-wallet')"));
     assert.ok(client.includes("return this.gameRequest('/games/aviator/state')"));
     assert.ok(client.includes("return this.gameRequest('/games/roulette/state')"));
-    assert.ok(client.includes("return this.gameRequest('/games/dice/state"));
+    assert.ok(client.includes('return this.gameRequest(`/games/dice/state'));
   });
 
   test('Render Blueprint provisions a separate Node backend without enabling non-Aviator workers before cutover', () => {
