@@ -153,6 +153,7 @@ async function tickCrashEngine(): Promise<EngineTickResult> {
 
 async function broadcastMultiplier(result: EngineTickResult): Promise<EngineTickResult> {
   if (result.action !== 'round_running' || !result.roundId || !Number.isFinite(result.multiplier)) return result;
+  const roundId = result.roundId;
   const sql = getEngineDatabaseClient();
   const rows = await sql.begin(async (tx) => {
     const updated = await tx.unsafe(
@@ -165,7 +166,7 @@ async function broadcastMultiplier(result: EngineTickResult): Promise<EngineTick
        RETURNING r.id,r.round_number,r.status::text,r.started_at,r.ended_at,
          r.server_seed_hash,r.revealed_server_seed,r.multiplier_tick_seq,
          clock_timestamp() AS server_time`,
-      [result.roundId],
+      [roundId],
     );
     if (!updated[0]) return null;
     const row = updated[0];
