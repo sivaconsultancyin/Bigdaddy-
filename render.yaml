@@ -5,6 +5,9 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     autoDeployTrigger: checksPass
+    envVars:
+      - key: VITE_GAME_API_BASE_URL
+        value: https://bigdaddy-backend.onrender.com/api
     routes:
       - type: rewrite
         source: /*
@@ -22,3 +25,28 @@ services:
       - path: /assets/*
         name: Cache-Control
         value: public, max-age=31536000, immutable
+
+  - type: web
+    runtime: node
+    name: bigdaddy-backend
+    region: singapore
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:backend
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_MODE
+        value: production
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://bigdaddy-frontend.onrender.com
+      - key: JWT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: AUTHORITATIVE_GAME_ENGINE_ENABLED
+        value: "false"
