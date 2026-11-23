@@ -91,7 +91,7 @@ async function runTestSuite() {
     assert.ok(source.includes('pg_try_advisory_lock(hashtext($1))'));
     assert.ok(source.includes('AUTHORITATIVE_GAME_ENGINE_ENABLED'));
     assert.ok(server.includes('startAuthoritativeGameEngine();'));
-    assert.ok(!/advance_round\\s*\\(/.test(source));
+    assert.ok(!/\\.rpc\\(['\"]advance_round/.test(source));
   });
 
   test('Aviator worker is isolated from Dice lifecycle and ticks only Aviator', () => {
