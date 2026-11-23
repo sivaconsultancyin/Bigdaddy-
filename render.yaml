@@ -30,7 +30,7 @@ services:
     runtime: node
     name: bigdaddy-backend
     region: singapore
-    plan: starter
+    plan: free
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:backend
     autoDeployTrigger: checksPass
