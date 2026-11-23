@@ -49,7 +49,7 @@ const CODE_ALIASES: Record<string, GameCode> = {
   'andar-bahar': 'andar_bahar',
   andar_bahar: 'andar_bahar',
 };
-const BETTING_MS = 15000;
+const BETTING_MS: Record<GameCode, number> = { roulette: 15_000, dice: 14_000, andar_bahar: 15_000 };
 let engineTimer: NodeJS.Timeout | null = null;
 let engineBusy = false;
 let lastSchemaWarningAt = 0;
@@ -113,9 +113,12 @@ function rouletteColor(number: number): 'red' | 'black' | 'green' {
   const red = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
   return red.has(number) ? 'red' : 'black';
 }
-export function makeResult(code: GameCode, seed: string): Record<string, any> {
+export function makeResult(code: GameCode, seed: string, roundId = 'deterministic-test-round'): Record<string, any> {
   if (code === 'roulette') {
-    const number = stableInt(seed, 'roulette', 37);
+    // Match the production PostgreSQL rule: SHA-256(seed || ':' || round UUID),
+    // first 32 bits interpreted big-endian, modulo 37.
+    const digest = createHash('sha256').update(seed + ':' + roundId).digest();
+    const number = digest.readUInt32BE(0) % 37;
     return { number, color: rouletteColor(number) };
   }
   if (code === 'dice') {
@@ -135,26 +138,31 @@ export function makeResult(code: GameCode, seed: string): Record<string, any> {
   }
   return { jokerCard, dealCards, winner, firstSide, totalCardsDealt: dealCards.length };
 }
+
 export function payoutMultiplier(code: GameCode, selection: any, result: any): number {
   const type = String(selection?.type || '').toLowerCase();
   if (code === 'roulette') {
     const number = Number(result.number);
     const numbers = Array.isArray(selection?.numbers) ? selection.numbers.map(Number) : [];
+    if (number === 0) {
+      if (type === 'green') return 36;
+      return ['straight', 'number'].includes(type) && numbers.includes(0) ? 36 : 0;
+    }
     if (['straight','split','street','corner','line','number'].includes(type)) {
       const odds: Record<string, number> = { straight: 36, number: 36, split: 18, street: 12, corner: 9, line: 6 };
       return numbers.includes(number) ? odds[type] : 0;
     }
-    if (type === 'red' || type === 'black' || type === 'green') return result.color === type ? (type === 'green' ? 36 : 2) : 0;
-    if (type === 'odd' || type === 'even') return number !== 0 && (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
-    if (type === 'low' || type === '1-18') return number >= 1 && number <= 18 ? 2 : 0;
-    if (type === 'high' || type === '19-36') return number >= 19 && number <= 36 ? 2 : 0;
-    if (type.startsWith('dozen')) {
-      const dozen = Number(type.replace('dozen', '') || selection?.dozen || selection?.value);
-      return number > 0 && Math.ceil(number / 12) === dozen ? 3 : 0;
+    if (type === 'red' || type === 'black') return result.color === type ? 2 : 0;
+    if (type === 'odd' || type === 'even') return (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
+    if (type === 'low') return number >= 1 && number <= 18 ? 2 : 0;
+    if (type === 'high') return number >= 19 && number <= 36 ? 2 : 0;
+    if (['dozen1','dozen2','dozen3'].includes(type)) {
+      const dozen = Number(type.slice(-1));
+      return Math.ceil(number / 12) === dozen ? 3 : 0;
     }
-    if (type.startsWith('col')) {
-      const column = Number(type.replace('col', '') || selection?.column || selection?.value);
-      return number > 0 && (number - 1) % 3 + 1 === column ? 3 : 0;
+    if (['col1','col2','col3'].includes(type)) {
+      const column = Number(type.slice(-1));
+      return (number - 1) % 3 + 1 === column ? 3 : 0;
     }
     return 0;
   }
@@ -164,8 +172,6 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
     if (type === 'odd' || type === 'even') return (type === 'odd' ? number % 2 === 1 : number % 2 === 0) ? 2 : 0;
     if (type === 'small') return number <= 5 ? 2 : 0;
     if (type === 'big') return number >= 6 ? 2 : 0;
-    if (type === 'over') return number > Number(selection?.value) ? 2 : 0;
-    if (type === 'under') return number < Number(selection?.value) ? 2 : 0;
     return 0;
   }
   if (type === 'andar' || type === 'bahar') {
@@ -187,8 +193,8 @@ export function maxLiabilityMultiplier(code: GameCode, selection: any): number {
     if (type === 'street') return 12;
     if (type === 'corner') return 9;
     if (type === 'line') return 6;
-    if (type.startsWith('dozen') || type.startsWith('col') || type === 'dozen' || type === 'column') return 3;
     if (type === 'green') return 36;
+    if (['dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return 3;
     return 2;
   }
   if (code === 'dice') return (type === 'number' || /^\d+$/.test(type)) ? 10 : 2;
@@ -198,28 +204,44 @@ export function validateSelection(code: GameCode, selection: any): boolean {
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return false;
   const type = String(selection.type || '').toLowerCase();
   if (code === 'roulette') {
-    if (['red','black','green','odd','even','low','high','1-18','19-36','dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return true;
+    if (['red','black','green','odd','even','low','high','dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return true;
     if (['straight','split','street','corner','line','number'].includes(type) && Array.isArray(selection.numbers)) {
       const expected: Record<string, number> = { straight: 1, split: 2, street: 3, corner: 4, line: 6, number: 1 };
       return selection.numbers.length === expected[type] &&
         selection.numbers.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 36);
     }
-    if (type === 'dozen') return [1,2,3].includes(Number(selection.dozen || selection.value));
-    if (type === 'column') return [1,2,3].includes(Number(selection.column || selection.value));
     return false;
   }
   if (code === 'dice') {
     if (type === 'number' || /^\d+$/.test(type)) return Number.isInteger(Number(selection.value ?? type)) && Number(selection.value ?? type) >= 1 && Number(selection.value ?? type) <= 10;
-    if (['odd','even','small','big'].includes(type)) return true;
-    if (type === 'over' || type === 'under') return Number.isInteger(Number(selection.value)) && Number(selection.value) >= 1 && Number(selection.value) <= 9;
-    return false;
+    return ['odd','even','small','big'].includes(type);
   }
   return ['andar','bahar','joker_red','joker_black'].includes(type);
 }
 
+function publicAndarBaharDeal(row: any, settled: boolean) {
+  const state = row.state || {};
+  const result = row.result || {};
+  const cards = Array.isArray(result.dealCards) ? result.dealCards : [];
+  const startedAt = state.dealStartedAt ? new Date(state.dealStartedAt).getTime() : NaN;
+  const visibleCount = settled ? cards.length : row.status === 'RUNNING' && Number.isFinite(startedAt)
+    ? Math.min(cards.length, Math.ceil((Math.max(0, Date.now() - startedAt) / 4500) * cards.length))
+    : 0;
+  const visibleCards = cards.slice(0, visibleCount);
+  return {
+    jokerCard: row.status === 'RUNNING' || settled ? result.jokerCard ?? null : null,
+    dealCards: visibleCards,
+    winningSide: settled ? result.winner ?? null : null,
+    winningCard: settled ? visibleCards[visibleCards.length - 1]?.card ?? null : null,
+    totalCardsDealt: visibleCards.length,
+    firstSide: row.status === 'RUNNING' || settled ? result.firstSide ?? null : null,
+    dealStartedAt: state.dealStartedAt ?? null,
+  };
+}
 function publicRound(row: any, code: GameCode) {
   const state = row.state || {};
-  const result = ['RESULT','SETTLED'].includes(row.status) ? row.result : null;
+  const settled = row.status === 'SETTLED';
+  const result = settled || (code === 'andar_bahar' && row.status === 'RUNNING') ? row.result : null;
   return {
     id: row.id,
     roundNumber: Number(row.round_number),
@@ -231,11 +253,7 @@ function publicRound(row: any, code: GameCode) {
       winningNumber: result?.number ?? null, color: result?.color ?? null,
     } : {}),
     ...(code === 'dice' ? { rolledNumber: result?.number ?? null, numberBetsAmount: {} } : {}),
-    ...(code === 'andar_bahar' ? {
-      jokerCard: result?.jokerCard ?? null, dealCards: result?.dealCards ?? [],
-      winningSide: result?.winner ?? null, winningCard: result?.dealCards?.[Math.max(0, (result?.dealCards?.length || 1) - 1)]?.card ?? null,
-      totalCardsDealt: result?.totalCardsDealt ?? 0, firstSide: 'bahar',
-    } : {}),
+    ...(code === 'andar_bahar' ? publicAndarBaharDeal(row, settled) : {}),
     totalBetsCount: Number(state.totalBetsCount || 0),
     totalBetAmount: String(state.totalBetAmount || '0'),
     ...(code === 'andar_bahar' ? { andarBetAmount: '0', baharBetAmount: '0' } : {}),
@@ -294,8 +312,8 @@ authoritativeGamesRouter.get('/games/:gameCode/state', auth, async (req: AuthReq
       });
     }
     // State endpoints only read the authoritative snapshot. The dedicated
-    // Supabase cron worker owns Dice round transitions and settlement; running
-    // advance_round() on every client poll duplicates that scheduler work.
+    // The dedicated Node lifecycle worker owns round transitions and settlement.
+    // State reads remain strictly read-only and never advance a round.
     const data = await readGameState(code);
     if (!data.round) return res.status(503).json({ error: 'GAME_NOT_CONFIGURED', gameCode: code });
     return res.json(data);
@@ -442,37 +460,149 @@ async function settleRound(roundId: string, code: GameCode) {
     if (!poolWalletId || !escrowRows[0]) throw new Error('GAME_WALLETS_NOT_CONFIGURED');
     const bets = await tx.unsafe(`SELECT * FROM ${schemaFor(code)}.authoritative_game_bets WHERE round_id=$1 AND status='PENDING' ORDER BY id FOR UPDATE`, [roundId]);
     for (const bet of bets) {
-      const playerRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE user_id=$1 AND wallet_type='PLAYER' LIMIT 1", [bet.user_id]);
+      const playerRows = await tx.unsafe("SELECT id FROM wallet.wallets WHERE user_id=$1 AND wallet_type='PLAYER' ORDER BY id LIMIT 1", [bet.user_id]);
       if (!playerRows[0]) throw new Error('PLAYER_WALLET_NOT_FOUND');
       await tx.unsafe("SELECT id FROM wallet.wallets WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE", [[poolWalletId, escrowRows[0].id, playerRows[0].id]]);
-      const multiplier = payoutMultiplier(code, bet.selection, round.result);
+
+      const multiplierBps = Math.round(payoutMultiplier(code, bet.selection, round.result) * 100);
       const amount = BigInt(String(bet.bet_amount));
-      const gross = multiplier > 0 ? amount * BigInt(multiplier) : 0n;
+      const gross = multiplierBps > 0 ? amount * BigInt(multiplierBps) / 100n : 0n;
+      const won = gross > 0n;
       let payoutTxId: string | null = null;
-      // Pay while the reservation still exists: wallet_transfer_atomic requires
-      // reserved pool liability to cover every winning payout.
-      if (gross > 0n) {
-        const payoutRows = await tx.unsafe(
-          "SELECT wallet.wallet_transfer_atomic($1,'BET_WIN_PAYOUT'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
-          ['AGAME_PAYOUT_' + bet.id, gross.toString(), poolWalletId, playerRows[0].id,
-            JSON.stringify({ gameCode: code, roundId, betId: bet.id, multiplier })],
+      let stakeTxId: string | null = null;
+
+      if (won) {
+        const refundRows = await tx.unsafe(
+          "SELECT wallet.wallet_transfer_atomic($1,'BET_ESCROW_REFUND'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
+          [`${code.toUpperCase()}_STAKE_RETURN_${String(bet.id).replace(/-/g, '')}`, amount.toString(), escrowRows[0].id, playerRows[0].id,
+            JSON.stringify({ gameCode: code, roundId, betId: bet.id, reason: 'winning stake return' })],
         );
-        payoutTxId = payoutRows[0].id;
+        stakeTxId = refundRows[0].id;
+        const profit = gross - amount;
+        if (profit > 0n) {
+          const payoutRows = await tx.unsafe(
+            "SELECT wallet.wallet_transfer_atomic($1,'BET_WIN_PAYOUT'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
+            [`${code.toUpperCase()}_PAYOUT_${String(bet.id).replace(/-/g, '')}`, profit.toString(), poolWalletId, playerRows[0].id,
+              JSON.stringify({ gameCode: code, roundId, betId: bet.id, multiplier: multiplierBps / 100, grossPayout: gross.toString() })],
+          );
+          payoutTxId = payoutRows[0].id;
+        }
+      } else {
+        const lossType = code === 'roulette' ? 'BET_LOSS_TREASURY' : 'BET_LOSS_GAME_POOL';
+        const lossRows = await tx.unsafe(
+          `SELECT wallet.wallet_transfer_atomic($1,'${lossType}'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id`,
+          [`${code.toUpperCase()}_LOSS_${String(bet.id).replace(/-/g, '')}`, amount.toString(), escrowRows[0].id, poolWalletId,
+            JSON.stringify({ gameCode: code, roundId, betId: bet.id, settlement: 'loss_to_game_pool' })],
+        );
+        stakeTxId = lossRows[0].id;
       }
-      const releaseRows = await tx.unsafe(
-        "SELECT wallet.wallet_transfer_atomic($1,'BET_LOSS_GAME_POOL'::public.transaction_type_enum,$2,$3::uuid,$4::uuid,$5::jsonb) AS id",
-        ['AGAME_STAKE_RELEASE_' + bet.id, amount.toString(), escrowRows[0].id, poolWalletId,
-          JSON.stringify({ gameCode: code, roundId, betId: bet.id, settlement: 'stake_to_pool' })],
+
+      const reservationRows = await tx.unsafe(
+        'UPDATE wallet.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id',
+        [poolWalletId, String(bet.reserved_liability)],
       );
-      const reservationRows = await tx.unsafe('UPDATE wallet.wallets SET reserved_balance=reserved_balance-$2::bigint,updated_at=now() WHERE id=$1 AND reserved_balance >= $2::bigint RETURNING id', [poolWalletId, String(bet.reserved_liability)]);
       if (!reservationRows[0]) throw new Error('GAME_POOL_RESERVATION_INVARIANT_FAILED');
       await tx.unsafe(
-        `UPDATE ${schemaFor(code)}.authoritative_game_bets SET status=$1,payout_amount=$2,stake_release_transaction_id=$3,payout_transaction_id=$4,settled_at=now() WHERE id=$5`,
-        [gross > 0n ? 'WON' : 'LOST', gross.toString(), releaseRows[0].id, payoutTxId, bet.id],
+        `UPDATE ${schemaFor(code)}.authoritative_game_bets
+         SET status=$1,payout_amount=$2,stake_release_transaction_id=$3,payout_transaction_id=$4,settled_at=now()
+         WHERE id=$5`,
+        [won ? 'WON' : 'LOST', gross.toString(), stakeTxId, payoutTxId, bet.id],
       );
     }
-    await tx.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET status='SETTLED',settled_at=now(),server_seed=server_seed WHERE id=$1`, [roundId]);
+    await tx.unsafe(
+      `UPDATE ${schemaFor(code)}.authoritative_game_rounds SET status='SETTLED',settled_at=now(),server_seed=server_seed,
+       state=state||jsonb_build_object('settlementComplete',true) WHERE id=$1`,
+      [roundId],
+    );
   });
+}
+
+async function advanceGame(code: GameCode) {
+  const sql = getDatabaseClient();
+  const gameRows = await sql.unsafe("SELECT status,pool_wallet_id FROM platform.games WHERE code=$1 LIMIT 1", [code]);
+  if (!gameRows[0] || gameRows[0].status !== 'ACTIVE' || !gameRows[0].pool_wallet_id) return;
+
+  const latestRows = await sql.unsafe(
+    `SELECT * FROM ${schemaFor(code)}.authoritative_game_rounds
+     WHERE game_code=$1 ORDER BY round_number DESC LIMIT 1`,
+    [code],
+  );
+  const latest = latestRows[0];
+  const now = Date.now();
+
+  if (latest?.status === 'BETTING' && new Date(latest.betting_closes_at).getTime() <= now) {
+    const seed = String(latest.server_seed || '');
+    if (!seed || createHash('sha256').update(seed).digest('hex') !== latest.server_seed_hash) {
+      throw new Error(`${code.toUpperCase()}_SERVER_SEED_HASH_MISMATCH`);
+    }
+    const result = makeResult(code, seed, String(latest.id));
+    const phaseKey = code === 'roulette' ? 'spinStartedAt' : code === 'dice' ? 'rollStartedAt' : 'dealStartedAt';
+    await sql.unsafe(
+      `UPDATE ${schemaFor(code)}.authoritative_game_rounds
+       SET status='RUNNING',result=$2::jsonb,state=state||jsonb_build_object($3::text,clock_timestamp())
+       WHERE id=$1 AND status='BETTING'`,
+      [latest.id, JSON.stringify(result), phaseKey],
+    );
+    return;
+  }
+
+  if (latest?.status === 'RUNNING') {
+    const phaseKey = code === 'roulette' ? 'spinStartedAt' : code === 'dice' ? 'rollStartedAt' : 'dealStartedAt';
+    const durationMs = code === 'roulette' ? 1_500 : 4_500;
+    const startedAt = latest.state?.[phaseKey] ? new Date(latest.state[phaseKey]).getTime() : new Date(latest.betting_closes_at).getTime();
+    if (now - startedAt >= durationMs) {
+      const transitioned = await sql.unsafe(
+        `UPDATE ${schemaFor(code)}.authoritative_game_rounds
+         SET status='RESULT' WHERE id=$1 AND status='RUNNING' AND result IS NOT NULL RETURNING id`,
+        [latest.id],
+      );
+      if (transitioned[0]) await settleRound(latest.id, code);
+    }
+    return;
+  }
+
+  if (latest?.status === 'RESULT') {
+    await settleRound(latest.id, code);
+    return;
+  }
+
+  const cooldownMs = code === 'roulette' ? 3_000 : 5_000;
+  if (!latest || latest.status === 'SETTLED' || latest.status === 'CANCELLED') {
+    const settledAt = latest?.settled_at ? new Date(latest.settled_at).getTime() : 0;
+    if (!latest || !settledAt || now - settledAt >= cooldownMs) {
+      const sequenceRows = await sql.unsafe(
+        `SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1`,
+        [code],
+      );
+      const roundNumber = Number(sequenceRows[0].n) + 1;
+      const seed = randomBytes(32).toString('hex');
+      const seedHash = createHash('sha256').update(seed).digest('hex');
+      await sql.unsafe(
+        `INSERT INTO ${schemaFor(code)}.authoritative_game_rounds
+         (game_code,round_number,status,state,server_seed_hash,server_seed,opened_at,betting_closes_at)
+         VALUES($1,$2,'BETTING',$3::jsonb,$4,$5,clock_timestamp(),
+           clock_timestamp()+($6::text||' milliseconds')::interval)`,
+        [code, roundNumber, JSON.stringify({ totalBetsCount: 0, totalBetAmount: '0' }), seedHash, seed, BETTING_MS[code]],
+      );
+    }
+  }
+}
+
+async function withGameLifecycleLock(code: GameCode, work: () => Promise<void>) {
+  const sql = getDatabaseClient();
+  const lockConnection = await sql.reserve();
+  const lockName = code === 'andar_bahar' ? 'andar-bahar-round-lifecycle-v1' : `${code}-round-lifecycle-v1`;
+  let acquired = false;
+  try {
+    const rows = await lockConnection.unsafe('SELECT pg_try_advisory_lock(hashtext($1)) AS acquired', [lockName]);
+    acquired = rows[0]?.acquired === true;
+    if (acquired) await work();
+  } finally {
+    if (acquired) {
+      await lockConnection.unsafe('SELECT pg_advisory_unlock(hashtext($1))', [lockName]).catch(() => undefined);
+    }
+    lockConnection.release();
+  }
 }
 
 async function tick() {
@@ -480,47 +610,16 @@ async function tick() {
   engineBusy = true;
   try {
     const sql = getDatabaseClient();
-    if (!(await hasRuntimeSchema())) {
-      if (Date.now() - lastSchemaWarningAt > 60000) {
-        console.warn('Authoritative game runtime migration is not applied yet; game engine remains idle.');
-        lastSchemaWarningAt = Date.now();
-      }
-      return;
-    }
     const activeRows = await sql.unsafe(
-      "SELECT g.code,g.status FROM platform.games g WHERE g.code = ANY($1::text[]) AND (g.status='ACTIVE' OR EXISTS (SELECT 1 FROM roulette.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM dice.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')) OR EXISTS (SELECT 1 FROM andar_bahar.authoritative_game_rounds r WHERE r.game_code=g.code AND r.status IN ('BETTING','RUNNING','RESULT')))", [GAME_CODES],
+      `SELECT g.code FROM platform.games g
+       WHERE g.code = ANY($1::text[]) AND g.status='ACTIVE'
+       ORDER BY g.code`,
+      [GAME_CODES],
     );
     for (const game of activeRows) {
       const code = game.code as GameCode;
-      const latestRows = await sql.unsafe(`SELECT * FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1 ORDER BY round_number DESC LIMIT 1`, [code]);
-      const latest = latestRows[0];
-      if (latest?.status === 'BETTING' && new Date(latest.betting_closes_at).getTime() <= Date.now()) {
-        const seed = String(latest.server_seed || '');
-        const result = makeResult(code, seed);
-        await sql.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET status='RUNNING',result=$2::jsonb WHERE id=$1 AND status='BETTING'`, [latest.id, JSON.stringify(result)]);
-      } else if (latest?.status === 'RUNNING' && Date.now() - new Date(latest.betting_closes_at).getTime() >= 1500) {
-        if (!latest.result) {
-          const recoveredResult = makeResult(code, String(latest.server_seed || ''));
-          await sql.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET result=$2::jsonb WHERE id=$1 AND status='RUNNING' AND result IS NULL`, [latest.id, JSON.stringify(recoveredResult)]);
-        }
-        await sql.unsafe(`UPDATE ${schemaFor(code)}.authoritative_game_rounds SET status='RESULT' WHERE id=$1 AND status='RUNNING' AND result IS NOT NULL`, [latest.id]);
-      } else if (latest?.status === 'RESULT' && Date.now() - new Date(latest.betting_closes_at).getTime() >= 2700) {
-        await settleRound(latest.id, code);
-      } else if (game.status === 'ACTIVE' && (!latest || latest.status === 'SETTLED' || latest.status === 'CANCELLED') &&
-          (!latest || !latest.settled_at || Date.now() - new Date(latest.settled_at).getTime() >= 2500)) {
-        const gameRows = await sql.unsafe(`SELECT COALESCE(MAX(round_number),0)::bigint AS n FROM ${schemaFor(code)}.authoritative_game_rounds WHERE game_code=$1`, [code]);
-        const roundNumber = Number(gameRows[0].n) + 1;
-        const seed = randomBytes(32).toString('hex');
-        const seedHash = createHash('sha256').update(seed).digest('hex');
-        await sql.unsafe(
-          `INSERT INTO ${schemaFor(code)}.authoritative_game_rounds(game_code,round_number,status,state,server_seed_hash,server_seed,opened_at,betting_closes_at) VALUES($1,$2,'BETTING',$3::jsonb,$4,$5,now(),now()+($6::text||' milliseconds')::interval)`,
-          [code, roundNumber, JSON.stringify({ totalBetsCount: 0, totalBetAmount: '0' }), seedHash, seed, BETTING_MS],
-        );
-      }
+      await withGameLifecycleLock(code, () => advanceGame(code));
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('GAME_WALLETS_NOT_CONFIGURED')) console.error('Authoritative game engine tick failed:', message);
   } finally {
     engineBusy = false;
   }
@@ -528,10 +627,17 @@ async function tick() {
 
 export function startAuthoritativeGameEngine() {
   if (engineTimer) return;
-  engineTimer = setInterval(() => { void tick(); }, 1000);
-  void tick();
-  console.log('Persistent authoritative game engine supervisor started.');
+  if (process.env.AUTHORITATIVE_GAME_ENGINE_ENABLED !== 'true') {
+    console.info('Non-Aviator Node game engines are disabled until the Supabase Cron cutover is approved.');
+    return;
+  }
+  engineTimer = setInterval(() => {
+    void tick().catch((error) => console.error('Authoritative Node game engine tick failed:', error instanceof Error ? error.message : String(error)));
+  }, 1_000);
+  void tick().catch((error) => console.error('Initial authoritative Node game engine tick failed:', error instanceof Error ? error.message : String(error)));
+  console.info('Roulette, Dice and Andar Bahar authoritative lifecycle workers started in Node.js.');
 }
+
 export function stopAuthoritativeGameEngine() {
   if (engineTimer) clearInterval(engineTimer);
   engineTimer = null;

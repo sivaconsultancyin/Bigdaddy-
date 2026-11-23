@@ -1,6 +1,6 @@
 # Authoritative game runtime
 
-This change moves Roulette, Dice, Dragon Tiger, and Andar Bahar round results and settlements to the trusted Node backend with durable state in Supabase PostgreSQL. Aviator/Crash continues to use the existing `game_rounds`/`game_bets` flow and receives a recovery fix for rounds left `CRASHED` before settlement.
+Current runtime target: Render Node.js owns Aviator, Roulette, Dice and Andar Bahar round progression and outcome generation; Supabase PostgreSQL owns durable state, auth and atomic wallet/settlement operations. Dragon Tiger and Teen Patti are retired.
 
 ## Runtime flow
 
@@ -15,7 +15,7 @@ This change moves Roulette, Dice, Dragon Tiger, and Andar Bahar round results an
 
 ## Game codes and pool setup
 
-Canonical Supabase codes are `roulette`, `dice`, `dragon_tiger`, and `andar_bahar`. The migration provisions a zero-balance GAME_POOL wallet and a `COMING_SOON` game row for each missing game. It does not mint tokens or activate games.
+Active game codes are `aviator`, `roulette`, `dice`, and `andar_bahar`. Dragon Tiger and Teen Patti are retired. The migration provisions a zero-balance GAME_POOL wallet and a `COMING_SOON` game row for each missing game. It does not mint tokens or activate games.
 
 To enable a game after the migration has been tested in staging:
 - As Owner, allocate existing Treasury tokens to that game's pool through the game pool allocation UI.
@@ -41,3 +41,8 @@ These multipliers are backend policy, not frontend instructions. Before producti
 - Run `scripts/authoritative_game_runtime_audit.sql` after migration and after settlement tests.
 - Test two simultaneous bets against the same round, duplicate idempotency replay, insufficient pool liquidity, expired betting round recovery, settlement retry after process restart, and wallet-ledger conservation.
 - Verify the live production backup and restore path before applying to production. This PR does not apply any migration to the connected live Supabase project.
+
+
+## Node runtime cutover
+
+See [NODE_AUTHORITATIVE_RUNTIME_CUTOVER.md](./NODE_AUTHORITATIVE_RUNTIME_CUTOVER.md) for the dedicated Render service, environment requirements, worker locking, and safe Supabase Cron cutover sequence. The non-Aviator Node scheduler remains disabled until the three corresponding Cron jobs are paused and the Render environment flag is explicitly enabled.

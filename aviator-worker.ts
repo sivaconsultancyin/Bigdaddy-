@@ -40,7 +40,7 @@ async function startWorker() {
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    stopProductionCrashEngine();
+    await stopProductionCrashEngine();
     healthServer.close();
     await closeDatabase();
     process.exit(0);

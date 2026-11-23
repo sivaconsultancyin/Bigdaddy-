@@ -9,7 +9,7 @@ import { config, getPublicConfigInfo } from './backend/src/config';
 import { connectDatabase, isDatabaseConnected } from './backend/src/db/postgres';
 import { productionRouter } from './backend/src/routes/production.routes';
 import { productionRequestsRouter } from './backend/src/routes/production.requests.routes';
-import { authoritativeGamesRouter } from './backend/src/routes/authoritative-games.routes';
+import { authoritativeGamesRouter, startAuthoritativeGameEngine, stopAuthoritativeGameEngine } from './backend/src/routes/authoritative-games.routes';
 import { bootstrapOwnerFromEnvironment } from './backend/src/services/owner-bootstrap.service';
 import { healthMonitorRouter } from './backend/src/routes/health-monitor.routes';
 import { recordHealthFailure } from './backend/src/services/health-monitor.service';
@@ -89,6 +89,7 @@ async function startServer() {
       console.log('✅ Supabase PostgreSQL connectivity check passed.');
       if (config.isProduction) {
         startPersistentAviatorEngine();
+        startAuthoritativeGameEngine();
         await bootstrapOwnerFromEnvironment();
         productionServicesStarted = true;
       }
@@ -273,8 +274,8 @@ async function startServer() {
   });
 
   const server = http.createServer(app);
-  process.once('SIGTERM', stopAviatorWorker);
-  process.once('SIGINT', stopAviatorWorker);
+  process.once('SIGTERM', () => { stopAviatorWorker(); stopAuthoritativeGameEngine(); });
+  process.once('SIGINT', () => { stopAviatorWorker(); stopAuthoritativeGameEngine(); });
 
   // Mount Vite middleware for dev or serve static dist in production
   if (process.env.NODE_ENV === 'production' && !process.env.DEV_MODE && !config.isDevelopmentOrPreview) {
@@ -300,6 +301,7 @@ async function startServer() {
         }
         if (isDatabaseConnected() && !productionServicesStarted) {
           startPersistentAviatorEngine();
+          startAuthoritativeGameEngine();
           await bootstrapOwnerFromEnvironment();
           productionServicesStarted = true;
         }

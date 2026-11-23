@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { createHmac } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src
 import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from '../supabase/functions/api/activation';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
+import { deriveCrashMultiplier } from '../backend/src/games/aviator/production.engine';
 import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
 import { resolveSupabasePublicConfig } from '../frontend/src/api/supabaseConfigValidation';
 
@@ -65,6 +66,55 @@ async function runTestSuite() {
     assert.ok(source.includes('window.setInterval(() => { void loadFailures(); }, 60000)'));
   });
 
+
+  test('Aviator production worker computes round progression in Node and retains atomic DB boundaries', () => {
+    const source = readFileSync('backend/src/games/aviator/production.engine.ts', 'utf8');
+    assert.ok(source.includes('deriveCrashMultiplier'));
+    assert.ok(source.includes('pg_try_advisory_xact_lock'));
+    assert.ok(source.includes('aviator.cashout_crash_bet_atomic'));
+    assert.ok(source.includes('aviator.settle_crash_round_atomic'));
+    assert.ok(source.includes('realtime.send'));
+    assert.ok(!source.includes('tick_crash_engine_with_broadcast'));
+    assert.ok(!source.includes('@supabase/supabase-js'));
+    const seed = 'known-aviator-seed';
+    const digest = createHmac('sha256', seed).update('42').digest('hex');
+    const value = Number(BigInt('0x' + digest.slice(0, 14)) >> 4n) / 4_503_599_627_370_496;
+    const expected = Math.min(50, Math.max(1, Math.floor((0.97 / Math.max(0.000000000001, 1 - value)) * 100) / 100));
+    assert.strictEqual(deriveCrashMultiplier(seed, 42), expected);
+  });
+
+  test('Non-Aviator authoritative rounds are supervised by the Node backend with cross-process locks', () => {
+    const source = readFileSync('backend/src/routes/authoritative-games.routes.ts', 'utf8');
+    const server = readFileSync('server.ts', 'utf8');
+    assert.ok(source.includes('startAuthoritativeGameEngine'));
+    assert.ok(source.includes('withGameLifecycleLock'));
+    assert.ok(source.includes('pg_try_advisory_lock(hashtext($1))'));
+    assert.ok(source.includes('AUTHORITATIVE_GAME_ENGINE_ENABLED'));
+    assert.ok(server.includes('startAuthoritativeGameEngine();'));
+    assert.ok(!source.includes('.rpc("advance_round"') && !source.includes(".rpc('advance_round'"));
+  });
+
+  test('Frontend routes game APIs to Node while account and wallet APIs stay on Supabase', () => {
+    const client = readFileSync('frontend/src/api/client.ts', 'utf8');
+    assert.ok(client.includes('const GAME_API_BASE = import.meta.env.VITE_GAME_API_BASE_URL || API_BASE'));
+    assert.ok(client.includes('private static gameRequest'));
+    assert.ok(client.includes("return this.request('/wallet/my-wallet')"));
+    assert.ok(client.includes("return this.gameRequest('/games/aviator/state')"));
+    assert.ok(client.includes("return this.gameRequest('/games/roulette/state')"));
+    assert.ok(client.includes('return this.gameRequest(`/games/dice/state'));
+  });
+
+  test('Render Blueprint provisions a separate Node backend without enabling non-Aviator workers before cutover', () => {
+    const blueprint = readFileSync('render.yaml', 'utf8');
+    assert.ok(blueprint.includes('name: bigdaddy-backend'));
+    assert.ok(blueprint.includes('startCommand: npm run start:backend'));
+    assert.ok(blueprint.includes('healthCheckPath: /api/health'));
+    assert.ok(blueprint.includes('key: VITE_GAME_API_BASE_URL'));
+    assert.ok(blueprint.includes('key: AUTHORITATIVE_GAME_ENGINE_ENABLED'));
+    assert.ok(blueprint.includes('value: "false"'));
+    assert.ok(blueprint.includes('key: JWT_SECRET'));
+    assert.ok(blueprint.includes('key: DATABASE_URL'));
+  });
 
   test('Aviator worker is isolated from Dice lifecycle and ticks only Aviator', () => {
     const engineSource = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
@@ -284,7 +334,7 @@ async function runTestSuite() {
     assert.deepStrictEqual(resolveSupabasePublicConfig('', '', false), { url: '', publishableKey: '', hasRealtime: false });
   });
 
-  test('Production routes every Aviator endpoint to the single configured Supabase API', () => {
+  test('Production keeps account APIs on Supabase and routes game APIs to the configured Node backend', () => {
     const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
     const supabaseConfig = readFileSync('frontend/src/api/supabaseConfig.ts', 'utf8');
     const sharedConfig = readFileSync('supabase/config.toml', 'utf8');
@@ -293,7 +343,12 @@ async function runTestSuite() {
     assert.ok(supabaseConfig.includes('${SUPABASE_URL}/functions/v1/api'));
     assert.ok(!supabaseConfig.includes('nzvpuoeibqrpcltrszvr.supabase.co'));
     assert.ok(apiClient.includes('const API_BASE'));
-    assert.ok(apiClient.includes('fetch(`${API_BASE}${endpoint}`'));
+    assert.ok(apiClient.includes('const GAME_API_BASE = import.meta.env.VITE_GAME_API_BASE_URL || API_BASE'));
+    assert.ok(apiClient.includes('baseUrl: string = API_BASE'));
+    assert.ok(apiClient.includes('fetch(`${baseUrl}${endpoint}`'));
+    assert.ok(apiClient.includes('return this.request<T>(endpoint, options, GAME_API_BASE)'));
+    assert.ok(apiClient.includes("return this.request('/wallet/my-wallet')"));
+    assert.ok(apiClient.includes("return this.gameRequest('/games/aviator/state')"));
     assert.ok(!apiClient.includes('yrleubhpiqejfvingqfj'));
     assert.ok(!apiClient.includes('AVIATOR_API_BASE'));
     assert.ok(!apiClient.includes('VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY'));
@@ -583,6 +638,14 @@ async function runTestSuite() {
     assert.ok(['red','black','green'].includes(a.color));
   });
 
+  test('Roulette Node result matches the committed PostgreSQL SHA-256 seed and round algorithm', () => {
+    const seed = 'roulette-node-parity-seed';
+    const roundId = 'f53c3b42-9c14-4dc2-a654-c2e34bdf98ad';
+    const expected = createHash('sha256').update(seed + ':' + roundId).digest().readUInt32BE(0) % 37;
+    assert.strictEqual(makeResult('roulette', seed, roundId).number, expected);
+    assert.strictEqual(makeResult('roulette', seed, roundId).number, makeResult('roulette', seed, roundId).number);
+  });
+
   test('Authoritative Dice outcome is in the 1-10 game range', () => {
     const result = makeResult('dice', 'dice-test-seed');
     assert.ok(Number(result.number) >= 1 && Number(result.number) <= 10);
@@ -608,6 +671,12 @@ async function runTestSuite() {
     assert.strictEqual(payoutMultiplier('dice', { type: 'big' }, { number: 5 }), 0);
     assert.strictEqual(maxLiabilityMultiplier('dice', { type: '7' }), 10);
     assert.strictEqual(maxLiabilityMultiplier('dice', { type: 'odd' }), 2);
+  });
+
+  test('Dice Node API rejects bet types not supported by the durable production settlement rule', () => {
+    assert.strictEqual(validateSelection('dice', { type: 'over', value: 5 }), false);
+    assert.strictEqual(validateSelection('dice', { type: 'under', value: 5 }), false);
+    assert.strictEqual(payoutMultiplier('dice', { type: '7' }, { number: 7 }), 9);
   });
 
   test('Dice activation requires the full max-bet liability in its mapped game pool', () => {
@@ -840,7 +909,7 @@ async function runTestSuite() {
     const executableNodeRoute = nodeStateRoute
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '');
-    assert.ok(!/advance_round\s*\(/.test(executableNodeRoute), 'Node state reads must not invoke lifecycle transitions');
+    assert.ok(!executableNodeRoute.includes('.rpc("advance_round"') && !executableNodeRoute.includes(".rpc('advance_round'"), 'Node state reads must not invoke lifecycle transitions');
     assert.ok(executableNodeRoute.includes('readGameState(code)'), 'Node state route must return the authoritative database snapshot');
   });
 
