@@ -94,6 +94,28 @@ async function runTestSuite() {
     assert.ok(!source.includes('.rpc("advance_round"') && !source.includes(".rpc('advance_round'"));
   });
 
+  test('Frontend routes game APIs to Node while account and wallet APIs stay on Supabase', () => {
+    const client = readFileSync('frontend/src/api/client.ts', 'utf8');
+    assert.ok(client.includes('const GAME_API_BASE = import.meta.env.VITE_GAME_API_BASE_URL || API_BASE'));
+    assert.ok(client.includes('private static gameRequest'));
+    assert.ok(client.includes("return this.request('/wallet/my-wallet')"));
+    assert.ok(client.includes("return this.gameRequest('/games/aviator/state')"));
+    assert.ok(client.includes("return this.gameRequest('/games/roulette/state')"));
+    assert.ok(client.includes("return this.gameRequest('/games/dice/state"));
+  });
+
+  test('Render Blueprint provisions a separate Node backend without enabling non-Aviator workers before cutover', () => {
+    const blueprint = readFileSync('render.yaml', 'utf8');
+    assert.ok(blueprint.includes('name: bigdaddy-backend'));
+    assert.ok(blueprint.includes('startCommand: npm run start:backend'));
+    assert.ok(blueprint.includes('healthCheckPath: /api/health'));
+    assert.ok(blueprint.includes('key: VITE_GAME_API_BASE_URL'));
+    assert.ok(blueprint.includes('key: AUTHORITATIVE_GAME_ENGINE_ENABLED'));
+    assert.ok(blueprint.includes('value: "false"'));
+    assert.ok(blueprint.includes('key: JWT_SECRET'));
+    assert.ok(blueprint.includes('key: DATABASE_URL'));
+  });
+
   test('Aviator worker is isolated from Dice lifecycle and ticks only Aviator', () => {
     const engineSource = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
     assert.ok(engineSource.includes('db.schema("aviator").rpc("tick_crash_engine_with_broadcast")'));
