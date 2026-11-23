@@ -8,6 +8,9 @@ import { buildRouletteBetOperation } from './idempotency';
 const API_BASE = import.meta.env.PROD
   ? SUPABASE_API_BASE
   : (import.meta.env.VITE_API_BASE_URL || '/api');
+// Game state/bet/cashout requests use the authoritative Node.js backend when
+// configured. Auth, wallet, admin and account APIs remain on Supabase Edge.
+const GAME_API_BASE = import.meta.env.VITE_GAME_API_BASE_URL || API_BASE;
 
 // Preserve the HTTP status for diagnostics without changing the user-facing error message.
 export class ApiRequestError extends Error {
@@ -90,9 +93,10 @@ export class ApiClient {
 
   public static async request<T = any>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    baseUrl: string = API_BASE,
   ): Promise<T> {
-    if (!API_BASE) {
+    if (!baseUrl) {
       throw new Error('Production API is not configured. Set VITE_SUPABASE_URL in the frontend environment.');
     }
     const token = this.getToken();
@@ -109,7 +113,7 @@ export class ApiClient {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      const response = await fetch(`${baseUrl}${endpoint}`, {
         ...options,
         headers,
         signal: options.signal ?? controller.signal,
@@ -134,6 +138,10 @@ export class ApiClient {
     } finally {
       window.clearTimeout(timeoutId);
     }
+  }
+
+  private static gameRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return this.request<T>(endpoint, options, GAME_API_BASE);
   }
 
   // Config Info
@@ -294,7 +302,7 @@ export class ApiClient {
 
   // Aviator
   public static getAviatorState() {
-    return this.request('/games/aviator/state');
+    return this.gameRequest('/games/aviator/state');
   }
 
   public static async placeAviatorBet(payload: { amount: string; autoCashoutMultiplier?: number | null }, idempotencyKey?: string) {
@@ -302,7 +310,7 @@ export class ApiClient {
     // An explicitly supplied key remains supported for callers that manage the intent.
     const operation = `aviator-bet:${JSON.stringify(payload)}`;
     const key = idempotencyKey ?? await this.pendingKey(operation, 'AVIATOR_BET');
-    const result = await this.request('/games/aviator/bet', {
+    const result = await this.gameRequest('/games/aviator/bet', {
       method: 'POST',
       headers: { 'Idempotency-Key': key },
       body: JSON.stringify(payload),
@@ -312,7 +320,7 @@ export class ApiClient {
   }
 
   public static cashoutAviatorBet(payload: { betId: string }) {
-    return this.request('/games/aviator/cashout', {
+    return this.gameRequest('/games/aviator/cashout', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -320,11 +328,11 @@ export class ApiClient {
 
   // European Roulette
   public static getRouletteState() {
-    return this.request('/games/roulette/state');
+    return this.gameRequest('/games/roulette/state');
   }
 
   public static spinRoulette(payload: { bets: Array<{ type: string; numbers: number[]; amount: string }> }) {
-    return this.request('/games/roulette/spin', {
+    return this.gameRequest('/games/roulette/spin', {
       method: 'POST',
       headers: { 'Idempotency-Key': 'roulette-spin-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
@@ -341,7 +349,7 @@ export class ApiClient {
     // original bet instead of locking the player's stake a second time.
     const operation = buildRouletteBetOperation(userId, roundId, payload);
     const idempotencyKey = await this.pendingKey(operation, 'ROULETTE_BET');
-    const result = await this.request('/games/roulette/bet', {
+    const result = await this.gameRequest('/games/roulette/bet', {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
@@ -352,11 +360,11 @@ export class ApiClient {
 
   // Live Andar Bahar
   public static getAndarBaharState() {
-    return this.request('/games/andar-bahar/state');
+    return this.gameRequest('/games/andar-bahar/state');
   }
 
   public static placeAndarBaharBet(payload: { bets: Array<{ type: string; amount: string }> }) {
-    return this.request('/games/andar-bahar/bet', {
+    return this.gameRequest('/games/andar-bahar/bet', {
       method: 'POST',
       headers: { 'Idempotency-Key': 'andar-bahar-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
@@ -366,7 +374,7 @@ export class ApiClient {
   // Provably Fair Dice
   public static getDiceState(userId?: string) {
     const q = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-    return this.request(`/games/dice/state${q}`);
+    return this.gameRequest(`/games/dice/state${q}`);
   }
 
   public static rollDice(payload: {
@@ -377,7 +385,7 @@ export class ApiClient {
     condition?: 'over' | 'under';
     customClientSeed?: string;
   }) {
-    return this.request('/games/dice/roll', {
+    return this.gameRequest('/games/dice/roll', {
       method: 'POST',
       headers: { 'Idempotency-Key': 'dice-roll-' + crypto.randomUUID() },
       body: JSON.stringify(payload),
@@ -388,7 +396,7 @@ export class ApiClient {
     payload: { bets: Array<{ type: string; amount: string }> },
     idempotencyKey = 'dice-bet-' + crypto.randomUUID(),
   ) {
-    return this.request('/games/dice/bet', {
+    return this.gameRequest('/games/dice/bet', {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
