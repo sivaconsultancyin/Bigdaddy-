@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { createHmac } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { spawnSync } from 'node:child_process';
 import { readRunningRealtimeMultiplier } from '../shared/src/aviatorRealtime';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ import { UserRole, TransactionType, RoundStatus, BetStatus } from '../shared/src
 import { evaluateGameActivationReadiness, getAndarBaharPublicDeal } from '../supabase/functions/api/activation';
 import { MAX_TOKEN_SUPPLY, MAX_TOKEN_SUPPLY_BIGINT, SYSTEM_WALLETS } from '../shared/src/constants';
 import { makeResult, payoutMultiplier, validateSelection, isPlayerRole, isCompatibleIdempotencyReplay, canReserveLiability, canSettleRound, maxLiabilityMultiplier } from '../backend/src/routes/authoritative-games.routes';
+import { deriveCrashMultiplier } from '../backend/src/games/aviator/production.engine';
 import { buildRouletteBetOperation } from '../frontend/src/api/idempotency';
 import { resolveSupabasePublicConfig } from '../frontend/src/api/supabaseConfigValidation';
 
@@ -65,6 +66,33 @@ async function runTestSuite() {
     assert.ok(source.includes('window.setInterval(() => { void loadFailures(); }, 60000)'));
   });
 
+
+  test('Aviator production worker computes round progression in Node and retains atomic DB boundaries', () => {
+    const source = readFileSync('backend/src/games/aviator/production.engine.ts', 'utf8');
+    assert.ok(source.includes('deriveCrashMultiplier'));
+    assert.ok(source.includes('pg_try_advisory_xact_lock'));
+    assert.ok(source.includes('aviator.cashout_crash_bet_atomic'));
+    assert.ok(source.includes('aviator.settle_crash_round_atomic'));
+    assert.ok(source.includes('realtime.send'));
+    assert.ok(!source.includes('tick_crash_engine_with_broadcast'));
+    assert.ok(!source.includes('@supabase/supabase-js'));
+    const seed = 'known-aviator-seed';
+    const digest = createHmac('sha256', seed).update('42').digest('hex');
+    const value = Number(BigInt('0x' + digest.slice(0, 14)) >> 4n) / 4_503_599_627_370_496;
+    const expected = Math.min(50, Math.max(1, Math.floor((0.97 / Math.max(0.000000000001, 1 - value)) * 100) / 100));
+    assert.strictEqual(deriveCrashMultiplier(seed, 42), expected);
+  });
+
+  test('Non-Aviator authoritative rounds are supervised by the Node backend with cross-process locks', () => {
+    const source = readFileSync('backend/src/routes/authoritative-games.routes.ts', 'utf8');
+    const server = readFileSync('server.ts', 'utf8');
+    assert.ok(source.includes('startAuthoritativeGameEngine'));
+    assert.ok(source.includes('withGameLifecycleLock'));
+    assert.ok(source.includes('pg_try_advisory_lock(hashtext($1))'));
+    assert.ok(source.includes('AUTHORITATIVE_GAME_ENGINE_ENABLED'));
+    assert.ok(server.includes('startAuthoritativeGameEngine();'));
+    assert.ok(!/advance_round\\s*\\(/.test(source));
+  });
 
   test('Aviator worker is isolated from Dice lifecycle and ticks only Aviator', () => {
     const engineSource = readFileSync('supabase/functions/aviator-engine/index.ts', 'utf8');
@@ -583,6 +611,14 @@ async function runTestSuite() {
     assert.ok(['red','black','green'].includes(a.color));
   });
 
+  test('Roulette Node result matches the committed PostgreSQL SHA-256 seed and round algorithm', () => {
+    const seed = 'roulette-node-parity-seed';
+    const roundId = 'f53c3b42-9c14-4dc2-a654-c2e34bdf98ad';
+    const expected = createHash('sha256').update(seed + ':' + roundId).digest().readUInt32BE(0) % 37;
+    assert.strictEqual(makeResult('roulette', seed, roundId).number, expected);
+    assert.strictEqual(makeResult('roulette', seed, roundId).number, makeResult('roulette', seed, roundId).number);
+  });
+
   test('Authoritative Dice outcome is in the 1-10 game range', () => {
     const result = makeResult('dice', 'dice-test-seed');
     assert.ok(Number(result.number) >= 1 && Number(result.number) <= 10);
@@ -608,6 +644,12 @@ async function runTestSuite() {
     assert.strictEqual(payoutMultiplier('dice', { type: 'big' }, { number: 5 }), 0);
     assert.strictEqual(maxLiabilityMultiplier('dice', { type: '7' }), 10);
     assert.strictEqual(maxLiabilityMultiplier('dice', { type: 'odd' }), 2);
+  });
+
+  test('Dice Node API rejects bet types not supported by the durable production settlement rule', () => {
+    assert.strictEqual(validateSelection('dice', { type: 'over', value: 5 }), false);
+    assert.strictEqual(validateSelection('dice', { type: 'under', value: 5 }), false);
+    assert.strictEqual(payoutMultiplier('dice', { type: '7' }, { number: 7 }), 9);
   });
 
   test('Dice activation requires the full max-bet liability in its mapped game pool', () => {
