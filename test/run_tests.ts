@@ -334,7 +334,7 @@ async function runTestSuite() {
     assert.deepStrictEqual(resolveSupabasePublicConfig('', '', false), { url: '', publishableKey: '', hasRealtime: false });
   });
 
-  test('Production routes every Aviator endpoint to the single configured Supabase API', () => {
+  test('Production keeps account APIs on Supabase and routes game APIs to the configured Node backend', () => {
     const apiClient = readFileSync('frontend/src/api/client.ts', 'utf8');
     const supabaseConfig = readFileSync('frontend/src/api/supabaseConfig.ts', 'utf8');
     const sharedConfig = readFileSync('supabase/config.toml', 'utf8');
@@ -343,7 +343,12 @@ async function runTestSuite() {
     assert.ok(supabaseConfig.includes('${SUPABASE_URL}/functions/v1/api'));
     assert.ok(!supabaseConfig.includes('nzvpuoeibqrpcltrszvr.supabase.co'));
     assert.ok(apiClient.includes('const API_BASE'));
-    assert.ok(apiClient.includes('fetch(`${API_BASE}${endpoint}`'));
+    assert.ok(apiClient.includes('const GAME_API_BASE = import.meta.env.VITE_GAME_API_BASE_URL || API_BASE'));
+    assert.ok(apiClient.includes('baseUrl: string = API_BASE'));
+    assert.ok(apiClient.includes('fetch(`${baseUrl}${endpoint}`'));
+    assert.ok(apiClient.includes('return this.request<T>(endpoint, options, GAME_API_BASE)'));
+    assert.ok(apiClient.includes("return this.request('/wallet/my-wallet')"));
+    assert.ok(apiClient.includes("return this.gameRequest('/games/aviator/state')"));
     assert.ok(!apiClient.includes('yrleubhpiqejfvingqfj'));
     assert.ok(!apiClient.includes('AVIATOR_API_BASE'));
     assert.ok(!apiClient.includes('VITE_AVIATOR_SUPABASE_PUBLISHABLE_KEY'));
