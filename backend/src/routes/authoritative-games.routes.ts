@@ -219,9 +219,29 @@ export function validateSelection(code: GameCode, selection: any): boolean {
   return ['andar','bahar','joker_red','joker_black'].includes(type);
 }
 
+function publicAndarBaharDeal(row: any, settled: boolean) {
+  const state = row.state || {};
+  const result = row.result || {};
+  const cards = Array.isArray(result.dealCards) ? result.dealCards : [];
+  const startedAt = state.dealStartedAt ? new Date(state.dealStartedAt).getTime() : NaN;
+  const visibleCount = settled ? cards.length : row.status === 'RUNNING' && Number.isFinite(startedAt)
+    ? Math.min(cards.length, Math.ceil((Math.max(0, Date.now() - startedAt) / 4500) * cards.length))
+    : 0;
+  const visibleCards = cards.slice(0, visibleCount);
+  return {
+    jokerCard: row.status === 'RUNNING' || settled ? result.jokerCard ?? null : null,
+    dealCards: visibleCards,
+    winningSide: settled ? result.winner ?? null : null,
+    winningCard: settled ? visibleCards[visibleCards.length - 1]?.card ?? null : null,
+    totalCardsDealt: visibleCards.length,
+    firstSide: row.status === 'RUNNING' || settled ? result.firstSide ?? null : null,
+    dealStartedAt: state.dealStartedAt ?? null,
+  };
+}
 function publicRound(row: any, code: GameCode) {
   const state = row.state || {};
-  const result = row.status === 'SETTLED' ? row.result : null;
+  const settled = row.status === 'SETTLED';
+  const result = settled || (code === 'andar_bahar' && row.status === 'RUNNING') ? row.result : null;
   return {
     id: row.id,
     roundNumber: Number(row.round_number),
@@ -233,11 +253,7 @@ function publicRound(row: any, code: GameCode) {
       winningNumber: result?.number ?? null, color: result?.color ?? null,
     } : {}),
     ...(code === 'dice' ? { rolledNumber: result?.number ?? null, numberBetsAmount: {} } : {}),
-    ...(code === 'andar_bahar' ? {
-      jokerCard: result?.jokerCard ?? null, dealCards: result?.dealCards ?? [],
-      winningSide: result?.winner ?? null, winningCard: result?.dealCards?.[Math.max(0, (result?.dealCards?.length || 1) - 1)]?.card ?? null,
-      totalCardsDealt: result?.totalCardsDealt ?? 0, firstSide: result?.firstSide ?? null,
-    } : {}),
+    ...(code === 'andar_bahar' ? publicAndarBaharDeal(row, settled) : {}),
     totalBetsCount: Number(state.totalBetsCount || 0),
     totalBetAmount: String(state.totalBetAmount || '0'),
     ...(code === 'andar_bahar' ? { andarBetAmount: '0', baharBetAmount: '0' } : {}),
