@@ -42,6 +42,8 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      - key: DATABASE_POOLER_URL
+        sync: false
       - key: CORS_ORIGINS
         value: https://bigdaddy-frontend.onrender.com
       - key: JWT_SECRET
