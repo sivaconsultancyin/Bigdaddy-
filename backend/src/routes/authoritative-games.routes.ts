@@ -145,6 +145,7 @@ export function payoutMultiplier(code: GameCode, selection: any, result: any): n
     const number = Number(result.number);
     const numbers = Array.isArray(selection?.numbers) ? selection.numbers.map(Number) : [];
     if (number === 0) {
+      if (type === 'green') return 36;
       return ['straight', 'number'].includes(type) && numbers.includes(0) ? 36 : 0;
     }
     if (['straight','split','street','corner','line','number'].includes(type)) {
@@ -192,6 +193,7 @@ export function maxLiabilityMultiplier(code: GameCode, selection: any): number {
     if (type === 'street') return 12;
     if (type === 'corner') return 9;
     if (type === 'line') return 6;
+    if (type === 'green') return 36;
     if (['dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return 3;
     return 2;
   }
@@ -202,7 +204,7 @@ export function validateSelection(code: GameCode, selection: any): boolean {
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return false;
   const type = String(selection.type || '').toLowerCase();
   if (code === 'roulette') {
-    if (['red','black','odd','even','low','high','dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return true;
+    if (['red','black','green','odd','even','low','high','dozen1','dozen2','dozen3','col1','col2','col3'].includes(type)) return true;
     if (['straight','split','street','corner','line','number'].includes(type) && Array.isArray(selection.numbers)) {
       const expected: Record<string, number> = { straight: 1, split: 2, street: 3, corner: 4, line: 6, number: 1 };
       return selection.numbers.length === expected[type] &&
@@ -294,8 +296,8 @@ authoritativeGamesRouter.get('/games/:gameCode/state', auth, async (req: AuthReq
       });
     }
     // State endpoints only read the authoritative snapshot. The dedicated
-    // Supabase cron worker owns Dice round transitions and settlement; running
-    // advance_round() on every client poll duplicates that scheduler work.
+    // The dedicated Node lifecycle worker owns round transitions and settlement.
+    // State reads remain strictly read-only and never advance a round.
     const data = await readGameState(code);
     if (!data.round) return res.status(503).json({ error: 'GAME_NOT_CONFIGURED', gameCode: code });
     return res.json(data);
